@@ -8,14 +8,22 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 | --- | --- | --- |
 | Struktur modular .NET 10 | Selesai | `PtwOnline.sln`, batas Domain/Application/Infrastructure/API/Worker |
 | Domain state machine | Fondasi selesai | `Ptw.Domain/Permit.cs`, unit tests |
-| Draft PTW | Vertical slice awal | create/list/get/update/submit, Angular create/list |
+| Draft PTW | Vertical slice diperkuat | create/list/get/update/submit, Angular create/list/detail/edit dengan optimistic concurrency |
 | Concurrency dan idempotency | Fondasi selesai | ETag/If-Match, request hash, unique idempotency record |
 | Data SQL Server | Fondasi selesai | schemas `ptw`, `audit`, `intg`, initial migration |
 | Audit dan outbox | Fondasi selesai | audit+outbox ditulis bersama perubahan aggregate |
 | Identity/authorization | Adapter development | actor abstraction, role/ownership/location scope; OIDC menunggu OPN-007 |
 | E-SIMI | Kontrak data pada draft saja | live adapter menunggu kontrak OPN-007 |
-| Angular SPA | Shell dan vertical slice draft | dashboard, nav, list, form, responsive layout |
+| Angular SPA | Shell dan vertical slice draft | dashboard, nav, list, create/detail/edit, conflict recovery, responsive layout |
 | Compose | Development topology | web, API, worker, migrator, SQL Server 2025 |
+| Integration test | API–SQL baseline | SQL Server Testcontainer, scope denial, stale ETag, dan idempotency replay/mismatch |
+
+## Increment 2
+
+- Detail PTW dapat dibuka dari daftar/dashboard dan menampilkan status, validity, bahaya, kontrol, metadata versi, serta pengingat keselamatan.
+- Draft dapat diedit hanya pada status yang diizinkan domain; update selalu membawa `If-Match` dan konflik menawarkan reload versi terbaru.
+- Test integrasi API memakai SQL Server disposable dengan credential acak pada runtime, menerapkan migration yang sama dengan aplikasi.
+- Register dan draft decision record OPN-001–009 tersedia di [`docs/decisions`](decisions/README.md); seluruh status masih `DRAFT` dan belum menjadi kebijakan.
 
 ## Belum diimplementasikan karena membutuhkan keputusan bisnis
 
@@ -31,7 +39,7 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 
 ## Urutan implementasi berikutnya
 
-1. Buat decision records OPN-001–009 bersama owner pada BRD.
+1. Lengkapi dan sahkan draft decision records OPN-001–009 bersama owner pada BRD.
 2. Implement master/effective dating dan authorization assignments memakai hasil OPN-001/002.
 3. Tambahkan E-SIMI adapter dan contract tests memakai hasil OPN-007.
 4. Implement declarative ruleset + simulation tanpa free-form scripting.

@@ -27,7 +27,7 @@ import { Permit, PermitApi } from '../../core/permit-api';
         <div class="state error">{{ error() }}</div>
       }
       @for (permit of permits(); track permit.id) {
-        <article>
+        <a class="permit-item" [routerLink]="['/permits', permit.id]">
           <span class="class-code">{{
             permit.draft.permitClass === 'HotWork'
               ? 'HW'
@@ -44,7 +44,7 @@ import { Permit, PermitApi } from '../../core/permit-api';
           </div>
           <span class="badge">{{ permit.status }}</span
           ><time>{{ permit.updatedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</time>
-        </article>
+        </a>
       } @empty {
         @if (!loading() && !error()) {
           <div class="state">Belum ada PTW. Buat draft pertama Anda.</div>
@@ -71,14 +71,20 @@ import { Permit, PermitApi } from '../../core/permit-api';
         color: #96a4a8;
         font-size: 9px;
       }
-      article {
+      .permit-item {
         min-height: 78px;
         padding: 0 20px;
         display: grid;
         grid-template-columns: auto 1fr auto 145px;
         align-items: center;
         gap: 15px;
+        color: inherit;
         border-bottom: 1px solid #edf0f1;
+        text-decoration: none;
+        transition: background 160ms ease;
+      }
+      .permit-item:hover {
+        background: #f7faf9;
       }
       .class-code {
         width: 40px;
@@ -91,11 +97,11 @@ import { Permit, PermitApi } from '../../core/permit-api';
         font-size: 10px;
         font-weight: 800;
       }
-      article strong {
+      .permit-item strong {
         color: #294650;
         font-size: 12px;
       }
-      article p {
+      .permit-item p {
         margin: 5px 0 0;
         color: #8b9a9f;
         font-size: 9px;
@@ -124,7 +130,7 @@ import { Permit, PermitApi } from '../../core/permit-api';
         background: #fff7f5;
       }
       @media (max-width: 650px) {
-        article {
+        .permit-item {
           grid-template-columns: auto 1fr auto;
           padding: 12px;
         }

@@ -1,4 +1,5 @@
 import { HttpClient } from '@angular/common/http';
+import { HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
@@ -46,5 +47,15 @@ export class PermitApi {
   }
   create(draft: PermitDraft): Observable<Permit> {
     return this.http.post<Permit>('/api/v1/permits', draft);
+  }
+
+  get(id: string): Observable<Permit> {
+    return this.http.get<Permit>(`/api/v1/permits/${id}`);
+  }
+
+  updateDraft(id: string, draft: PermitDraft, eTag: string): Observable<Permit> {
+    return this.http.patch<Permit>(`/api/v1/permits/${id}/draft`, draft, {
+      headers: new HttpHeaders({ 'If-Match': eTag }),
+    });
   }
 }

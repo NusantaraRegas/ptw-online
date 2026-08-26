@@ -1,0 +1,209 @@
+<div class="page-title">
+  <div>
+    <p class="eyebrow">Detail Permit to Work</p>
+    <h1>{{ permit()?.permitNumber || 'Draft PTW' }}</h1>
+    <p class="subtitle">Lihat data terkini dan perbarui draft dengan kontrol versi.</p>
+  </div>
+  <a class="back" routerLink="/permits">← Kembali ke PTW Saya</a>
+</div>
+
+@if (loading()) {
+  <section class="card state" aria-live="polite">
+    <span class="spinner" aria-hidden="true"></span>
+    <strong>Memuat detail PTW…</strong>
+  </section>
+} @else if (!permit()) {
+  <section class="card state error-state" role="alert">
+    <strong>Detail tidak tersedia</strong>
+    <p>{{ error() }}</p>
+    <a routerLink="/permits">Kembali ke daftar PTW</a>
+  </section>
+} @else {
+  @if (success()) {
+    <div class="message success" role="status">{{ success() }}</div>
+  }
+
+  <section class="safety-note" aria-label="Pengingat keselamatan">
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z" />
+    </svg>
+    <p>
+      <strong>APPROVED belum mengizinkan pekerjaan dimulai.</strong> Hanya status OPEN dengan
+      prasyarat lapangan tervalidasi yang mengizinkan pekerjaan.
+    </p>
+  </section>
+
+  @if (!editing()) {
+    <section class="detail-layout">
+      <article class="card detail-card">
+        <header>
+          <div>
+            <span class="status" [class.open]="permit()!.status === 'OPEN'">{{
+              statusLabel()
+            }}</span>
+            <h2>{{ permit()!.draft.title }}</h2>
+            <p>{{ permit()!.draft.description }}</p>
+          </div>
+          @if (canEdit()) {
+            <button class="secondary-button" type="button" (click)="startEdit()">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="m4 16-1 5 5-1L19 9l-4-4L4 16ZM13 7l4 4" />
+              </svg>
+              Edit draft
+            </button>
+          }
+        </header>
+
+        <dl class="facts">
+          <div>
+            <dt>Lokasi</dt>
+            <dd>{{ permit()!.draft.locationId }}</dd>
+          </div>
+          <div>
+            <dt>Perusahaan</dt>
+            <dd>{{ permit()!.draft.company }}</dd>
+          </div>
+          <div>
+            <dt>Pelaksana</dt>
+            <dd>{{ permit()!.draft.performingAuthority }}</dd>
+          </div>
+          <div>
+            <dt>Kelas izin</dt>
+            <dd>{{ permit()!.draft.permitClass }}</dd>
+          </div>
+          <div>
+            <dt>Tingkat risiko</dt>
+            <dd>{{ permit()!.draft.riskLevel }}</dd>
+          </div>
+          <div>
+            <dt>Sponsor</dt>
+            <dd>{{ permit()!.draft.sponsorId }}</dd>
+          </div>
+          <div>
+            <dt>Mulai</dt>
+            <dd>
+              {{ permit()!.draft.validFrom | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
+            </dd>
+          </div>
+          <div>
+            <dt>Selesai</dt>
+            <dd>
+              {{ permit()!.draft.validUntil | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
+            </dd>
+          </div>
+        </dl>
+
+        <div class="list-section">
+          <h3>Bahaya teridentifikasi</h3>
+          <div class="chips">
+            @for (hazard of permit()!.draft.hazards; track hazard) {
+              <span class="chip hazard">{{ hazard }}</span>
+            }
+          </div>
+        </div>
+        <div class="list-section">
+          <h3>Kontrol awal</h3>
+          <div class="chips">
+            @for (control of permit()!.draft.controls; track control) {
+              <span class="chip control">{{ control }}</span>
+            }
+          </div>
+        </div>
+      </article>
+
+      <aside class="side-stack">
+        <section class="card meta-card">
+          <h2>Informasi dokumen</h2>
+          <dl>
+            <div>
+              <dt>Versi</dt>
+              <dd>v{{ permit()!.version }}</dd>
+            </div>
+            <div>
+              <dt>Nomor E-SIMI</dt>
+              <dd>{{ permit()!.draft.eSimiNumber || 'Belum tersedia' }}</dd>
+            </div>
+            <div>
+              <dt>Dibuat</dt>
+              <dd>{{ permit()!.createdAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</dd>
+            </div>
+            <div>
+              <dt>Diperbarui</dt>
+              <dd>{{ permit()!.updatedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</dd>
+            </div>
+          </dl>
+        </section>
+        <section class="card next-step">
+          <span>Langkah berikutnya</span>
+          <strong>{{
+            canEdit() ? 'Lengkapi dan verifikasi draft' : 'Pantau status workflow'
+          }}</strong>
+          <p>Submit final menunggu seluruh requirement dan aturan yang disahkan tersedia.</p>
+        </section>
+      </aside>
+    </section>
+  } @else {
+    <form class="card edit-card" [formGroup]="form" (ngSubmit)="save()">
+      <header>
+        <div>
+          <p class="eyebrow">Mode edit</p>
+          <h2>Perbarui draft PTW</h2>
+        </div>
+        <span>Versi saat ini: v{{ permit()!.version }}</span>
+      </header>
+      <div class="form-grid">
+        <label class="wide">Judul pekerjaan<input formControlName="title" /></label>
+        <label class="wide"
+          >Uraian pekerjaan<textarea formControlName="description" rows="4"></textarea>
+        </label>
+        <label>Lokasi<input formControlName="locationId" /></label>
+        <label>Perusahaan pelaksana<input formControlName="company" /></label>
+        <label>Nama pelaksana<input formControlName="performingAuthority" /></label>
+        <label
+          >Kelas izin<select formControlName="permitClass">
+            <option value="HotWork">Pekerjaan Panas</option>
+            <option value="ColdWork">Pekerjaan Dingin</option>
+            <option value="ConfinedSpaceEntry">Memasuki Ruang Terbatas</option>
+          </select></label
+        >
+        <label
+          >Tingkat risiko<select formControlName="riskLevel">
+            <option value="Low">Rendah</option>
+            <option value="Medium">Sedang</option>
+            <option value="High">Tinggi</option>
+            <option value="Extreme">Ekstrem</option>
+          </select></label
+        >
+        <label>Nomor E-SIMI<input formControlName="eSimiNumber" /></label>
+        <label>Mulai<input type="datetime-local" formControlName="validFrom" /></label>
+        <label
+          >Selesai (maks. 7 hari)<input type="datetime-local" formControlName="validUntil"
+        /></label>
+        <label class="wide"
+          >Bahaya <small>pisahkan dengan koma</small><input formControlName="hazards"
+        /></label>
+        <label class="wide"
+          >Kontrol <small>pisahkan dengan koma</small><input formControlName="controls"
+        /></label>
+      </div>
+
+      @if (error()) {
+        <div class="message error" role="alert">
+          <span>{{ error() }}</span>
+          @if (conflict()) {
+            <button type="button" (click)="reload()">Muat versi terbaru</button>
+          }
+        </div>
+      }
+
+      <footer>
+        <button class="text-button" type="button" [disabled]="saving()" (click)="cancelEdit()">
+          Batal
+        </button>
+        <button class="primary-button" type="submit" [disabled]="saving() || form.invalid">
+          {{ saving() ? 'Menyimpan…' : 'Simpan perubahan' }}
+        </button>
+      </footer>
+    </form>
+  }
+}

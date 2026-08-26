@@ -14,6 +14,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/permits/permit-create').then((m) => m.PermitCreate),
   },
   {
+    path: 'permits/:id',
+    loadComponent: () => import('./features/permits/permit-detail').then((m) => m.PermitDetail),
+  },
+  {
     path: 'tasks',
     loadComponent: () => import('./features/placeholder/placeholder').then((m) => m.TasksPage),
   },

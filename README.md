@@ -17,11 +17,13 @@ Sudah tersedia:
 - API `/api/v1` untuk identitas development serta create, list, get, update, dan submit draft;
 - optimistic concurrency memakai `ETag`/`If-Match` dan idempotency untuk transition command;
 - SQL Server persistence, immutable permit-version snapshot, audit event, transactional outbox, dan initial EF migration;
-- Angular 22 SPA dengan dashboard keselamatan, daftar PTW, form draft, responsive navigation, dan Bahasa Indonesia;
+- Angular 22 SPA dengan dashboard keselamatan, daftar, detail, create/edit draft ber-ETag, responsive navigation, dan Bahasa Indonesia;
 - worker outbox, health checks, rate limiting, `ProblemDetails`, correlation ID, development identity adapter, Docker Compose, Nginx, dan CI;
-- unit tests untuk invariants dan negative paths domain.
+- unit tests untuk invariants/negative paths domain serta integration test API–SQL untuk scope, concurrency, dan idempotency.
 
 Area yang menunggu keputusan OPN-001–009—termasuk matriks approval, checklist keselamatan, ambang gas, SSO, dan kontrak E-SIMI—tidak diberi default tersembunyi. Lihat [status implementasi](docs/implementation-status.md).
+
+Draft decision record beserta owner dan pertanyaan yang wajib dijawab tersedia di [register keputusan OPN](docs/decisions/README.md). Status `DRAFT` belum boleh diperlakukan sebagai kebijakan yang disahkan.
 
 ## Stack
 
@@ -166,6 +168,7 @@ src/
   Ptw.Worker/           background outbox processor
   web/                  Angular SPA
 tests/Ptw.Domain.Tests/ critical domain tests
+tests/Ptw.Api.IntegrationTests/ API + disposable SQL Server tests
 deploy/                 Compose and Nginx configuration
 docs/                   implementation status
 ```

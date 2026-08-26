@@ -172,7 +172,7 @@
     </div>
   }
   @for (permit of permits().slice(0, 4); track permit.id) {
-    <a class="permit-row" routerLink="/permits"
+    <a class="permit-row" [routerLink]="['/permits', permit.id]"
       ><div class="permit-type">
         {{
           permit.draft.permitClass === 'HotWork'
