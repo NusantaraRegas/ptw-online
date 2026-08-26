@@ -1,0 +1,8 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ptw.Domain\Ptw.Domain.csproj" />
+    <ProjectReference Include="..\Ptw.Contracts\Ptw.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

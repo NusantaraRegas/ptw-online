@@ -1,0 +1,193 @@
+<div class="page-title">
+  <div>
+    <p class="eyebrow">Rabu, 26 Agustus 2026 · WIB</p>
+    <h1>Selamat datang, Sponsor Demo</h1>
+    <p class="subtitle">Pantau izin kerja dan tindakan keselamatan dari satu tempat.</p>
+  </div>
+  <a class="primary-button" routerLink="/permits/new">
+    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+    Buat PTW baru
+  </a>
+</div>
+
+<section class="safety-callout" aria-label="Informasi keselamatan penting">
+  <span class="shield" aria-hidden="true">
+    <svg viewBox="0 0 24 24">
+      <path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z" />
+      <path d="m9 12 2 2 4-5" />
+    </svg>
+  </span>
+  <div>
+    <strong>APPROVED bukan izin untuk mulai bekerja</strong>
+    <p>
+      Pekerjaan hanya boleh dimulai ketika seluruh prasyarat lapangan telah diverifikasi dan PTW
+      berstatus <b>OPEN</b>.
+    </p>
+  </div>
+  <a routerLink="/operations">Lihat alur keselamatan →</a>
+</section>
+
+<section class="stats" aria-label="Ringkasan PTW">
+  @for (stat of stats(); track stat.label) {
+    <article class="card stat" [class]="'card stat ' + stat.tone">
+      <span class="stat-icon" aria-hidden="true">
+        @switch (stat.icon) {
+          @case ('document') {
+            <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h6M9 17h6" /></svg>
+          }
+          @case ('clock') {
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+          }
+          @case ('check') {
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" />
+              <path d="m8 12 2.5 2.5L16 9" />
+            </svg>
+          }
+          @case ('open') {
+            <svg viewBox="0 0 24 24">
+              <path d="M8 11V8a4 4 0 0 1 7.8-1.2" />
+              <rect x="5" y="11" width="14" height="10" rx="2" />
+            </svg>
+          }
+          @default {
+            <svg viewBox="0 0 24 24">
+              <path d="M12 8v5M12 17h.01" />
+              <path
+                d="M10.3 3.8 2.5 18a2 2 0 0 0 1.8 3h15.4a2 2 0 0 0 1.8-3L13.7 3.8a2 2 0 0 0-3.4 0Z"
+              />
+            </svg>
+          }
+        }
+      </span>
+      <div>
+        <strong>{{ stat.value }}</strong>
+        <p>{{ stat.label }}</p>
+      </div>
+    </article>
+  }
+</section>
+
+<div class="dashboard-grid">
+  <section class="card panel">
+    <header>
+      <div>
+        <h2>Tindakan diperlukan</h2>
+        <p>Prioritas berdasarkan SLA dan risiko</p>
+      </div>
+      <a routerLink="/tasks">Lihat semua</a>
+    </header>
+    <div class="task-row urgent">
+      <span class="task-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 7v6M12 17h.01" />
+          <circle cx="12" cy="12" r="9" />
+        </svg>
+      </span>
+      <div>
+        <strong>Review Hot Work · Compressor Deck</strong>
+        <p><b>RISIKO TINGGI</b> · PTW-20260826-1042 · Jatuh tempo 45 menit</p>
+      </div>
+      <button type="button">Tinjau</button>
+    </div>
+    <div class="task-row">
+      <span class="task-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="m7 12 3 3 7-7" />
+          <circle cx="12" cy="12" r="9" />
+        </svg>
+      </span>
+      <div>
+        <strong>Validasi lapangan · Jetty Area</strong>
+        <p>Cold Work · PTW-20260825-0988 · Hari ini 14:00 WIB</p>
+      </div>
+      <button type="button">Buka</button>
+    </div>
+    <div class="task-row">
+      <span class="task-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M20 7v5h-5" />
+          <path d="M19 12a7 7 0 1 0-2 5" />
+        </svg>
+      </span>
+      <div>
+        <strong>Perbaiki dokumen JSA</strong>
+        <p>CSE · PTW-20260824-0911 · Dikembalikan oleh HSE</p>
+      </div>
+      <button type="button">Perbaiki</button>
+    </div>
+  </section>
+
+  <section class="card panel operation">
+    <header>
+      <div>
+        <h2>Status operasi</h2>
+        <p>Kondisi izin saat ini</p>
+      </div>
+      <span class="live"><i></i> LIVE</span>
+    </header>
+    <div class="operation-metrics">
+      <div><strong>7</strong><span>OPEN</span></div>
+      <div><strong>1</strong><span>SUSPENDED</span></div>
+      <div><strong>3</strong><span>AKAN BERAKHIR</span></div>
+    </div>
+    <div class="incident">
+      <span>!</span>
+      <div>
+        <strong>PTW di-suspend</strong>
+        <p>Gas reading di luar batas · Process Area A</p>
+        <small>12 menit lalu</small>
+      </div>
+    </div>
+    <a class="board-link" routerLink="/operations">Buka Papan Operasi <span>→</span></a>
+  </section>
+</div>
+
+<section class="card recent">
+  <header>
+    <div>
+      <h2>PTW terbaru</h2>
+      <p>Draft dan aktivitas terakhir Anda</p>
+    </div>
+    <a routerLink="/permits">Lihat PTW Saya</a>
+  </header>
+  @if (!online()) {
+    <div class="offline">
+      API belum terhubung. Jalankan SQL Server dan Ptw.Api untuk memuat data aktual.
+    </div>
+  }
+  @if (permits().length === 0) {
+    <div class="empty">
+      <span class="empty-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M7 3h10v4H7zM5 5H4v16h16V5h-1" />
+          <path d="M8 12h8M8 16h5" />
+        </svg>
+      </span>
+      <strong>Belum ada draft PTW</strong>
+      <p>Buat PTW pertama untuk memulai alur perencanaan.</p>
+    </div>
+  }
+  @for (permit of permits().slice(0, 4); track permit.id) {
+    <a class="permit-row" routerLink="/permits"
+      ><div class="permit-type">
+        {{
+          permit.draft.permitClass === 'HotWork'
+            ? 'HW'
+            : permit.draft.permitClass === 'ColdWork'
+              ? 'CW'
+              : 'CS'
+        }}
+      </div>
+      <div>
+        <strong>{{ permit.draft.title }}</strong>
+        <p>{{ permit.permitNumber || 'Draft belum bernomor' }} · {{ permit.draft.locationId }}</p>
+      </div>
+      <span class="status">{{ permit.status }}</span
+      ><time>{{ permit.updatedAt | date: 'dd MMM, HH:mm' : 'Asia/Jakarta' }} WIB</time></a
+    >
+  }
+</section>

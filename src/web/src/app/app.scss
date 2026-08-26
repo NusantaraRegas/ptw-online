@@ -1,0 +1,352 @@
+:host {
+  display: block;
+  min-height: 100vh;
+}
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr);
+}
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 28px 20px 22px;
+  color: #dce6ed;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(32, 116, 130, 0.22), transparent 20rem),
+    linear-gradient(180deg, #092f3d 0%, #061f2a 100%);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: white;
+  text-decoration: none;
+  padding: 0 10px 27px;
+  border-bottom: 1px solid #ffffff18;
+}
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #092d3a;
+  background: linear-gradient(145deg, #f3c667, #d89a2d);
+  box-shadow:
+    inset 0 0 0 3px #f9dc9b,
+    0 8px 24px #020f1440;
+}
+.brand strong,
+.brand small,
+.user strong,
+.user small,
+.sidebar-foot strong,
+.sidebar-foot small {
+  display: block;
+}
+.brand strong {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 17px;
+}
+.brand small {
+  color: #92aab5;
+  margin-top: 3px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+nav {
+  margin-top: 22px;
+  flex: 1;
+}
+.nav-label {
+  margin: 21px 12px 8px;
+  color: #6f8c98;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+nav a {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 25px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 0;
+  padding: 0 12px;
+  border-radius: 10px;
+  color: #b9cad1;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+.nav-icon {
+  width: 19px;
+  height: 19px;
+  color: #78939e;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+nav a:hover {
+  color: white;
+  background: #ffffff0f;
+  transform: translateX(2px);
+}
+nav a.active {
+  color: #fff;
+  background: linear-gradient(90deg, #ffffff17, #ffffff0c);
+  box-shadow:
+    inset 3px 0 #e1aa41,
+    0 8px 20px #020f1414;
+}
+nav a.active .nav-icon {
+  color: #edbd61;
+}
+nav em {
+  min-width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: #18323b;
+  background: #edbd61;
+  font-size: 10px;
+  font-style: normal;
+}
+.sidebar-foot {
+  padding: 15px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #ffffff12;
+  border-radius: 12px;
+  background: #ffffff08;
+}
+.sidebar-foot strong {
+  font-size: 11px;
+  color: #d9e8ed;
+}
+.sidebar-foot small {
+  margin-top: 2px;
+  color: #6f919e;
+  font-size: 10px;
+}
+.pulse {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #41bd8a;
+  box-shadow: 0 0 0 4px #41bd8a1d;
+}
+main {
+  min-width: 0;
+  background: transparent;
+}
+.topbar {
+  height: 72px;
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  padding: 0 clamp(20px, 3vw, 42px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fffffff0;
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid #dfe5e6;
+}
+.environment span,
+.environment strong {
+  display: block;
+}
+.environment span {
+  color: #9ca9ad;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+.environment strong {
+  color: #48606a;
+  font-size: 12px;
+  margin-top: 3px;
+}
+.environment {
+  position: relative;
+  padding-left: 14px;
+}
+.environment::before {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--nr-gold);
+  content: '';
+}
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.top-actions button {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #60747c;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
+}
+.top-actions button:hover {
+  color: var(--nr-teal);
+  border-color: var(--nr-border);
+  background: #f4f8f8;
+}
+.notification-button svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.top-actions .unread-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #da634e;
+  border: 2px solid #fff;
+}
+.profile-divider {
+  width: 1px;
+  height: 28px;
+  margin: 0 2px 0 5px;
+  background: var(--nr-border);
+}
+.avatar {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(145deg, #176e7d, #0b4553);
+  box-shadow: 0 5px 14px #0d56662b;
+  font-size: 12px;
+  font-weight: 700;
+}
+.user strong {
+  color: #213b45;
+  font-size: 12px;
+}
+.user small {
+  color: #91a0a5;
+  font-size: 10px;
+  margin-top: 2px;
+}
+.content {
+  padding: clamp(26px, 3vw, 42px);
+  max-width: 1540px;
+  margin: 0 auto;
+}
+.menu-button {
+  display: none;
+}
+.menu-backdrop {
+  display: none;
+}
+@media (max-width: 850px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: fixed;
+    left: -285px;
+    width: 272px;
+    transition: left 0.22s ease;
+  }
+  .menu-open .sidebar {
+    left: 0;
+    box-shadow: 20px 0 50px #061f2a33;
+  }
+  .menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9;
+    display: block;
+    visibility: hidden;
+    border: 0;
+    background: #04161e80;
+    opacity: 0;
+    transition:
+      opacity 0.2s ease,
+      visibility 0.2s ease;
+  }
+  .menu-open .menu-backdrop {
+    visibility: visible;
+    opacity: 1;
+  }
+  .menu-button {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--nr-border);
+    border-radius: 10px;
+    color: var(--nr-teal);
+    background: #fff;
+  }
+  .menu-button svg {
+    width: 21px;
+    height: 21px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+  }
+  .environment {
+    display: none;
+  }
+  .topbar {
+    height: 64px;
+    padding: 0 18px;
+  }
+  .content {
+    padding: 22px 16px;
+  }
+  .user {
+    display: none;
+  }
+  .profile-divider {
+    display: none;
+  }
+}
