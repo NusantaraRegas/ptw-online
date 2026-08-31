@@ -91,8 +91,29 @@ Jika SDK .NET 10 belum terpasang:
 ```powershell
 docker run --rm -v "${PWD}:/workspace" -w /workspace `
   mcr.microsoft.com/dotnet/sdk:10.0 `
-  dotnet test PtwOnline.sln --configuration Release
+  dotnet test tests/Ptw.Domain.Tests/Ptw.Domain.Tests.csproj --configuration Release
 ```
+
+Integration test API memakai SQL Server disposable melalui Testcontainers ketika dijalankan dengan SDK native; Docker harus aktif. Untuk fallback ketika SDK hanya tersedia dalam container, gunakan SQL Server Compose dan database test terpisah:
+
+```powershell
+$passwordLine = Get-Content -Encoding utf8 .env |
+  Where-Object { $_ -like 'PTW_SQL_BOOTSTRAP_PASSWORD=*' } |
+  Select-Object -First 1
+$testPassword = $passwordLine.Substring($passwordLine.IndexOf('=') + 1)
+$env:PTW_TEST_CONNECTION_STRING = "Server=tcp:db,1433;Database=PtwOnlineIntegration;User Id=sa;Password=$testPassword;Encrypt=True;TrustServerCertificate=True"
+
+docker compose --env-file .env -f deploy/compose/compose.dev.yaml up -d db
+docker run --rm --network nr-ptw-dev_backend `
+  -e PTW_TEST_CONNECTION_STRING `
+  -v "${PWD}:/workspace" -w /workspace `
+  mcr.microsoft.com/dotnet/sdk:10.0 `
+  dotnet test PtwOnline.sln --configuration Release
+
+Remove-Item Env:PTW_TEST_CONNECTION_STRING
+```
+
+Jangan menaruh connection string test atau password di source code maupun commit.
 
 ### Frontend
 

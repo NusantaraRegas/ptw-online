@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ptw.Infrastructure.Persistence;
 using Testcontainers.MsSql;
 
@@ -36,6 +38,12 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
             {
                 ["ConnectionStrings:PtwDb"] = _connectionString
             }));
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<DbContextOptions<PtwDbContext>>();
+            services.RemoveAll<IDbContextOptionsConfiguration<PtwDbContext>>();
+            services.AddDbContext<PtwDbContext>(options => options.UseSqlServer(_connectionString));
+        });
     }
 
     public async Task InitializeAsync()
