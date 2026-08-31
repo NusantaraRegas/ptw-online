@@ -142,6 +142,7 @@
         </section>
       </aside>
     </section>
+    <app-permit-history [permitId]="permit()!.id" [revision]="permit()!.version" />
   } @else {
     <form class="card edit-card" [formGroup]="form" (ngSubmit)="save()">
       <header>

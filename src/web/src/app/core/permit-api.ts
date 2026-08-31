@@ -39,6 +39,28 @@ export interface PagedPermits {
   count: number;
 }
 
+export interface PermitActivity {
+  sequence: number;
+  eventType: string;
+  actorId: string;
+  occurredAt: string;
+  payload: Record<string, unknown>;
+  correlationId: string;
+}
+
+export interface PermitVersion {
+  version: number;
+  snapshot: PermitDraft;
+  contentHash: string;
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface PagedHistory<T> {
+  items: T[];
+  count: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PermitApi {
   constructor(private readonly http: HttpClient) {}
@@ -56,6 +78,18 @@ export class PermitApi {
   updateDraft(id: string, draft: PermitDraft, eTag: string): Observable<Permit> {
     return this.http.patch<Permit>(`/api/v1/permits/${id}/draft`, draft, {
       headers: new HttpHeaders({ 'If-Match': eTag }),
+    });
+  }
+
+  listActivity(id: string, offset = 0, limit = 10): Observable<PagedHistory<PermitActivity>> {
+    return this.http.get<PagedHistory<PermitActivity>>(`/api/v1/permits/${id}/activity`, {
+      params: { offset, limit },
+    });
+  }
+
+  listVersions(id: string, offset = 0, limit = 10): Observable<PagedHistory<PermitVersion>> {
+    return this.http.get<PagedHistory<PermitVersion>>(`/api/v1/permits/${id}/versions`, {
+      params: { offset, limit },
     });
   }
 }

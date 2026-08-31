@@ -14,10 +14,10 @@ Sudah tersedia:
 - modular monolith ASP.NET Core 10 dengan batas Domain, Application, Contracts, Infrastructure, API, dan Worker;
 - explicit state machine PTW dari `DRAFT` sampai terminal state;
 - guard validity maksimum tujuh hari, submit fail-closed, field readiness, single active work period, suspend/resolution, dan handback;
-- API `/api/v1` untuk identitas development serta create, list, get, update, dan submit draft;
+- API `/api/v1` untuk identitas development serta create, list, get, update, submit draft, audit timeline, dan immutable version history;
 - optimistic concurrency memakai `ETag`/`If-Match` dan idempotency untuk transition command;
 - SQL Server persistence, immutable permit-version snapshot, audit event, transactional outbox, dan initial EF migration;
-- Angular 22 SPA dengan dashboard keselamatan, daftar, detail, create/edit draft ber-ETag, responsive navigation, dan Bahasa Indonesia;
+- Angular 22 SPA dengan dashboard keselamatan, daftar, detail, create/edit draft ber-ETag, audit timeline, version history, responsive navigation, dan Bahasa Indonesia;
 - worker outbox, health checks, rate limiting, `ProblemDetails`, correlation ID, development identity adapter, Docker Compose, Nginx, dan CI;
 - unit tests untuk invariants/negative paths domain serta integration test API–SQL untuk scope, concurrency, dan idempotency.
 
@@ -142,16 +142,18 @@ Identitas dapat diganti per request melalui `X-Dev-User`, `X-Dev-Name`, `X-Dev-R
 
 ## API yang tersedia
 
-| Method  | Endpoint                      | Fungsi                                         |
-| ------- | ----------------------------- | ---------------------------------------------- |
-| `GET`   | `/api/v1/me`                  | Identitas, role, dan scope efektif             |
-| `GET`   | `/api/v1/permits`             | Daftar PTW scoped                              |
-| `POST`  | `/api/v1/permits`             | Membuat draft                                  |
-| `GET`   | `/api/v1/permits/{id}`        | Membaca detail scoped                          |
-| `PATCH` | `/api/v1/permits/{id}/draft`  | Update draft dengan `If-Match`                 |
-| `POST`  | `/api/v1/permits/{id}/submit` | Submit dengan `If-Match` dan `Idempotency-Key` |
-| `GET`   | `/health/live`                | Process liveness                               |
-| `GET`   | `/health/ready`               | Readiness termasuk SQL Server                  |
+| Method  | Endpoint                        | Fungsi                                         |
+| ------- | ------------------------------- | ---------------------------------------------- |
+| `GET`   | `/api/v1/me`                    | Identitas, role, dan scope efektif             |
+| `GET`   | `/api/v1/permits`               | Daftar PTW scoped                              |
+| `POST`  | `/api/v1/permits`               | Membuat draft                                  |
+| `GET`   | `/api/v1/permits/{id}`          | Membaca detail scoped                          |
+| `GET`   | `/api/v1/permits/{id}/activity` | Audit timeline scoped dan paginated            |
+| `GET`   | `/api/v1/permits/{id}/versions` | Snapshot versi immutable, scoped dan paginated |
+| `PATCH` | `/api/v1/permits/{id}/draft`    | Update draft dengan `If-Match`                 |
+| `POST`  | `/api/v1/permits/{id}/submit`   | Submit dengan `If-Match` dan `Idempotency-Key` |
+| `GET`   | `/health/live`                  | Process liveness                               |
+| `GET`   | `/health/ready`                 | Readiness termasuk SQL Server                  |
 
 OpenAPI tersedia di development melalui `/openapi/v1.json`. Stale write dikembalikan sebagai HTTP `409`; idempotency key yang sama dengan payload berbeda juga ditolak.
 

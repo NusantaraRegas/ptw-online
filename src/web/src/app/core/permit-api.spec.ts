@@ -48,4 +48,28 @@ describe('PermitApi', () => {
     expect(request.request.body).toEqual(draft);
     request.flush({});
   });
+
+  it('loads scoped activity with pagination', () => {
+    api.listActivity('permit-id', 10, 5).subscribe();
+    const request = http.expectOne(
+      (candidate) =>
+        candidate.url === '/api/v1/permits/permit-id/activity' &&
+        candidate.params.get('offset') === '10' &&
+        candidate.params.get('limit') === '5',
+    );
+    expect(request.request.method).toBe('GET');
+    request.flush({ items: [], count: 0 });
+  });
+
+  it('loads immutable version history with pagination', () => {
+    api.listVersions('permit-id', 0, 10).subscribe();
+    const request = http.expectOne(
+      (candidate) =>
+        candidate.url === '/api/v1/permits/permit-id/versions' &&
+        candidate.params.get('offset') === '0' &&
+        candidate.params.get('limit') === '10',
+    );
+    expect(request.request.method).toBe('GET');
+    request.flush({ items: [], count: 0 });
+  });
 });

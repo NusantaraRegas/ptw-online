@@ -1,5 +1,7 @@
 namespace Ptw.Contracts;
 
+using System.Text.Json;
+
 public sealed record PermitDraftRequest(
     string Title,
     string Description,
@@ -36,6 +38,21 @@ public sealed record PermitResponse(
     string ETag);
 
 public sealed record PagedResponse<T>(IReadOnlyList<T> Items, int Count);
+
+public sealed record PermitActivityResponse(
+    long Sequence,
+    string EventType,
+    string ActorId,
+    DateTimeOffset OccurredAt,
+    JsonElement Payload,
+    string CorrelationId);
+
+public sealed record PermitVersionResponse(
+    int Version,
+    PermitDraftRequest Snapshot,
+    string ContentHash,
+    DateTimeOffset CreatedAt,
+    string CreatedBy);
 
 public sealed record MeResponse(
     string UserId,

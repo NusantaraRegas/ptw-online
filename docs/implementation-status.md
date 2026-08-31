@@ -11,12 +11,12 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 | Draft PTW | Vertical slice diperkuat | create/list/get/update/submit, Angular create/list/detail/edit dengan optimistic concurrency |
 | Concurrency dan idempotency | Fondasi selesai | ETag/If-Match, request hash, unique idempotency record |
 | Data SQL Server | Fondasi selesai | schemas `ptw`, `audit`, `intg`, initial migration |
-| Audit dan outbox | Fondasi selesai | audit+outbox ditulis bersama perubahan aggregate |
+| Audit dan outbox | Read/write vertical slice | audit+outbox ditulis atomik; timeline scoped dan paginated tersedia pada API/UI |
 | Identity/authorization | Adapter development | actor abstraction, role/ownership/location scope; OIDC menunggu OPN-007 |
 | E-SIMI | Kontrak data pada draft saja | live adapter menunggu kontrak OPN-007 |
-| Angular SPA | Shell dan vertical slice draft | dashboard, nav, list, create/detail/edit, conflict recovery, responsive layout |
+| Angular SPA | Shell dan vertical slice draft | dashboard, nav, list, create/detail/edit, audit/version history, conflict recovery, responsive layout |
 | Compose | Development topology | web, API, worker, migrator, SQL Server 2025 |
-| Integration test | API–SQL baseline | SQL Server Testcontainer, scope denial, stale ETag, dan idempotency replay/mismatch |
+| Integration test | API–SQL baseline | SQL Server Testcontainer, scope denial termasuk history, stale ETag, idempotency, pagination, dan immutability |
 
 ## Increment 2
 
@@ -24,6 +24,13 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 - Draft dapat diedit hanya pada status yang diizinkan domain; update selalu membawa `If-Match` dan konflik menawarkan reload versi terbaru.
 - Test integrasi API memakai SQL Server disposable dengan credential acak pada runtime, menerapkan migration yang sama dengan aplikasi.
 - Register dan draft decision record OPN-001–009 tersedia di [`docs/decisions`](decisions/README.md); seluruh status masih `DRAFT` dan belum menjadi kebijakan.
+
+## Increment 3
+
+- Detail PTW menampilkan audit timeline terbaru dan snapshot seluruh versi tanpa mengubah historical record.
+- Endpoint `activity` dan `versions` memvalidasi parent permit dan location scope di server, membatasi `limit` hingga 100, serta mengurutkan record terbaru lebih dahulu.
+- Snapshot versi memuat hash SHA-256 untuk verifikasi konten; seluruh timestamp tetap disimpan UTC dan ditampilkan sebagai WIB.
+- Test integrasi membuktikan pagination, urutan, persistensi event awal, snapshot versi 1–3, invalid page request, dan penolakan akses di luar location scope.
 
 ## Belum diimplementasikan karena membutuhkan keputusan bisnis
 

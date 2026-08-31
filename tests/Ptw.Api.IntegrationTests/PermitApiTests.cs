@@ -35,10 +35,99 @@ public sealed class PermitApiTests(PtwApiFactory factory)
 
         using var scopedClient = factory.CreateClient();
         scopedClient.DefaultRequestHeaders.Add("X-Dev-Locations", "AREA-OTHER");
-        using var response = await scopedClient.GetAsync($"/api/v1/permits/{created.Id}");
+        using var detailResponse = await scopedClient.GetAsync($"/api/v1/permits/{created.Id}");
+        using var activityResponse = await scopedClient.GetAsync($"/api/v1/permits/{created.Id}/activity");
+        using var versionsResponse = await scopedClient.GetAsync($"/api/v1/permits/{created.Id}/versions");
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Equal("authorization.denied", await ProblemCodeAsync(response));
+        Assert.Equal(HttpStatusCode.Forbidden, detailResponse.StatusCode);
+        Assert.Equal("authorization.denied", await ProblemCodeAsync(detailResponse));
+        Assert.Equal(HttpStatusCode.Forbidden, activityResponse.StatusCode);
+        Assert.Equal("authorization.denied", await ProblemCodeAsync(activityResponse));
+        Assert.Equal(HttpStatusCode.Forbidden, versionsResponse.StatusCode);
+        Assert.Equal("authorization.denied", await ProblemCodeAsync(versionsResponse));
+    }
+
+    [Fact]
+    public async Task HistoryIsAppendOnlyOrderedAndPaginated()
+    {
+        using var client = factory.CreateClient();
+        var created = await CreatePermitAsync(client, "AREA-HISTORY");
+
+        using var initialActivityResponse = await client.GetAsync(
+            $"/api/v1/permits/{created.Id}/activity?offset=0&limit=1");
+        initialActivityResponse.EnsureSuccessStatusCode();
+        var initialActivity = await initialActivityResponse.Content.ReadFromJsonAsync<PagedResponse<PermitActivityResponse>>();
+        var initialEvent = Assert.Single(Assert.IsType<PagedResponse<PermitActivityResponse>>(initialActivity).Items);
+        Assert.Equal(1, initialActivity.Count);
+
+        var versionTwo = await UpdatePermitAsync(client, created, "Draft versi dua");
+        var versionThree = await UpdatePermitAsync(client, versionTwo, "Draft versi tiga");
+
+        using var latestActivityResponse = await client.GetAsync(
+            $"/api/v1/permits/{created.Id}/activity?offset=0&limit=2");
+        latestActivityResponse.EnsureSuccessStatusCode();
+        var latestActivity = Assert.IsType<PagedResponse<PermitActivityResponse>>(
+            await latestActivityResponse.Content.ReadFromJsonAsync<PagedResponse<PermitActivityResponse>>());
+        Assert.Equal(3, latestActivity.Count);
+        Assert.Equal(2, latestActivity.Items.Count);
+        Assert.True(latestActivity.Items[0].Sequence > latestActivity.Items[1].Sequence);
+
+        using var oldestActivityResponse = await client.GetAsync(
+            $"/api/v1/permits/{created.Id}/activity?offset=2&limit=2");
+        oldestActivityResponse.EnsureSuccessStatusCode();
+        var oldestActivity = Assert.IsType<PagedResponse<PermitActivityResponse>>(
+            await oldestActivityResponse.Content.ReadFromJsonAsync<PagedResponse<PermitActivityResponse>>());
+        var persistedInitialEvent = Assert.Single(oldestActivity.Items);
+        Assert.Equal(3, oldestActivity.Count);
+        Assert.Equal(initialEvent.Sequence, persistedInitialEvent.Sequence);
+        Assert.Equal(initialEvent.EventType, persistedInitialEvent.EventType);
+        Assert.Equal(initialEvent.ActorId, persistedInitialEvent.ActorId);
+        Assert.Equal(initialEvent.Payload.GetRawText(), persistedInitialEvent.Payload.GetRawText());
+
+        using var latestVersionsResponse = await client.GetAsync(
+            $"/api/v1/permits/{created.Id}/versions?offset=0&limit=2");
+        latestVersionsResponse.EnsureSuccessStatusCode();
+        var latestVersions = Assert.IsType<PagedResponse<PermitVersionResponse>>(
+            await latestVersionsResponse.Content.ReadFromJsonAsync<PagedResponse<PermitVersionResponse>>());
+        Assert.Equal(3, latestVersions.Count);
+        Assert.Collection(
+            latestVersions.Items,
+            item =>
+            {
+                Assert.Equal(3, item.Version);
+                Assert.Equal("Draft versi tiga", item.Snapshot.Title);
+            },
+            item =>
+            {
+                Assert.Equal(2, item.Version);
+                Assert.Equal("Draft versi dua", item.Snapshot.Title);
+            });
+
+        using var oldestVersionResponse = await client.GetAsync(
+            $"/api/v1/permits/{created.Id}/versions?offset=2&limit=2");
+        oldestVersionResponse.EnsureSuccessStatusCode();
+        var oldestVersions = Assert.IsType<PagedResponse<PermitVersionResponse>>(
+            await oldestVersionResponse.Content.ReadFromJsonAsync<PagedResponse<PermitVersionResponse>>());
+        var originalVersion = Assert.Single(oldestVersions.Items);
+        Assert.Equal(1, originalVersion.Version);
+        Assert.Equal("Draft awal", originalVersion.Snapshot.Title);
+        Assert.False(string.IsNullOrWhiteSpace(originalVersion.ContentHash));
+        Assert.Equal(versionThree.Version, latestVersions.Items[0].Version);
+    }
+
+    [Fact]
+    public async Task HistoryRejectsInvalidPagination()
+    {
+        using var client = factory.CreateClient();
+        var created = await CreatePermitAsync(client, "AREA-PAGINATION");
+
+        using var invalidOffset = await client.GetAsync($"/api/v1/permits/{created.Id}/activity?offset=-1");
+        using var invalidLimit = await client.GetAsync($"/api/v1/permits/{created.Id}/versions?limit=101");
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, invalidOffset.StatusCode);
+        Assert.Equal("pagination.invalid_offset", await ProblemCodeAsync(invalidOffset));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, invalidLimit.StatusCode);
+        Assert.Equal("pagination.invalid_limit", await ProblemCodeAsync(invalidLimit));
     }
 
     [Fact]
@@ -79,6 +168,18 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<PermitResponse>()
             ?? throw new InvalidOperationException("API tidak mengembalikan permit.");
+    }
+
+    private static async Task<PermitResponse> UpdatePermitAsync(
+        HttpClient client,
+        PermitResponse permit,
+        string title)
+    {
+        using var request = PatchDraft(permit.Id, permit.ETag, Draft(permit.Draft.LocationId, title));
+        using var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<PermitResponse>()
+            ?? throw new InvalidOperationException("API tidak mengembalikan permit yang diperbarui.");
     }
 
     private static HttpRequestMessage PatchDraft(Guid id, string etag, PermitDraftRequest draft)

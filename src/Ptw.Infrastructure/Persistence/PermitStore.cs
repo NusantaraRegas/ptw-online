@@ -111,6 +111,52 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         return await FindAsync(existing.PermitId, cancellationToken);
     }
 
+    public async Task<StorePage<PermitActivityEntry>> ListActivityAsync(
+        Guid permitId,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.AuditEvents.AsNoTracking().Where(x => x.PermitId == permitId);
+        var count = await query.CountAsync(cancellationToken);
+        var records = await query
+            .OrderByDescending(x => x.Sequence)
+            .Skip(offset)
+            .Take(limit)
+            .Select(x => new PermitActivityEntry(
+                x.Sequence,
+                x.EventType,
+                x.ActorId,
+                x.OccurredAt,
+                x.PayloadJson,
+                x.CorrelationId))
+            .ToListAsync(cancellationToken);
+        return new StorePage<PermitActivityEntry>(records, count);
+    }
+
+    public async Task<StorePage<PermitVersionEntry>> ListVersionsAsync(
+        Guid permitId,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.PermitVersions.AsNoTracking().Where(x => x.PermitId == permitId);
+        var count = await query.CountAsync(cancellationToken);
+        var records = await query
+            .OrderByDescending(x => x.Version)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+        var entries = records.Select(record => new PermitVersionEntry(
+            record.Version,
+            JsonSerializer.Deserialize<PermitDraft>(record.ContentJson, JsonOptions)
+                ?? throw new InvalidOperationException("Snapshot versi PTW tidak valid."),
+            record.ContentHash,
+            record.CreatedAt,
+            record.CreatedBy)).ToArray();
+        return new StorePage<PermitVersionEntry>(entries, count);
+    }
+
     private void AddVersion(Permit permit, string actorId)
     {
         var json = JsonSerializer.Serialize(permit.Draft, JsonOptions);

@@ -21,6 +21,24 @@ public sealed class PermitsController(PermitService service) : ControllerBase
         return response;
     }
 
+    [HttpGet("{id:guid}/activity")]
+    [ProducesResponseType<PagedResponse<PermitActivityResponse>>(StatusCodes.Status200OK)]
+    public Task<PagedResponse<PermitActivityResponse>> ListActivity(
+        Guid id,
+        [FromQuery] int offset = 0,
+        [FromQuery] int limit = 20,
+        CancellationToken cancellationToken = default) =>
+        service.ListActivityAsync(id, offset, limit, cancellationToken);
+
+    [HttpGet("{id:guid}/versions")]
+    [ProducesResponseType<PagedResponse<PermitVersionResponse>>(StatusCodes.Status200OK)]
+    public Task<PagedResponse<PermitVersionResponse>> ListVersions(
+        Guid id,
+        [FromQuery] int offset = 0,
+        [FromQuery] int limit = 20,
+        CancellationToken cancellationToken = default) =>
+        service.ListVersionsAsync(id, offset, limit, cancellationToken);
+
     [HttpPost]
     [ProducesResponseType<PermitResponse>(StatusCodes.Status201Created)]
     public async Task<ActionResult<PermitResponse>> Create(PermitDraftRequest request, CancellationToken cancellationToken)

@@ -46,6 +46,45 @@ public sealed class PermitService(
         return new PagedResponse<PermitResponse>(items, items.Length);
     }
 
+    public async Task<PagedResponse<PermitActivityResponse>> ListActivityAsync(
+        Guid id,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        EnsureValidPage(offset, limit);
+        var stored = await GetStoredAsync(id, cancellationToken);
+        EnsureLocationScope(actorContext.Current, stored.Permit.Draft.LocationId);
+        var page = await store.ListActivityAsync(id, offset, limit, cancellationToken);
+        var items = page.Items.Select(entry => new PermitActivityResponse(
+            entry.Sequence,
+            entry.EventType,
+            entry.ActorId,
+            entry.OccurredAt,
+            JsonSerializer.Deserialize<JsonElement>(entry.PayloadJson),
+            entry.CorrelationId)).ToArray();
+        return new PagedResponse<PermitActivityResponse>(items, page.Count);
+    }
+
+    public async Task<PagedResponse<PermitVersionResponse>> ListVersionsAsync(
+        Guid id,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        EnsureValidPage(offset, limit);
+        var stored = await GetStoredAsync(id, cancellationToken);
+        EnsureLocationScope(actorContext.Current, stored.Permit.Draft.LocationId);
+        var page = await store.ListVersionsAsync(id, offset, limit, cancellationToken);
+        var items = page.Items.Select(entry => new PermitVersionResponse(
+            entry.Version,
+            entry.Draft.ToRequest(),
+            entry.ContentHash,
+            entry.CreatedAt,
+            entry.CreatedBy)).ToArray();
+        return new PagedResponse<PermitVersionResponse>(items, page.Count);
+    }
+
     public async Task<PermitResponse> UpdateDraftAsync(
         Guid id,
         PermitDraftRequest request,
@@ -127,6 +166,19 @@ public sealed class PermitService(
 
     private static bool HasLocationScope(Actor actor, string locationId) =>
         actor.LocationScopes.Contains("*") || actor.LocationScopes.Contains(locationId);
+
+    private static void EnsureValidPage(int offset, int limit)
+    {
+        if (offset < 0)
+        {
+            throw new InvalidRequestException("pagination.invalid_offset", "Offset tidak boleh negatif.");
+        }
+
+        if (limit is < 1 or > 100)
+        {
+            throw new InvalidRequestException("pagination.invalid_limit", "Limit harus berada antara 1 dan 100.");
+        }
+    }
 
     private static string Hash<T>(T value)
     {

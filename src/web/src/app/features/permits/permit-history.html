@@ -1,0 +1,95 @@
+<section class="card history-card" aria-labelledby="history-title">
+  <header>
+    <div>
+      <h2 id="history-title">Riwayat PTW</h2>
+      <p>Jejak aktivitas dan snapshot versi yang tersimpan permanen.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Jenis riwayat">
+      <button
+        type="button"
+        id="activity-tab"
+        role="tab"
+        aria-controls="activity-panel"
+        [attr.aria-selected]="tab() === 'activity'"
+        [attr.tabindex]="tab() === 'activity' ? 0 : -1"
+        [class.active]="tab() === 'activity'"
+        (click)="selectTab('activity')"
+      >
+        Aktivitas <span>{{ activityCount() }}</span>
+      </button>
+      <button
+        type="button"
+        id="versions-tab"
+        role="tab"
+        aria-controls="versions-panel"
+        [attr.aria-selected]="tab() === 'versions'"
+        [attr.tabindex]="tab() === 'versions' ? 0 : -1"
+        [class.active]="tab() === 'versions'"
+        (click)="selectTab('versions')"
+      >
+        Versi <span>{{ versionCount() }}</span>
+      </button>
+    </div>
+  </header>
+
+  @if (tab() === 'activity') {
+    <div class="history-list" id="activity-panel" role="tabpanel" aria-labelledby="activity-tab">
+      @if (activityError()) {
+        <p class="history-error" role="alert">{{ activityError() }}</p>
+      }
+      @for (item of activity(); track item.sequence) {
+        <article class="activity-row">
+          <span class="actor" aria-hidden="true">{{ actorInitials(item.actorId) }}</span>
+          <div>
+            <strong>{{ eventLabel(item.eventType) }}</strong>
+            <p>Oleh {{ item.actorId }}</p>
+          </div>
+          <time>{{ item.occurredAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</time>
+        </article>
+      } @empty {
+        @if (!activityLoading() && !activityError()) {
+          <p class="empty">Belum ada aktivitas untuk PTW ini.</p>
+        }
+      }
+      @if (activityLoading()) {
+        <p class="loading" aria-live="polite">Memuat aktivitas…</p>
+      }
+      @if (!activityLoading() && activity().length < activityCount()) {
+        <button class="load-more" type="button" (click)="loadMoreActivity()">
+          Muat aktivitas berikutnya
+        </button>
+      }
+    </div>
+  } @else {
+    <div class="history-list" id="versions-panel" role="tabpanel" aria-labelledby="versions-tab">
+      @if (versionsError()) {
+        <p class="history-error" role="alert">{{ versionsError() }}</p>
+      }
+      @for (item of versions(); track item.version) {
+        <article class="version-row">
+          <span class="version-number">v{{ item.version }}</span>
+          <div>
+            <strong>{{ item.snapshot.title }}</strong>
+            <p>{{ item.snapshot.locationId }} · disimpan oleh {{ item.createdBy }}</p>
+          </div>
+          <div class="version-meta">
+            <time>{{ item.createdAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</time>
+            <code title="Content hash SHA-256">{{ shortHash(item.contentHash) }}…</code>
+          </div>
+        </article>
+      } @empty {
+        @if (!versionsLoading() && !versionsError()) {
+          <p class="empty">Belum ada snapshot versi untuk PTW ini.</p>
+        }
+      }
+      @if (versionsLoading()) {
+        <p class="loading" aria-live="polite">Memuat versi…</p>
+      }
+      @if (!versionsLoading() && versions().length < versionCount()) {
+        <button class="load-more" type="button" (click)="loadMoreVersions()">
+          Muat versi berikutnya
+        </button>
+      }
+    </div>
+  }
+</section>

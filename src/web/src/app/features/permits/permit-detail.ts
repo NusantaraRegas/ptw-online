@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Permit, PermitApi, PermitDraft } from '../../core/permit-api';
+import { PermitHistory } from './permit-history';
 
 function toLocalInput(value: string): string {
   const date = new Date(value);
@@ -13,7 +14,7 @@ function toLocalInput(value: string): string {
 
 @Component({
   selector: 'app-permit-detail',
-  imports: [DatePipe, ReactiveFormsModule, RouterLink],
+  imports: [DatePipe, ReactiveFormsModule, RouterLink, PermitHistory],
   templateUrl: './permit-detail.html',
   styleUrl: './permit-detail.scss',
 })

@@ -3,6 +3,20 @@ using Ptw.Domain;
 namespace Ptw.Application;
 
 public sealed record StoredPermit(Permit Permit, string ETag);
+public sealed record StorePage<T>(IReadOnlyList<T> Items, int Count);
+public sealed record PermitActivityEntry(
+    long Sequence,
+    string EventType,
+    string ActorId,
+    DateTimeOffset OccurredAt,
+    string PayloadJson,
+    string CorrelationId);
+public sealed record PermitVersionEntry(
+    int Version,
+    PermitDraft Draft,
+    string ContentHash,
+    DateTimeOffset CreatedAt,
+    string CreatedBy);
 
 public interface IPermitStore
 {
@@ -21,6 +35,16 @@ public interface IPermitStore
         string operation,
         string key,
         string requestHash,
+        CancellationToken cancellationToken);
+    Task<StorePage<PermitActivityEntry>> ListActivityAsync(
+        Guid permitId,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken);
+    Task<StorePage<PermitVersionEntry>> ListVersionsAsync(
+        Guid permitId,
+        int offset,
+        int limit,
         CancellationToken cancellationToken);
 }
 
