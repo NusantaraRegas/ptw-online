@@ -1,0 +1,145 @@
+<div class="page-title">
+  <div>
+    <p class="eyebrow">Konfigurasi berversi</p>
+    <h1>Master lokasi</h1>
+    <p class="subtitle">
+      Kelola struktur dan periode efektif lokasi melalui pemeriksaan maker-checker.
+    </p>
+  </div>
+  @if (!accessDenied()) {
+    <button class="primary-action" type="button" (click)="toggleForm()">
+      {{ formOpen() ? 'Tutup form' : '+ Draft lokasi' }}
+    </button>
+  }
+</div>
+
+<section class="boundary-note" aria-label="Batas implementasi">
+  <span aria-hidden="true">i</span>
+  <p>
+    Framework ini belum menjadi authority policy PTW. Daftar lokasi, pemilik area, dan assignment
+    produksi tetap menunggu OPN-001/002 disahkan.
+  </p>
+</section>
+
+@if (accessDenied()) {
+  <section class="card access-card">
+    <span class="lock" aria-hidden="true">×</span>
+    <div>
+      <h2>Akses Administrator diperlukan</h2>
+      <p>{{ error() }}</p>
+    </div>
+  </section>
+} @else {
+  @if (error()) {
+    <p class="error-summary" role="alert">{{ error() }}</p>
+  }
+
+  @if (formOpen()) {
+    <form class="card location-form" [formGroup]="form" (ngSubmit)="create()">
+      <header>
+        <div>
+          <h2>Draft lokasi baru</h2>
+          <p>Draft belum efektif sampai diperiksa Administrator lain.</p>
+        </div>
+        <span>Langkah 1 dari 2</span>
+      </header>
+      <div class="form-grid">
+        <label>
+          <span>Kode lokasi</span>
+          <input formControlName="code" autocomplete="off" placeholder="Masukkan kode resmi" />
+        </label>
+        <label>
+          <span>Nama lokasi</span>
+          <input formControlName="name" autocomplete="off" placeholder="Masukkan nama lokasi" />
+        </label>
+        <label>
+          <span>Lokasi induk</span>
+          <select formControlName="parentId">
+            <option value="">Tanpa induk</option>
+            @for (item of locations(); track item.id) {
+              <option [value]="item.id">{{ item.code }} — {{ item.name }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          <span>Mulai efektif</span>
+          <input type="datetime-local" formControlName="effectiveFrom" />
+        </label>
+        <label>
+          <span>Akhir efektif <small>opsional</small></span>
+          <input type="datetime-local" formControlName="effectiveUntil" />
+        </label>
+      </div>
+      <footer>
+        <button type="button" class="secondary-action" (click)="toggleForm()">Batal</button>
+        <button type="submit" class="primary-action" [disabled]="saving()">
+          {{ saving() ? 'Menyimpan…' : 'Simpan draft' }}
+        </button>
+      </footer>
+    </form>
+  }
+
+  <section class="card catalog-card" aria-labelledby="catalog-title">
+    <header>
+      <div>
+        <h2 id="catalog-title">Katalog lokasi</h2>
+        <p>{{ locations().length }} entry konfigurasi</p>
+      </div>
+      <div class="legend"><span></span> Efektif saat ini</div>
+    </header>
+
+    @if (loading()) {
+      <p class="empty" aria-live="polite">Memuat master lokasi…</p>
+    } @else {
+      <div class="location-list">
+        @for (item of locations(); track item.id) {
+          <article class="location-row">
+            <span class="location-mark" [class.effective]="item.isEffective" aria-hidden="true">
+              {{ item.code.slice(0, 2).toUpperCase() }}
+            </span>
+            <div class="identity">
+              <strong>{{ item.name }}</strong>
+              <p>{{ item.code }} · {{ parentName(item.parentId) }}</p>
+            </div>
+            <div class="period">
+              <small>Periode efektif</small>
+              <span>
+                {{ item.effectiveFrom | date: 'dd MMM yyyy' : 'Asia/Jakarta' }} —
+                {{
+                  item.effectiveUntil
+                    ? (item.effectiveUntil | date: 'dd MMM yyyy' : 'Asia/Jakarta')
+                    : 'seterusnya'
+                }}
+              </span>
+            </div>
+            <div class="ownership">
+              <small>Maker / checker</small>
+              <span>{{ item.makerId }} / {{ item.checkerId ?? 'belum ada' }}</span>
+            </div>
+            <span class="status" [attr.data-status]="item.status">
+              {{ statusLabel(item.status) }}
+            </span>
+            <div class="row-actions">
+              @if (item.status === 'DRAFT') {
+                <button type="button" (click)="submit(item)" [disabled]="actingId() === item.id">
+                  Ajukan pemeriksaan
+                </button>
+              } @else if (item.status === 'PENDING_APPROVAL') {
+                <button type="button" (click)="approve(item)" [disabled]="actingId() === item.id">
+                  Setujui
+                </button>
+              } @else {
+                <span>v{{ item.version }}</span>
+              }
+            </div>
+          </article>
+        } @empty {
+          <div class="empty">
+            <strong>Belum ada master lokasi</strong>
+            <p>Buat draft pertama setelah daftar lokasi resmi tersedia.</p>
+          </div>
+        }
+      </div>
+    }
+  </section>
+}

@@ -18,6 +18,7 @@ Sudah tersedia:
 - optimistic concurrency memakai `ETag`/`If-Match` dan idempotency untuk transition command;
 - SQL Server persistence, immutable permit-version snapshot, audit event, transactional outbox, dan initial EF migration;
 - Angular 22 SPA dengan dashboard keselamatan, daftar, detail, create/edit draft ber-ETag, audit timeline, version history, responsive navigation, dan Bahasa Indonesia;
+- framework master lokasi effective-dated dengan maker-checker, immutable version snapshot, audit/outbox, dan halaman Administrasi fail-safe;
 - worker outbox, health checks, rate limiting, `ProblemDetails`, correlation ID, development identity adapter, Docker Compose, Nginx, dan CI;
 - unit tests untuk invariants/negative paths domain serta integration test API–SQL untuk scope, concurrency, dan idempotency.
 
@@ -142,8 +143,8 @@ Identitas dapat diganti per request melalui `X-Dev-User`, `X-Dev-Name`, `X-Dev-R
 
 ## API yang tersedia
 
-| Method  | Endpoint                        | Fungsi                                         |
-| ------- | ------------------------------- | ---------------------------------------------- |
+| Method  | Endpoint                                  | Fungsi                                         |
+| ------- | ----------------------------------------- | ---------------------------------------------- |
 | `GET`   | `/api/v1/me`                    | Identitas, role, dan scope efektif             |
 | `GET`   | `/api/v1/permits`               | Daftar PTW scoped                              |
 | `POST`  | `/api/v1/permits`               | Membuat draft                                  |
@@ -152,10 +153,18 @@ Identitas dapat diganti per request melalui `X-Dev-User`, `X-Dev-Name`, `X-Dev-R
 | `GET`   | `/api/v1/permits/{id}/versions` | Snapshot versi immutable, scoped dan paginated |
 | `PATCH` | `/api/v1/permits/{id}/draft`    | Update draft dengan `If-Match`                 |
 | `POST`  | `/api/v1/permits/{id}/submit`   | Submit dengan `If-Match` dan `Idempotency-Key` |
+| `GET`   | `/api/v1/admin/locations`        | Daftar seluruh konfigurasi lokasi (Admin)      |
+| `POST`  | `/api/v1/admin/locations`        | Membuat draft lokasi (Admin)                   |
+| `PATCH` | `/api/v1/admin/locations/{id}/draft`      | Memperbarui draft dengan `If-Match`            |
+| `POST`  | `/api/v1/admin/locations/{id}/submit`     | Mengajukan pemeriksaan maker-checker           |
+| `POST`  | `/api/v1/admin/locations/{id}/approve`    | Menyetujui dengan checker berbeda              |
+| `POST`  | `/api/v1/admin/locations/{id}/return-for-changes` | Mengembalikan draft dengan alasan       |
 | `GET`   | `/health/live`                  | Process liveness                               |
 | `GET`   | `/health/ready`                 | Readiness termasuk SQL Server                  |
 
 OpenAPI tersedia di development melalui `/openapi/v1.json`. Stale write dikembalikan sebagai HTTP `409`; idempotency key yang sama dengan payload berbeda juga ditolak.
+
+Master lokasi belum dipakai sebagai sumber authority PTW dan tidak memiliki seed produksi. Hanya identitas dengan role `Administrator` yang dapat mengakses endpoint administrasi. Daftar lokasi, hierarchy ownership, overlap/delegation, dan assignment produksi tetap menunggu OPN-001/002 berstatus `ACCEPTED`.
 
 ## Lifecycle dan invariants
 

@@ -23,9 +23,3 @@ export class ReportsPage {
   description = 'Pencarian scoped, filter, ekspor, dan printable permit.';
   icon = '⌕';
 }
-@Component({ selector: 'app-admin', template, styles })
-export class AdminPage {
-  title = 'Administrasi';
-  description = 'Master data, ruleset berversi, otorisasi, dan integration operations.';
-  icon = '⚙';
-}

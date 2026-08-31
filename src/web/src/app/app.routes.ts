@@ -31,7 +31,7 @@ export const routes: Routes = [
   },
   {
     path: 'admin',
-    loadComponent: () => import('./features/placeholder/placeholder').then((m) => m.AdminPage),
+    loadComponent: () => import('./features/admin/admin-locations').then((m) => m.AdminLocations),
   },
   { path: '**', redirectTo: '' },
 ];

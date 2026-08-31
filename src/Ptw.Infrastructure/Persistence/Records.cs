@@ -65,3 +65,58 @@ public sealed class IdempotencyRecord
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
 }
+
+public sealed class LocationMasterRecord
+{
+    public Guid Id { get; set; }
+    public string Code { get; set; } = null!;
+    public string Name { get; set; } = null!;
+    public Guid? ParentId { get; set; }
+    public DateTimeOffset EffectiveFrom { get; set; }
+    public DateTimeOffset? EffectiveUntil { get; set; }
+    public string Status { get; set; } = null!;
+    public int Version { get; set; }
+    public string MakerId { get; set; } = null!;
+    public string? CheckerId { get; set; }
+    public DateTimeOffset? ApprovedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public byte[] RowVersion { get; set; } = [];
+}
+
+public sealed class LocationMasterVersionRecord
+{
+    public Guid Id { get; set; }
+    public Guid LocationMasterId { get; set; }
+    public int Version { get; set; }
+    public string ContentJson { get; set; } = null!;
+    public string ContentHash { get; set; } = null!;
+    public DateTimeOffset CreatedAt { get; set; }
+    public string CreatedBy { get; set; } = null!;
+}
+
+public sealed class ConfigurationAuditEventRecord
+{
+    public long Sequence { get; set; }
+    public Guid Id { get; set; }
+    public string AggregateType { get; set; } = null!;
+    public Guid AggregateId { get; set; }
+    public string EventType { get; set; } = null!;
+    public string ActorId { get; set; } = null!;
+    public DateTimeOffset OccurredAt { get; set; }
+    public string PayloadJson { get; set; } = null!;
+    public string CorrelationId { get; set; } = null!;
+}
+
+public sealed class LocationCommandReceiptRecord
+{
+    public Guid Id { get; set; }
+    public string ActorId { get; set; } = null!;
+    public string Operation { get; set; } = null!;
+    public string Key { get; set; } = null!;
+    public string RequestHash { get; set; } = null!;
+    public Guid LocationMasterId { get; set; }
+    public int ResultVersion { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+}

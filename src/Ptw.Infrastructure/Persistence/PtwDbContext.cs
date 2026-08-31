@@ -9,6 +9,10 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
     public DbSet<AuditEventRecord> AuditEvents => Set<AuditEventRecord>();
     public DbSet<OutboxMessageRecord> OutboxMessages => Set<OutboxMessageRecord>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
+    public DbSet<LocationMasterRecord> LocationMasters => Set<LocationMasterRecord>();
+    public DbSet<LocationMasterVersionRecord> LocationMasterVersions => Set<LocationMasterVersionRecord>();
+    public DbSet<ConfigurationAuditEventRecord> ConfigurationAuditEvents => Set<ConfigurationAuditEventRecord>();
+    public DbSet<LocationCommandReceiptRecord> LocationCommandReceipts => Set<LocationCommandReceiptRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -56,5 +60,60 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         idempotency.Property(x => x.Operation).HasMaxLength(100);
         idempotency.Property(x => x.Key).HasMaxLength(200);
         idempotency.Property(x => x.RequestHash).HasMaxLength(64);
+
+        var location = modelBuilder.Entity<LocationMasterRecord>();
+        location.ToTable(
+            "LocationMaster",
+            "cfg",
+            table => table.HasCheckConstraint(
+                "CK_LocationMaster_EffectivePeriod",
+                "[EffectiveUntil] IS NULL OR [EffectiveUntil] > [EffectiveFrom]"));
+        location.HasKey(x => x.Id);
+        location.Property(x => x.Code).HasMaxLength(100);
+        location.Property(x => x.Name).HasMaxLength(200);
+        location.Property(x => x.Status).HasMaxLength(40);
+        location.Property(x => x.MakerId).HasMaxLength(200);
+        location.Property(x => x.CheckerId).HasMaxLength(200);
+        location.Property(x => x.RowVersion).IsRowVersion();
+        location.HasIndex(x => new { x.Code, x.EffectiveFrom }).IsUnique();
+        location.HasIndex(x => new { x.Status, x.EffectiveFrom, x.EffectiveUntil });
+        location.HasOne<LocationMasterRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.ParentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var locationVersion = modelBuilder.Entity<LocationMasterVersionRecord>();
+        locationVersion.ToTable("LocationMasterVersion", "cfg");
+        locationVersion.HasKey(x => x.Id);
+        locationVersion.HasIndex(x => new { x.LocationMasterId, x.Version }).IsUnique();
+        locationVersion.Property(x => x.ContentHash).HasMaxLength(64);
+        locationVersion.Property(x => x.CreatedBy).HasMaxLength(200);
+        locationVersion.HasOne<LocationMasterRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.LocationMasterId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var configurationAudit = modelBuilder.Entity<ConfigurationAuditEventRecord>();
+        configurationAudit.ToTable("ConfigurationAuditEvent", "audit");
+        configurationAudit.HasKey(x => x.Sequence);
+        configurationAudit.Property(x => x.Sequence).UseIdentityColumn();
+        configurationAudit.Property(x => x.AggregateType).HasMaxLength(100);
+        configurationAudit.Property(x => x.EventType).HasMaxLength(100);
+        configurationAudit.Property(x => x.ActorId).HasMaxLength(200);
+        configurationAudit.Property(x => x.CorrelationId).HasMaxLength(100);
+        configurationAudit.HasIndex(x => new { x.AggregateType, x.AggregateId, x.Sequence });
+
+        var locationReceipt = modelBuilder.Entity<LocationCommandReceiptRecord>();
+        locationReceipt.ToTable("LocationCommandReceipt", "intg");
+        locationReceipt.HasKey(x => x.Id);
+        locationReceipt.HasIndex(x => new { x.ActorId, x.Operation, x.Key }).IsUnique();
+        locationReceipt.Property(x => x.ActorId).HasMaxLength(200);
+        locationReceipt.Property(x => x.Operation).HasMaxLength(100);
+        locationReceipt.Property(x => x.Key).HasMaxLength(200);
+        locationReceipt.Property(x => x.RequestHash).HasMaxLength(64);
+        locationReceipt.HasOne<LocationMasterRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.LocationMasterId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
