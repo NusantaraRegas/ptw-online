@@ -84,7 +84,7 @@ import { Permit, PermitApi } from '../../core/permit-api';
         transition: background 160ms ease;
       }
       .permit-item:hover {
-        background: #f7faf9;
+        background: #f3f8fc;
       }
       .class-code {
         width: 40px;
@@ -92,13 +92,13 @@ import { Permit, PermitApi } from '../../core/permit-api';
         display: grid;
         place-items: center;
         border-radius: 9px;
-        color: #1d6473;
-        background: #e4f1f3;
+        color: var(--nr-blue-dark);
+        background: var(--nr-blue-soft);
         font-size: 10px;
         font-weight: 800;
       }
       .permit-item strong {
-        color: #294650;
+        color: var(--nr-ink);
         font-size: 12px;
       }
       .permit-item p {
@@ -109,8 +109,8 @@ import { Permit, PermitApi } from '../../core/permit-api';
       .badge {
         padding: 6px 9px;
         border-radius: 11px;
-        color: #775d25;
-        background: #fff1d3;
+        color: var(--nr-lime-dark);
+        background: var(--nr-lime-soft);
         font-size: 8px;
         font-weight: 800;
       }

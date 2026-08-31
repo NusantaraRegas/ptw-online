@@ -13,7 +13,7 @@
 }
 .history-card h2 {
   margin: 0 0 4px;
-  color: #294650;
+  color: var(--nr-ink);
   font-size: 15px;
 }
 .history-card header p {
@@ -48,10 +48,10 @@
   content: '';
 }
 .tabs button.active {
-  color: var(--nr-teal);
+  color: var(--nr-blue-dark);
 }
 .tabs button.active::after {
-  background: var(--nr-gold);
+  background: var(--nr-blue);
 }
 .tabs span {
   min-width: 19px;
@@ -86,8 +86,8 @@
   display: grid;
   place-items: center;
   border-radius: 10px;
-  color: #276878;
-  background: #e6f1f3;
+  color: var(--nr-blue-dark);
+  background: var(--nr-blue-soft);
   font-size: 10px;
   font-weight: 800;
 }
@@ -130,8 +130,8 @@
 .history-error {
   padding: 10px;
   border-radius: 8px;
-  color: #984638;
-  background: #fff0ed;
+  color: var(--nr-red-dark);
+  background: var(--nr-red-soft);
 }
 .load-more {
   min-height: 36px;
@@ -140,14 +140,14 @@
   display: block;
   border: 1px solid #cadadd;
   border-radius: 8px;
-  color: var(--nr-teal);
+  color: var(--nr-blue-dark);
   background: white;
   font-size: 10px;
   font-weight: 800;
   cursor: pointer;
 }
 .load-more:hover {
-  background: #f3f8f8;
+  background: var(--nr-blue-soft);
 }
 @media (max-width: 650px) {
   .history-card > header {

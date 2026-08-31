@@ -1,0 +1,206 @@
+<nav class="admin-tabs" aria-label="Administrasi konfigurasi">
+  <a routerLink="/admin">Master lokasi</a>
+  <a routerLink="/admin/authorizations" aria-current="page">Otorisasi pengguna</a>
+</nav>
+
+<div class="page-title">
+  <div>
+    <p class="eyebrow">Authority efektif dan berversi</p>
+    <h1>Otorisasi pengguna</h1>
+    <p class="subtitle">
+      Satu karyawan dapat memegang beberapa role, masing-masing dengan action, lokasi, kompetensi,
+      dan periode yang terukur.
+    </p>
+  </div>
+  @if (!accessDenied()) {
+    <button class="primary-action" type="button" (click)="toggleForm()">
+      {{ formOpen() ? 'Tutup form' : '+ Draft assignment' }}
+    </button>
+  }
+</div>
+
+<section class="boundary-note" aria-label="Batas implementasi">
+  <span aria-hidden="true">i</span>
+  <p>
+    Framework ini belum menjadi authority workflow PTW. Role dan action di bawah belum merupakan
+    matriks produksi sampai OPN-002 disahkan. Assignment hilang, kedaluwarsa, atau ambigu akan
+    ditolak secara fail-safe oleh resolver.
+  </p>
+</section>
+
+@if (accessDenied()) {
+  <section class="card access-card">
+    <span class="lock" aria-hidden="true">!</span>
+    <div>
+      <h2>Akses Administrator diperlukan</h2>
+      <p>{{ error() }}</p>
+    </div>
+  </section>
+} @else {
+  @if (error()) {
+    <p class="error-summary" role="alert">{{ error() }}</p>
+  }
+
+  <section class="metrics" aria-label="Ringkasan assignment">
+    <article>
+      <strong>{{ assignments().length }}</strong
+      ><span>Total assignment</span>
+    </article>
+    <article>
+      <strong>{{ subjectCount() }}</strong
+      ><span>Karyawan unik</span>
+    </article>
+    <article>
+      <strong>{{ effectiveCount() }}</strong
+      ><span>Efektif saat ini</span>
+    </article>
+  </section>
+
+  @if (formOpen()) {
+    <form class="card assignment-form" [formGroup]="form" (ngSubmit)="create()">
+      <header>
+        <div>
+          <h2>Draft assignment baru</h2>
+          <p>Maker tidak dapat menyetujui assignment yang dibuat atau diajukannya sendiri.</p>
+        </div>
+        <span>Maker-checker</span>
+      </header>
+      <div class="form-grid">
+        <label>
+          <span>User ID</span>
+          <input
+            formControlName="subjectId"
+            autocomplete="off"
+            placeholder="contoh: operator.satu"
+          />
+        </label>
+        <label>
+          <span>Role code</span>
+          <input formControlName="roleCode" autocomplete="off" placeholder="contoh: PTW_ISSUER" />
+        </label>
+        <label class="wide">
+          <span>Action codes <small>pisahkan dengan koma</small></span>
+          <input
+            formControlName="actionCodes"
+            autocomplete="off"
+            placeholder="permit.issue, permit.suspend"
+          />
+        </label>
+        <label>
+          <span>Jenis assignment</span>
+          <select formControlName="kind">
+            <option value="DIRECT">Langsung</option>
+            <option value="DELEGATION">Delegasi</option>
+          </select>
+        </label>
+        <label>
+          <span>Assignment sumber <small>wajib untuk delegasi</small></span>
+          <input
+            formControlName="sourceAuthorizationId"
+            autocomplete="off"
+            placeholder="UUID assignment"
+          />
+        </label>
+        <label>
+          <span>Location ID <small>kosong berarti global</small></span>
+          <input formControlName="locationId" autocomplete="off" placeholder="UUID lokasi" />
+        </label>
+        <label class="checkbox-field">
+          <input type="checkbox" formControlName="includeDescendants" />
+          <span>Termasuk seluruh lokasi turunan</span>
+        </label>
+        <label class="wide">
+          <span>Kompetensi wajib <small>pisahkan dengan koma</small></span>
+          <input
+            formControlName="requiredCompetencyCodes"
+            autocomplete="off"
+            placeholder="GAS_TEST_L2, HSE_INDUCTION"
+          />
+        </label>
+        <label>
+          <span>Mulai efektif</span>
+          <input type="datetime-local" formControlName="effectiveFrom" />
+        </label>
+        <label>
+          <span>Akhir efektif <small>wajib untuk delegasi</small></span>
+          <input type="datetime-local" formControlName="effectiveUntil" />
+        </label>
+      </div>
+      <footer>
+        <button type="button" class="secondary-action" (click)="toggleForm()">Batal</button>
+        <button type="submit" class="primary-action" [disabled]="saving()">
+          {{ saving() ? 'Menyimpan…' : 'Simpan draft' }}
+        </button>
+      </footer>
+    </form>
+  }
+
+  <section class="card catalog-card" aria-labelledby="authorization-catalog-title">
+    <header>
+      <div>
+        <h2 id="authorization-catalog-title">Assignment aktif dan terencana</h2>
+        <p>Role berbeda untuk karyawan yang sama ditampilkan sebagai assignment terpisah.</p>
+      </div>
+      <div class="legend"><span></span> Efektif saat ini</div>
+    </header>
+
+    @if (loading()) {
+      <p class="empty" aria-live="polite">Memuat assignment otorisasi…</p>
+    } @else {
+      <div class="assignment-list">
+        @for (item of assignments(); track item.id) {
+          <article class="assignment-row">
+            <span class="role-mark" [class.effective]="item.isEffective" aria-hidden="true">
+              {{ initials(item.roleCode) }}
+            </span>
+            <div class="identity">
+              <strong>{{ item.subjectId }}</strong>
+              <p>{{ item.roleCode }} · {{ item.kind === 'DIRECT' ? 'Langsung' : 'Delegasi' }}</p>
+            </div>
+            <div class="scope">
+              <small>Action</small>
+              <div class="chips">
+                @for (action of item.actionCodes; track action) {
+                  <span>{{ action }}</span>
+                }
+              </div>
+            </div>
+            <div class="period">
+              <small>Periode efektif</small>
+              <span>
+                {{ item.effectiveFrom | date: 'dd MMM yyyy' : 'Asia/Jakarta' }} —
+                {{
+                  item.effectiveUntil
+                    ? (item.effectiveUntil | date: 'dd MMM yyyy' : 'Asia/Jakarta')
+                    : 'seterusnya'
+                }}
+              </span>
+              <small>{{ item.locationId ? 'Scope lokasi' : 'Scope global' }}</small>
+            </div>
+            <span class="status" [attr.data-status]="item.status">
+              {{ statusLabel(item.status) }}
+            </span>
+            <div class="row-actions">
+              @if (item.status === 'DRAFT') {
+                <button type="button" (click)="submit(item)" [disabled]="actingId() === item.id">
+                  Ajukan
+                </button>
+              } @else if (item.status === 'PENDING_APPROVAL') {
+                <button type="button" (click)="approve(item)" [disabled]="actingId() === item.id">
+                  Setujui
+                </button>
+              } @else {
+                <span>v{{ item.version }}</span>
+              }
+            </div>
+          </article>
+        } @empty {
+          <div class="empty">
+            <strong>Belum ada assignment</strong>
+            <p>Buat draft pertama tanpa mengunci satu karyawan pada satu role saja.</p>
+          </div>
+        }
+      </div>
+    }
+  </section>
+}

@@ -30,6 +30,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/placeholder/placeholder').then((m) => m.ReportsPage),
   },
   {
+    path: 'admin/authorizations',
+    loadComponent: () =>
+      import('./features/admin/admin-authorizations').then((m) => m.AdminAuthorizations),
+  },
+  {
     path: 'admin',
     loadComponent: () => import('./features/admin/admin-locations').then((m) => m.AdminLocations),
   },

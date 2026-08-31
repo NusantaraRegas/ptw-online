@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Permit, PermitApi } from '../../core/permit-api';
+import { DevelopmentIdentityStore } from '../../core/development-identity';
 
 @Component({
   selector: 'app-dashboard',
@@ -13,8 +14,10 @@ import { Permit, PermitApi } from '../../core/permit-api';
 export class Dashboard {
   private readonly api = inject(PermitApi);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly identityStore = inject(DevelopmentIdentityStore);
   protected readonly permits = signal<Permit[]>([]);
   protected readonly online = signal(true);
+  protected readonly displayName = computed(() => this.identityStore.selected().displayName);
   protected readonly stats = computed(() => {
     const permits = this.permits();
     return [

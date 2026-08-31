@@ -1,8 +1,8 @@
 <div class="app-shell" [class.menu-open]="menuOpen()">
   <aside id="main-navigation" class="sidebar" aria-label="Navigasi utama">
     <a class="brand" routerLink="/" aria-label="NR PTW Online" (click)="closeMenu()">
-      <span class="brand-mark" aria-hidden="true">NR</span>
-      <span><strong>PTW Online</strong><small>Nusantara Regas</small></span>
+      <img src="/assets/brand/logo-regas.png" alt="" />
+      <span class="brand-product"><strong>PTW Online</strong><small>Permit to Work</small></span>
     </a>
     <nav>
       <p class="nav-label">Workspace</p>
@@ -47,15 +47,17 @@
         <span>Pencarian & Laporan</span>
       </a>
       <p class="nav-label">Pengaturan</p>
-      <a routerLink="/admin" routerLinkActive="active" (click)="closeMenu()">
-        <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="3" />
-          <path
-            d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"
-          />
-        </svg>
-        <span>Administrasi</span>
-      </a>
+      @if (isAdministrator()) {
+        <a routerLink="/admin" routerLinkActive="active" (click)="closeMenu()">
+          <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"
+            />
+          </svg>
+          <span>Administrasi</span>
+        </a>
+      }
     </nav>
     <div class="sidebar-foot">
       <span class="pulse" aria-hidden="true"></span>
@@ -86,6 +88,20 @@
       </button>
       <div class="environment"><span>Lingkungan</span><strong>Development</strong></div>
       <div class="top-actions">
+        @if (identity().isDevelopmentIdentity) {
+          <label class="identity-switcher">
+            <span>Akun demo</span>
+            <select
+              #identitySelector
+              [value]="selectedIdentityKey()"
+              (change)="switchIdentity(identitySelector.value)"
+            >
+              @for (profile of developmentProfiles; track profile.key) {
+                <option [value]="profile.key">{{ profile.displayName }}</option>
+              }
+            </select>
+          </label>
+        }
         <button
           class="notification-button"
           type="button"
@@ -100,7 +116,10 @@
         </button>
         <span class="profile-divider" aria-hidden="true"></span>
         <span class="avatar" aria-hidden="true">{{ initials() }}</span>
-        <span class="user"><strong>Sponsor Demo</strong><small>Sponsor Pekerjaan</small></span>
+        <span class="user">
+          <strong>{{ identity().displayName }}</strong>
+          <small>{{ roleLabel() }}</small>
+        </span>
       </div>
     </header>
     <section class="content"><router-outlet /></section>

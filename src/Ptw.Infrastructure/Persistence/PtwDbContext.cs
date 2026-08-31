@@ -13,6 +13,9 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
     public DbSet<LocationMasterVersionRecord> LocationMasterVersions => Set<LocationMasterVersionRecord>();
     public DbSet<ConfigurationAuditEventRecord> ConfigurationAuditEvents => Set<ConfigurationAuditEventRecord>();
     public DbSet<LocationCommandReceiptRecord> LocationCommandReceipts => Set<LocationCommandReceiptRecord>();
+    public DbSet<UserAuthorizationRecord> UserAuthorizations => Set<UserAuthorizationRecord>();
+    public DbSet<UserAuthorizationVersionRecord> UserAuthorizationVersions => Set<UserAuthorizationVersionRecord>();
+    public DbSet<AuthorizationCommandReceiptRecord> AuthorizationCommandReceipts => Set<AuthorizationCommandReceiptRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -114,6 +117,56 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         locationReceipt.HasOne<LocationMasterRecord>()
             .WithMany()
             .HasForeignKey(x => x.LocationMasterId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var userAuthorization = modelBuilder.Entity<UserAuthorizationRecord>();
+        userAuthorization.ToTable(
+            "UserAuthorization",
+            "sec",
+            table => table.HasCheckConstraint(
+                "CK_UserAuthorization_EffectivePeriod",
+                "[EffectiveUntil] IS NULL OR [EffectiveUntil] > [EffectiveFrom]"));
+        userAuthorization.HasKey(x => x.Id);
+        userAuthorization.Property(x => x.SubjectId).HasMaxLength(200);
+        userAuthorization.Property(x => x.RoleCode).HasMaxLength(100);
+        userAuthorization.Property(x => x.Kind).HasMaxLength(40);
+        userAuthorization.Property(x => x.Status).HasMaxLength(40);
+        userAuthorization.Property(x => x.MakerId).HasMaxLength(200);
+        userAuthorization.Property(x => x.CheckerId).HasMaxLength(200);
+        userAuthorization.Property(x => x.RowVersion).IsRowVersion();
+        userAuthorization.HasIndex(x => new { x.SubjectId, x.Status, x.EffectiveFrom, x.EffectiveUntil });
+        userAuthorization.HasIndex(x => new { x.LocationId, x.RoleCode, x.Status });
+        userAuthorization.HasOne<LocationMasterRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.LocationId)
+            .OnDelete(DeleteBehavior.Restrict);
+        userAuthorization.HasOne<UserAuthorizationRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.SourceAuthorizationId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var authorizationVersion = modelBuilder.Entity<UserAuthorizationVersionRecord>();
+        authorizationVersion.ToTable("UserAuthorizationVersion", "sec");
+        authorizationVersion.HasKey(x => x.Id);
+        authorizationVersion.HasIndex(x => new { x.UserAuthorizationId, x.Version }).IsUnique();
+        authorizationVersion.Property(x => x.ContentHash).HasMaxLength(64);
+        authorizationVersion.Property(x => x.CreatedBy).HasMaxLength(200);
+        authorizationVersion.HasOne<UserAuthorizationRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.UserAuthorizationId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var authorizationReceipt = modelBuilder.Entity<AuthorizationCommandReceiptRecord>();
+        authorizationReceipt.ToTable("AuthorizationCommandReceipt", "intg");
+        authorizationReceipt.HasKey(x => x.Id);
+        authorizationReceipt.HasIndex(x => new { x.ActorId, x.Operation, x.Key }).IsUnique();
+        authorizationReceipt.Property(x => x.ActorId).HasMaxLength(200);
+        authorizationReceipt.Property(x => x.Operation).HasMaxLength(100);
+        authorizationReceipt.Property(x => x.Key).HasMaxLength(200);
+        authorizationReceipt.Property(x => x.RequestHash).HasMaxLength(64);
+        authorizationReceipt.HasOne<UserAuthorizationRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.UserAuthorizationId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -120,3 +120,50 @@ public sealed class LocationCommandReceiptRecord
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
 }
+
+public sealed class UserAuthorizationRecord
+{
+    public Guid Id { get; set; }
+    public string SubjectId { get; set; } = null!;
+    public string RoleCode { get; set; } = null!;
+    public string ActionCodesJson { get; set; } = null!;
+    public Guid? LocationId { get; set; }
+    public bool IncludeDescendants { get; set; }
+    public string RequiredCompetencyCodesJson { get; set; } = null!;
+    public string Kind { get; set; } = null!;
+    public Guid? SourceAuthorizationId { get; set; }
+    public DateTimeOffset EffectiveFrom { get; set; }
+    public DateTimeOffset? EffectiveUntil { get; set; }
+    public string Status { get; set; } = null!;
+    public int Version { get; set; }
+    public string MakerId { get; set; } = null!;
+    public string? CheckerId { get; set; }
+    public DateTimeOffset? ApprovedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public byte[] RowVersion { get; set; } = [];
+}
+
+public sealed class UserAuthorizationVersionRecord
+{
+    public Guid Id { get; set; }
+    public Guid UserAuthorizationId { get; set; }
+    public int Version { get; set; }
+    public string ContentJson { get; set; } = null!;
+    public string ContentHash { get; set; } = null!;
+    public DateTimeOffset CreatedAt { get; set; }
+    public string CreatedBy { get; set; } = null!;
+}
+
+public sealed class AuthorizationCommandReceiptRecord
+{
+    public Guid Id { get; set; }
+    public string ActorId { get; set; } = null!;
+    public string Operation { get; set; } = null!;
+    public string Key { get; set; } = null!;
+    public string RequestHash { get; set; } = null!;
+    public Guid UserAuthorizationId { get; set; }
+    public int ResultVersion { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+}

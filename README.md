@@ -17,8 +17,12 @@ Sudah tersedia:
 - API `/api/v1` untuk identitas development serta create, list, get, update, submit draft, audit timeline, dan immutable version history;
 - optimistic concurrency memakai `ETag`/`If-Match` dan idempotency untuk transition command;
 - SQL Server persistence, immutable permit-version snapshot, audit event, transactional outbox, dan initial EF migration;
-- Angular 22 SPA dengan dashboard keselamatan, daftar, detail, create/edit draft ber-ETag, audit timeline, version history, responsive navigation, dan Bahasa Indonesia;
+- Angular 22 SPA bertema logo resmi Pertamina Nusantara Regas dengan dashboard keselamatan,
+  daftar, detail, create/edit draft ber-ETag, audit timeline, version history, responsive navigation,
+  dan Bahasa Indonesia;
 - framework master lokasi effective-dated dengan maker-checker, immutable version snapshot, audit/outbox, dan halaman Administrasi fail-safe;
+- framework assignment otorisasi multi-role dengan periode efektif, maker-checker, delegasi
+  non-broadening, resolver fail-safe, dan halaman Administrasi;
 - worker outbox, health checks, rate limiting, `ProblemDetails`, correlation ID, development identity adapter, Docker Compose, Nginx, dan CI;
 - unit tests untuk invariants/negative paths domain serta integration test API–SQL untuk scope, concurrency, dan idempotency.
 
@@ -136,10 +140,27 @@ Pada environment `Development`, API menyediakan identitas default:
 | -------------- | -------------- |
 | User ID        | `sponsor.demo` |
 | Display name   | `Sponsor Demo` |
-| Role           | `Sponsor`      |
+| Role           | `Sponsor`, `Administrator` |
 | Location scope | `*`            |
 
-Identitas dapat diganti per request melalui `X-Dev-User`, `X-Dev-Name`, `X-Dev-Roles`, dan `X-Dev-Locations`. Adapter hanya berhasil pada environment `Development`; OIDC/BFF produksi menunggu OPN-007.
+Identitas dapat diganti per request melalui `X-Dev-User`, `X-Dev-Name`, `X-Dev-Roles`, dan
+`X-Dev-Locations`. Nilai header menggantikan default sepenuhnya, sehingga negative test tetap dapat
+memakai role `Sponsor` saja. Adapter hanya berhasil pada environment `Development`; OIDC/BFF
+produksi menunggu OPN-007.
+
+Frontend Development menyediakan pemilih **Akun demo** pada topbar:
+
+| Akun | User ID | Role |
+| --- | --- | --- |
+| Sponsor Demo | `sponsor.demo` | `Sponsor`, `Administrator` |
+| Admin Maker Demo | `admin.maker.demo` | `Administrator` |
+| Admin Checker Demo | `admin.checker.demo` | `Administrator` |
+| Sponsor Only Demo | `sponsor.only.demo` | `Sponsor` |
+
+Pilihan disimpan di `sessionStorage` dan diterapkan sebagai header hanya untuk request `/api/`.
+Gunakan Admin Maker untuk mengajukan konfigurasi, lalu Admin Checker untuk menyetujuinya. Selector
+tidak ditampilkan bila `/api/v1/me` tidak mengembalikan development identity, dan header tersebut
+tetap diabaikan backend di luar environment `Development`.
 
 ## API yang tersedia
 
@@ -159,12 +180,22 @@ Identitas dapat diganti per request melalui `X-Dev-User`, `X-Dev-Name`, `X-Dev-R
 | `POST`  | `/api/v1/admin/locations/{id}/submit`     | Mengajukan pemeriksaan maker-checker           |
 | `POST`  | `/api/v1/admin/locations/{id}/approve`    | Menyetujui dengan checker berbeda              |
 | `POST`  | `/api/v1/admin/locations/{id}/return-for-changes` | Mengembalikan draft dengan alasan       |
+| `GET`   | `/api/v1/admin/authorizations` | Daftar assignment otorisasi (Admin) |
+| `POST`  | `/api/v1/admin/authorizations` | Membuat draft assignment multi-role (Admin) |
+| `PATCH` | `/api/v1/admin/authorizations/{id}/draft` | Memperbarui draft dengan `If-Match` |
+| `POST`  | `/api/v1/admin/authorizations/{id}/submit` | Mengajukan pemeriksaan maker-checker |
+| `POST`  | `/api/v1/admin/authorizations/{id}/approve` | Menyetujui dengan checker berbeda |
+| `POST`  | `/api/v1/admin/authorizations/{id}/return-for-changes` | Mengembalikan draft dengan alasan |
 | `GET`   | `/health/live`                  | Process liveness                               |
 | `GET`   | `/health/ready`                 | Readiness termasuk SQL Server                  |
 
 OpenAPI tersedia di development melalui `/openapi/v1.json`. Stale write dikembalikan sebagai HTTP `409`; idempotency key yang sama dengan payload berbeda juga ditolak.
 
-Master lokasi belum dipakai sebagai sumber authority PTW dan tidak memiliki seed produksi. Hanya identitas dengan role `Administrator` yang dapat mengakses endpoint administrasi. Daftar lokasi, hierarchy ownership, overlap/delegation, dan assignment produksi tetap menunggu OPN-001/002 berstatus `ACCEPTED`.
+Master lokasi dan assignment otorisasi belum dipakai sebagai sumber authority PTW dan tidak memiliki
+seed produksi. Satu user dapat memiliki beberapa role; SoD diterapkan per actor/action/konteks, dan
+delegasi tidak boleh memperluas authority sumber. Hanya identitas dengan role `Administrator` yang
+dapat mengakses endpoint administrasi. Daftar lokasi, role/action, hierarchy ownership, kompetensi,
+approval route, dan detail SoD produksi tetap menunggu OPN-001/002 berstatus `ACCEPTED`.
 
 ## Lifecycle dan invariants
 

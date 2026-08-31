@@ -23,7 +23,7 @@ internal sealed class DevelopmentAuthenticationHandler(
 
         var userId = Request.Headers["X-Dev-User"].FirstOrDefault() ?? "sponsor.demo";
         var displayName = Request.Headers["X-Dev-Name"].FirstOrDefault() ?? "Sponsor Demo";
-        var roles = Split(Request.Headers["X-Dev-Roles"].FirstOrDefault() ?? "Sponsor");
+        var roles = Split(Request.Headers["X-Dev-Roles"].FirstOrDefault() ?? "Sponsor,Administrator");
         var locations = Split(Request.Headers["X-Dev-Locations"].FirstOrDefault() ?? "*");
         var claims = new List<Claim>
         {

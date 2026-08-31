@@ -85,6 +85,34 @@ button:disabled {
   line-height: 1.55;
 }
 
+.metrics {
+  margin-bottom: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metrics article {
+  padding: 16px 18px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--nr-border);
+  border-radius: 11px;
+  background: white;
+  box-shadow: 0 5px 18px rgb(34 68 77 / 5%);
+}
+
+.metrics strong {
+  color: #274b55;
+  font-size: 20px;
+}
+
+.metrics span {
+  color: #819398;
+  font-size: 9px;
+  font-weight: 700;
+}
+
 .access-card {
   min-height: 150px;
   padding: 30px;
@@ -102,10 +130,11 @@ button:disabled {
   color: #a34b3c;
   background: #fff0ed;
   font-size: 22px;
+  font-weight: 900;
 }
 
 .access-card h2,
-.location-form h2,
+.assignment-form h2,
 .catalog-card h2 {
   margin: 0;
   color: #294650;
@@ -113,7 +142,7 @@ button:disabled {
 }
 
 .access-card p,
-.location-form header p,
+.assignment-form header p,
 .catalog-card header p {
   margin: 5px 0 0;
   color: var(--nr-muted);
@@ -129,12 +158,12 @@ button:disabled {
   font-size: 10px;
 }
 
-.location-form {
+.assignment-form {
   margin-bottom: 18px;
   overflow: hidden;
 }
 
-.location-form header,
+.assignment-form header,
 .catalog-card > header {
   padding: 17px 20px;
   display: flex;
@@ -143,7 +172,7 @@ button:disabled {
   border-bottom: 1px solid var(--nr-border);
 }
 
-.location-form header > span {
+.assignment-form header > span {
   padding: 5px 8px;
   border-radius: 10px;
   color: #6a7d82;
@@ -167,9 +196,8 @@ button:disabled {
   font-weight: 800;
 }
 
-.form-grid label:first-child,
-.form-grid label:nth-child(2) {
-  grid-column: span 1;
+.form-grid .wide {
+  grid-column: 1 / -1;
 }
 
 .form-grid small {
@@ -196,7 +224,20 @@ button:disabled {
   outline: 3px solid rgb(0 117 191 / 14%);
 }
 
-.location-form footer {
+.form-grid .checkbox-field {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  align-self: end;
+}
+
+.form-grid .checkbox-field input {
+  width: 16px;
+  min-height: 16px;
+}
+
+.assignment-form footer {
   padding: 14px 20px;
   display: flex;
   justify-content: flex-end;
@@ -224,58 +265,72 @@ button:disabled {
   background: var(--nr-lime);
 }
 
-.location-list {
+.assignment-list {
   padding: 0 20px 12px;
 }
 
-.location-row {
-  min-height: 78px;
+.assignment-row {
+  min-height: 88px;
   display: grid;
-  grid-template-columns: auto 1.1fr 1fr 1fr auto auto;
+  grid-template-columns: auto 1fr 1.35fr 1fr auto auto;
   align-items: center;
   gap: 14px;
   border-bottom: 1px solid #edf1f1;
 }
 
-.location-mark {
-  width: 36px;
-  height: 36px;
+.role-mark {
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 11px;
   color: #607b82;
   background: #edf3f4;
   font-size: 9px;
   font-weight: 900;
 }
 
-.location-mark.effective {
+.role-mark.effective {
   color: var(--nr-lime-dark);
   background: var(--nr-lime-soft);
 }
 
 .identity strong,
-.period span,
-.ownership span {
+.period span {
   display: block;
   color: #314e57;
   font-size: 10px;
 }
 
 .identity p,
-.period small,
-.ownership small {
+.scope small,
+.period small {
   margin: 4px 0 0;
   display: block;
   color: #89999e;
   font-size: 8px;
 }
 
-.period span,
-.ownership span {
-  margin-top: 5px;
+.period span {
+  margin: 5px 0;
   color: #60777e;
   font-size: 9px;
+}
+
+.chips {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chips span {
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--nr-blue-dark);
+  background: var(--nr-blue-soft);
+  font-size: 8px;
+  font-weight: 700;
 }
 
 .status {
@@ -299,14 +354,13 @@ button:disabled {
 }
 
 .row-actions {
-  min-width: 105px;
+  min-width: 80px;
   text-align: right;
 }
 
 .row-actions button {
   min-height: 32px;
   padding: 0 10px;
-  white-space: nowrap;
 }
 
 .row-actions span {
@@ -332,14 +386,14 @@ button:disabled {
   margin: 0;
 }
 
-@media (max-width: 950px) {
-  .location-row {
+@media (max-width: 1050px) {
+  .assignment-row {
     padding: 14px 0;
     grid-template-columns: auto 1fr auto;
   }
 
-  .period,
-  .ownership {
+  .scope,
+  .period {
     grid-column: 2;
   }
 
@@ -350,8 +404,13 @@ button:disabled {
 }
 
 @media (max-width: 620px) {
+  .metrics,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .form-grid .wide {
+    grid-column: auto;
   }
 
   .page-title {
@@ -360,12 +419,12 @@ button:disabled {
     flex-direction: column;
   }
 
-  .location-row {
+  .assignment-row {
     grid-template-columns: auto 1fr;
   }
 
+  .scope,
   .period,
-  .ownership,
   .status,
   .row-actions {
     grid-column: 2;

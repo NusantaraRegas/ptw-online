@@ -18,6 +18,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IActorContext, HttpActorContext>();
 builder.Services.AddScoped<PermitService>();
 builder.Services.AddScoped<LocationMasterService>();
+builder.Services.AddScoped<UserAuthorizationService>();
 builder.Services.AddPtwInfrastructure(builder.Configuration);
 builder.Services
     .AddAuthentication(DevelopmentAuthenticationHandler.SchemeName)

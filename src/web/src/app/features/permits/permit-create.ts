@@ -96,7 +96,7 @@ function localDate(hoursFromNow: number): string {
   styles: [
     `
       .back {
-        color: #327484;
+        color: var(--nr-blue-dark);
         font-size: 11px;
         font-weight: 700;
         text-decoration: none;
@@ -120,13 +120,13 @@ function localDate(hoursFromNow: number): string {
         place-items: center;
         border-radius: 50%;
         color: white;
-        background: #0c5767;
+        background: linear-gradient(145deg, var(--nr-blue), #005f9b);
         font-size: 11px;
         font-weight: 800;
       }
       .form-head h2 {
         margin: 0 0 3px;
-        color: #27444e;
+        color: var(--nr-ink);
         font-size: 15px;
       }
       .form-head p {
@@ -161,7 +161,7 @@ function localDate(hoursFromNow: number): string {
         padding: 11px 12px;
         border: 1px solid #d7e0e2;
         border-radius: 7px;
-        color: #23404a;
+        color: var(--nr-ink);
         background: white;
         font-size: 11px;
       }
@@ -175,7 +175,7 @@ function localDate(hoursFromNow: number): string {
         justify-content: space-between;
         align-items: center;
         border-top: 1px solid #e5eaeb;
-        background: #fafbfb;
+        background: #f7fafc;
       }
       footer span {
         color: #87979c;
@@ -185,8 +185,8 @@ function localDate(hoursFromNow: number): string {
         margin: 0 26px 15px;
         padding: 11px;
         border-radius: 7px;
-        color: #a24637;
-        background: #fff0ed;
+        color: var(--nr-red-dark);
+        background: var(--nr-red-soft);
         font-size: 10px;
       }
       button:disabled {

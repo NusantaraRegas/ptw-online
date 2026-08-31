@@ -16,6 +16,8 @@ public static class InfrastructureServices
             sql.EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null)));
         services.AddScoped<IPermitStore, PermitStore>();
         services.AddScoped<ILocationMasterStore, LocationMasterStore>();
+        services.AddScoped<IUserAuthorizationStore, UserAuthorizationStore>();
+        services.AddScoped<IAuthorizationAssignmentResolver, AuthorizationAssignmentResolver>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IPermitNumberGenerator, PermitNumberGenerator>();
         return services;

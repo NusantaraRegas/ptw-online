@@ -2,11 +2,12 @@ import { DatePipe } from '@angular/common';
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { LocationDraft, LocationMaster, LocationMasterApi } from '../../core/location-master-api';
 
 @Component({
   selector: 'app-admin-locations',
-  imports: [DatePipe, ReactiveFormsModule],
+  imports: [DatePipe, ReactiveFormsModule, RouterLink],
   templateUrl: './admin-locations.html',
   styleUrl: './admin-locations.scss',
 })

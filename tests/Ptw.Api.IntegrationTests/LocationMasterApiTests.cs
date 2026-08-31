@@ -15,6 +15,7 @@ public sealed class LocationMasterApiTests(PtwApiFactory factory)
     public async Task NonAdministratorCannotReadOrCreateLocationMaster()
     {
         using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Dev-Roles", "Sponsor");
 
         using var list = await client.GetAsync("/api/v1/admin/locations");
         using var create = await client.PostAsJsonAsync("/api/v1/admin/locations", Draft("DENIED-AREA"));

@@ -1,5 +1,5 @@
 .back {
-  color: #327484;
+  color: var(--nr-blue-dark);
   font-size: 12px;
   font-weight: 700;
   text-decoration: none;
@@ -39,10 +39,11 @@
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
-  border: 1px solid #ecd18f;
+  border: 1px solid rgb(226 56 63 / 28%);
+  border-left: 4px solid var(--nr-red);
   border-radius: 12px;
-  color: #74551f;
-  background: #fffaed;
+  color: #7d2025;
+  background: var(--nr-red-soft);
 }
 .safety-note svg {
   width: 24px;
@@ -89,8 +90,8 @@
   display: inline-flex;
   padding: 5px 9px;
   border-radius: 999px;
-  color: #735b28;
-  background: #fff0cd;
+  color: var(--nr-lime-dark);
+  background: var(--nr-lime-soft);
   font-size: 10px;
   font-weight: 800;
 }
@@ -107,14 +108,14 @@
   flex: 0 0 auto;
   border: 1px solid #cadadd;
   border-radius: 9px;
-  color: var(--nr-teal);
+  color: var(--nr-blue-dark);
   background: white;
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
 }
 .secondary-button:hover {
-  background: #f2f8f8;
+  background: var(--nr-blue-soft);
 }
 .secondary-button svg {
   width: 16px;

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Ptw.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using Ptw.Infrastructure.Persistence;
 namespace Ptw.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PtwDbContext))]
-    partial class PtwDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260831051432_UserAuthorizationFramework")]
+    partial class UserAuthorizationFramework
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
