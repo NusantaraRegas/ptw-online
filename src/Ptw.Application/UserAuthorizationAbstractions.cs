@@ -22,6 +22,7 @@ public interface IUserAuthorizationStore
     Task<IReadOnlyList<StoredUserAuthorization>> ListApprovedForSubjectAsync(
         string subjectId,
         CancellationToken cancellationToken);
+    Task<int> CountApprovedEffectiveAsync(DateTimeOffset instant, CancellationToken cancellationToken);
     Task<StoredUserAuthorization?> FindAsync(Guid id, CancellationToken cancellationToken);
     Task<StoredUserAuthorization> AddAsync(
         UserAuthorizationAssignment entry,

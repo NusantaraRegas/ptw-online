@@ -35,6 +35,15 @@ export const routes: Routes = [
       import('./features/admin/admin-authorizations').then((m) => m.AdminAuthorizations),
   },
   {
+    path: 'admin/policy',
+    loadComponent: () =>
+      import('./features/admin/admin-policy-readiness').then((m) => m.AdminPolicyReadiness),
+  },
+  {
+    path: 'admin/policy-uat',
+    loadComponent: () => import('./features/admin/admin-policy-uat').then((m) => m.AdminPolicyUat),
+  },
+  {
     path: 'admin',
     loadComponent: () => import('./features/admin/admin-locations').then((m) => m.AdminLocations),
   },

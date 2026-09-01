@@ -22,3 +22,7 @@ Dokumen di folder ini mengubah isu terbuka BRD menjadi decision record yang dapa
 4. Implementasi mengacu pada versi decision record yang accepted; perubahan berikutnya membuat superseding record.
 
 Gunakan [template](decision-record-template.md) untuk keputusan tambahan.
+
+Untuk memfasilitasi keputusan awal yang memblokir authorization dan workflow, gunakan
+[paket workshop OPN-001/002](OPN-001-002-workshop.md). Paket tersebut tidak menggantikan pengesahan
+owner dan approver.

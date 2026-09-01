@@ -22,13 +22,19 @@ public interface IPermitStore
 {
     Task<StoredPermit?> FindAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<StoredPermit>> ListAsync(string? sponsorId, CancellationToken cancellationToken);
-    Task<StoredPermit> AddAsync(Permit permit, Actor actor, string correlationId, CancellationToken cancellationToken);
+    Task<StoredPermit> AddAsync(
+        Permit permit,
+        Actor actor,
+        string correlationId,
+        PolicyAuthorizationEvidence? authorizationEvidence,
+        CancellationToken cancellationToken);
     Task<StoredPermit> UpdateAsync(
         Permit permit,
         string expectedETag,
         Actor actor,
         string correlationId,
         IdempotencyContext? idempotency,
+        PolicyAuthorizationEvidence? authorizationEvidence,
         CancellationToken cancellationToken);
     Task<StoredPermit?> FindIdempotentResultAsync(
         string actorId,
@@ -48,7 +54,12 @@ public interface IPermitStore
         CancellationToken cancellationToken);
 }
 
-public sealed record Actor(string Id, string DisplayName, IReadOnlySet<string> Roles, IReadOnlySet<string> LocationScopes);
+public sealed record Actor(
+    string Id,
+    string DisplayName,
+    IReadOnlySet<string> Roles,
+    IReadOnlySet<string> LocationScopes,
+    IReadOnlySet<string> CompetencyCodes);
 
 public interface IActorContext
 {
@@ -72,6 +83,13 @@ public sealed class ResourceNotFoundException(string resource, object id) : Exce
 public sealed class ConcurrencyConflictException() : Exception("Data PTW telah berubah. Muat ulang sebelum mengulangi aksi.");
 
 public sealed class InvalidRequestException(string code, string message) : Exception(message)
+{
+    public string Code { get; } = code;
+}
+
+public sealed class PolicyActivationException(string message) : Exception(message);
+
+public sealed class PolicyAuthorizationDeniedException(string code, string message) : Exception(message)
 {
     public string Code { get; } = code;
 }

@@ -1,0 +1,112 @@
+.simulation-context {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--nr-border);
+}
+
+.simulation-context > div {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.8rem 1rem;
+  border-right: 1px solid var(--nr-border);
+}
+
+.simulation-context > div:last-child {
+  border-right: 0;
+}
+
+.simulation-context small {
+  color: var(--nr-muted);
+  font-size: 0.68rem;
+}
+
+.matched-assignments {
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--nr-border);
+}
+
+.matched-assignments h4 {
+  margin-bottom: 0.55rem;
+  font-size: 0.78rem;
+}
+
+.matched-assignments article {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0;
+  color: var(--nr-muted);
+  font-size: 0.74rem;
+}
+
+.matched-assignments article strong {
+  color: var(--nr-ink);
+}
+
+.simulation-checks > article {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--nr-border);
+}
+
+.simulation-checks > article > span {
+  width: 1.55rem;
+  height: 1.55rem;
+  font-size: 0.72rem;
+}
+
+.simulation-checks p {
+  margin-top: 0.15rem;
+  color: var(--nr-muted);
+  font-size: 0.76rem;
+}
+
+.simulation-checks em {
+  color: var(--nr-red-dark);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.simulation-checks .passed em {
+  color: var(--nr-lime-dark);
+}
+
+.simulation-result > footer {
+  padding: 0.75rem 1rem;
+  color: var(--nr-muted);
+  background: #f7fafb;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) {
+  .simulation-checks > article {
+    grid-template-columns: auto 1fr;
+  }
+
+  .simulation-checks em {
+    grid-column: 2;
+  }
+
+  .simulation-context {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .simulation-context > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .simulation-context > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--nr-border);
+  }
+
+  .matched-assignments article {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+}

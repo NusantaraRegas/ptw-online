@@ -19,6 +19,13 @@ builder.Services.AddScoped<IActorContext, HttpActorContext>();
 builder.Services.AddScoped<PermitService>();
 builder.Services.AddScoped<LocationMasterService>();
 builder.Services.AddScoped<UserAuthorizationService>();
+builder.Services.AddScoped<OperationalPolicyService>();
+builder.Services.AddScoped<PolicySimulationService>();
+builder.Services.AddScoped<PolicyUatService>();
+builder.Services.AddScoped<IOperationalPolicyGate, OperationalPolicyGate>();
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection("OperationalPolicy").Get<OperationalPolicySettings>()
+    ?? new OperationalPolicySettings());
 builder.Services.AddPtwInfrastructure(builder.Configuration);
 builder.Services
     .AddAuthentication(DevelopmentAuthenticationHandler.SchemeName)

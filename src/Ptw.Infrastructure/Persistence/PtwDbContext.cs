@@ -16,6 +16,9 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
     public DbSet<UserAuthorizationRecord> UserAuthorizations => Set<UserAuthorizationRecord>();
     public DbSet<UserAuthorizationVersionRecord> UserAuthorizationVersions => Set<UserAuthorizationVersionRecord>();
     public DbSet<AuthorizationCommandReceiptRecord> AuthorizationCommandReceipts => Set<AuthorizationCommandReceiptRecord>();
+    public DbSet<PolicyUatSuiteRecord> PolicyUatSuites => Set<PolicyUatSuiteRecord>();
+    public DbSet<PolicyUatRunRecord> PolicyUatRuns => Set<PolicyUatRunRecord>();
+    public DbSet<PolicyUatCommandReceiptRecord> PolicyUatCommandReceipts => Set<PolicyUatCommandReceiptRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -167,6 +170,58 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         authorizationReceipt.HasOne<UserAuthorizationRecord>()
             .WithMany()
             .HasForeignKey(x => x.UserAuthorizationId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var policyUatSuite = modelBuilder.Entity<PolicyUatSuiteRecord>();
+        policyUatSuite.ToTable("PolicyUatSuite", "cfg");
+        policyUatSuite.HasKey(x => x.Id);
+        policyUatSuite.Property(x => x.SuiteKey).HasMaxLength(100);
+        policyUatSuite.Property(x => x.Name).HasMaxLength(200);
+        policyUatSuite.Property(x => x.PolicyVersion).HasMaxLength(100);
+        policyUatSuite.Property(x => x.ContentHash).HasMaxLength(64);
+        policyUatSuite.Property(x => x.CreatedBy).HasMaxLength(200);
+        policyUatSuite.HasIndex(x => new { x.SuiteKey, x.Version }).IsUnique();
+        policyUatSuite.HasIndex(x => new { x.PolicyVersion, x.CreatedAt });
+
+        var policyUatRun = modelBuilder.Entity<PolicyUatRunRecord>();
+        policyUatRun.ToTable(
+            "PolicyUatRun",
+            "audit",
+            table => table.HasCheckConstraint(
+                "CK_PolicyUatRun_Counts",
+                "[ScenarioCount] > 0 AND [MatchedCount] >= 0 AND [MatchedCount] <= [ScenarioCount]"));
+        policyUatRun.HasKey(x => x.Id);
+        policyUatRun.Property(x => x.PolicyVersion).HasMaxLength(100);
+        policyUatRun.Property(x => x.SuiteContentHash).HasMaxLength(64);
+        policyUatRun.Property(x => x.ReportHash).HasMaxLength(64);
+        policyUatRun.Property(x => x.ExecutedBy).HasMaxLength(200);
+        policyUatRun.HasIndex(x => new { x.PolicyVersion, x.Passed, x.ExecutedAt });
+        policyUatRun.HasIndex(x => new { x.PolicyUatSuiteId, x.ExecutedAt });
+        policyUatRun.HasOne<PolicyUatSuiteRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.PolicyUatSuiteId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var policyUatReceipt = modelBuilder.Entity<PolicyUatCommandReceiptRecord>();
+        policyUatReceipt.ToTable(
+            "PolicyUatCommandReceipt",
+            "intg",
+            table => table.HasCheckConstraint(
+                "CK_PolicyUatCommandReceipt_Result",
+                "([PolicyUatSuiteId] IS NOT NULL AND [PolicyUatRunId] IS NULL) OR ([PolicyUatSuiteId] IS NULL AND [PolicyUatRunId] IS NOT NULL)"));
+        policyUatReceipt.HasKey(x => x.Id);
+        policyUatReceipt.Property(x => x.ActorId).HasMaxLength(200);
+        policyUatReceipt.Property(x => x.Operation).HasMaxLength(100);
+        policyUatReceipt.Property(x => x.Key).HasMaxLength(200);
+        policyUatReceipt.Property(x => x.RequestHash).HasMaxLength(64);
+        policyUatReceipt.HasIndex(x => new { x.ActorId, x.Operation, x.Key }).IsUnique();
+        policyUatReceipt.HasOne<PolicyUatSuiteRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.PolicyUatSuiteId)
+            .OnDelete(DeleteBehavior.Restrict);
+        policyUatReceipt.HasOne<PolicyUatRunRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.PolicyUatRunId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

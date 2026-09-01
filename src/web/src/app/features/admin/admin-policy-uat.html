@@ -1,0 +1,256 @@
+<nav class="admin-tabs" aria-label="Administrasi konfigurasi">
+  <a routerLink="/admin">Master lokasi</a>
+  <a routerLink="/admin/authorizations">Otorisasi pengguna</a>
+  <a routerLink="/admin/policy">Kesiapan policy</a>
+  <a routerLink="/admin/policy-uat" aria-current="page">UAT policy</a>
+</nav>
+
+<div class="page-title">
+  <div>
+    <p class="eyebrow">Versioned evidence pack</p>
+    <h1>UAT assignment policy</h1>
+    <p class="subtitle">
+      Bekukan expected outcome, jalankan batch terhadap master efektif, dan simpan coverage serta
+      checksum sebagai bukti aktivasi.
+    </p>
+  </div>
+</div>
+
+<section class="boundary-note">
+  <span aria-hidden="true">i</span>
+  <p>
+    Paket dan hasil run bersifat immutable. Run hanya menguji policy; tidak mengubah PTW, tidak
+    mengesahkan OPN-001/002, dan tidak menyalakan enforcement.
+  </p>
+</section>
+
+@if (accessDenied()) {
+  <section class="card access-card">
+    <span aria-hidden="true">!</span>
+    <div>
+      <h2>Akses Administrator diperlukan</h2>
+      <p>{{ error() }}</p>
+    </div>
+  </section>
+} @else {
+  @if (error()) {
+    <p class="error-summary" role="alert">{{ error() }}</p>
+  }
+  @if (success()) {
+    <p class="success-summary" role="status">{{ success() }}</p>
+  }
+
+  <section class="card suite-builder" aria-labelledby="suite-builder-title">
+    <header>
+      <div>
+        <p class="eyebrow">Expected vs actual</p>
+        <h2 id="suite-builder-title">Buat versi paket UAT</h2>
+      </div>
+      <span>{{ scenarios.length }} skenario</span>
+    </header>
+
+    <form [formGroup]="suiteForm" (ngSubmit)="saveSuite()">
+      <div class="metadata-grid">
+        <label>
+          <span>Suite key</span>
+          <input formControlName="suiteKey" autocomplete="off" />
+        </label>
+        <label>
+          <span>Nama paket</span>
+          <input formControlName="name" autocomplete="off" />
+        </label>
+        <label>
+          <span>Versi policy</span>
+          <input
+            formControlName="policyVersion"
+            autocomplete="off"
+            placeholder="contoh: 2026.09-rc1"
+          />
+        </label>
+      </div>
+
+      <div formArrayName="scenarios" class="scenario-list">
+        @for (scenario of scenarios.controls; track scenario; let index = $index) {
+          <fieldset [formGroupName]="index">
+            <legend>Skenario {{ index + 1 }}</legend>
+            <button
+              type="button"
+              class="remove"
+              (click)="removeScenario(index)"
+              [disabled]="scenarios.length === 1"
+            >
+              Hapus
+            </button>
+            <label
+              ><span>Case code</span><input formControlName="caseCode" autocomplete="off"
+            /></label>
+            <label class="description"
+              ><span>Deskripsi</span><input formControlName="description" autocomplete="off"
+            /></label>
+            <label
+              ><span>Subject ID</span><input formControlName="subjectId" autocomplete="off"
+            /></label>
+            <label
+              ><span>Action code</span><input formControlName="actionCode" autocomplete="off"
+            /></label>
+            <label
+              ><span>Kode lokasi</span><input formControlName="locationCode" autocomplete="off"
+            /></label>
+            <label
+              ><span>Kompetensi <small>pisahkan koma</small></span
+              ><input formControlName="competencyCodes" autocomplete="off"
+            /></label>
+            <label
+              ><span>Waktu evaluasi <small>opsional</small></span
+              ><input type="datetime-local" formControlName="evaluatedAt"
+            /></label>
+            <label
+              ><span>Expected outcome</span
+              ><select formControlName="expectedOutcome">
+                <option value="ALLOW">ALLOW</option>
+                <option value="DENY">DENY</option>
+              </select></label
+            >
+            <label
+              ><span>Expected code <small>opsional</small></span
+              ><input formControlName="expectedCode" autocomplete="off"
+            /></label>
+          </fieldset>
+        }
+      </div>
+
+      <footer>
+        <button
+          type="button"
+          class="secondary-action"
+          (click)="addScenario()"
+          [disabled]="scenarios.length >= 200"
+        >
+          Tambah skenario
+        </button>
+        <button type="submit" class="primary-action" [disabled]="saving()">
+          {{ saving() ? 'Menyimpan…' : 'Bekukan versi paket' }}
+        </button>
+      </footer>
+    </form>
+  </section>
+
+  <section class="card catalog" aria-labelledby="suite-catalog-title">
+    <header>
+      <div>
+        <p class="eyebrow">Immutable catalog</p>
+        <h2 id="suite-catalog-title">Paket tersedia</h2>
+      </div>
+      <span>{{ suites().length }} versi</span>
+    </header>
+    @if (loading()) {
+      <p class="empty">Memuat paket UAT…</p>
+    } @else if (suites().length === 0) {
+      <p class="empty">
+        <strong>Belum ada paket UAT</strong>Buat versi pertama untuk mulai merekam evidence.
+      </p>
+    } @else {
+      <div class="suite-list">
+        @for (suite of suites(); track suite.id) {
+          <article>
+            <div class="suite-identity">
+              <span>v{{ suite.version }}</span>
+              <div>
+                <strong>{{ suite.name }}</strong
+                ><small>{{ suite.suiteKey }} · policy {{ suite.policyVersion }}</small>
+              </div>
+            </div>
+            <div>
+              <small>Skenario</small><strong>{{ suite.scenarios.length }}</strong>
+            </div>
+            <div class="hash">
+              <small>Content hash</small><code>{{ suite.contentHash }}</code>
+            </div>
+            <div class="run-status" [class.passed]="suite.latestRun?.passed">
+              <small>Run terakhir</small>
+              <strong>{{
+                suite.latestRun ? (suite.latestRun.passed ? 'LULUS' : 'GAGAL') : 'BELUM ADA'
+              }}</strong>
+            </div>
+            <button
+              class="primary-action"
+              type="button"
+              (click)="runSuite(suite)"
+              [disabled]="runningSuiteId() !== ''"
+            >
+              {{ runningSuiteId() === suite.id ? 'Menjalankan…' : 'Jalankan batch' }}
+            </button>
+          </article>
+        }
+      </div>
+    }
+  </section>
+
+  @if (latestRun(); as run) {
+    <section class="card run-report" [class.passed]="run.passed" aria-labelledby="uat-report-title">
+      <header>
+        <div>
+          <p>Batch report</p>
+          <h2 id="uat-report-title">
+            {{ run.passed ? 'LULUS' : 'GAGAL' }} · {{ run.suiteKey }} v{{ run.suiteVersion }}
+          </h2>
+        </div>
+        <time [attr.datetime]="run.executedAt"
+          >{{ run.executedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</time
+        >
+      </header>
+      <div class="coverage-grid">
+        <div>
+          <small>Expected ALLOW / DENY</small
+          ><strong
+            >{{ run.coverage.expectedAllowCount }} / {{ run.coverage.expectedDenyCount }}</strong
+          >
+        </div>
+        <div>
+          <small>Actual ALLOW / DENY</small
+          ><strong>{{ run.coverage.actualAllowCount }} / {{ run.coverage.actualDenyCount }}</strong>
+        </div>
+        <div>
+          <small>Matched</small
+          ><strong>{{ run.coverage.matchedCount }} / {{ run.coverage.scenarioCount }}</strong>
+        </div>
+        <div>
+          <small>Subjects / actions / lokasi</small
+          ><strong
+            >{{ run.coverage.distinctSubjectCount }} / {{ run.coverage.distinctActionCount }} /
+            {{ run.coverage.distinctLocationCount }}</strong
+          >
+        </div>
+        <div>
+          <small>Roles / competencies</small
+          ><strong
+            >{{ run.coverage.distinctRoleCount }} /
+            {{ run.coverage.distinctCompetencyCount }}</strong
+          >
+        </div>
+        <div>
+          <small>Temporal cases</small><strong>{{ run.coverage.temporalScenarioCount }}</strong>
+        </div>
+      </div>
+      <div class="result-list">
+        @for (result of run.results; track result.caseCode) {
+          <article [class.matched]="result.matched">
+            <span aria-hidden="true">{{ result.matched ? '✓' : '!' }}</span>
+            <div>
+              <strong>{{ result.caseCode }}</strong
+              ><small>Expected {{ result.expectedOutcome }} {{ result.expectedCode || '' }}</small>
+            </div>
+            <div>
+              <small>Actual</small
+              ><strong>{{ result.actualOutcome }} · {{ result.actualCode }}</strong>
+            </div>
+            <em>{{ result.matched ? 'Cocok' : 'Mismatch' }}</em>
+          </article>
+        }
+      </div>
+      <footer>
+        <span>Report SHA-256</span><code>{{ run.reportHash }}</code>
+      </footer>
+    </section>
+  }
+}

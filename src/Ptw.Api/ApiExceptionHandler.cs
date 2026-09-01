@@ -20,6 +20,10 @@ internal sealed class ApiExceptionHandler(IProblemDetailsService problemDetailsS
             ResourceNotFoundException => (StatusCodes.Status404NotFound, "resource.not_found", "Data tidak ditemukan"),
             UnauthorizedAccessException => (StatusCodes.Status403Forbidden, "authorization.denied", "Akses ditolak"),
             ConcurrencyConflictException => (StatusCodes.Status409Conflict, "concurrency.conflict", "Konflik versi"),
+            PolicyAuthorizationDeniedException denied =>
+                (StatusCodes.Status403Forbidden, denied.Code, "Otorisasi policy menolak aksi"),
+            PolicyActivationException =>
+                (StatusCodes.Status503ServiceUnavailable, "policy.activation_not_ready", "Policy belum siap"),
             InvalidRequestException { Code: "idempotency.payload_mismatch" } request =>
                 (StatusCodes.Status409Conflict, request.Code, "Konflik idempotency"),
             DomainRuleViolationException domain => (StatusCodes.Status409Conflict, domain.Code, "Aturan domain menolak aksi"),

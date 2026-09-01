@@ -13,6 +13,11 @@ public sealed record LocationCommandContext(
 public interface ILocationMasterStore
 {
     Task<IReadOnlyList<StoredLocationMaster>> ListAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<StoredLocationMaster>> FindApprovedEffectiveByCodeAsync(
+        string code,
+        DateTimeOffset instant,
+        CancellationToken cancellationToken);
+    Task<int> CountApprovedEffectiveAsync(DateTimeOffset instant, CancellationToken cancellationToken);
     Task<StoredLocationMaster?> FindAsync(Guid id, CancellationToken cancellationToken);
     Task<StoredLocationMaster> AddAsync(
         LocationMasterEntry entry,

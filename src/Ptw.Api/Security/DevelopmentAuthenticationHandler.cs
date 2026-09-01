@@ -25,6 +25,7 @@ internal sealed class DevelopmentAuthenticationHandler(
         var displayName = Request.Headers["X-Dev-Name"].FirstOrDefault() ?? "Sponsor Demo";
         var roles = Split(Request.Headers["X-Dev-Roles"].FirstOrDefault() ?? "Sponsor,Administrator");
         var locations = Split(Request.Headers["X-Dev-Locations"].FirstOrDefault() ?? "*");
+        var competencies = Split(Request.Headers["X-Dev-Competencies"].FirstOrDefault() ?? string.Empty);
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, userId),
@@ -33,6 +34,7 @@ internal sealed class DevelopmentAuthenticationHandler(
         };
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
         claims.AddRange(locations.Select(location => new Claim("location_scope", location)));
+        claims.AddRange(competencies.Select(competency => new Claim("competency", competency)));
         var identity = new ClaimsIdentity(claims, SchemeName);
         return Task.FromResult(AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));

@@ -32,6 +32,18 @@ public sealed class UserAuthorizationStore(PtwDbContext dbContext) : IUserAuthor
         return records.Select(ToStored).ToArray();
     }
 
+    public Task<int> CountApprovedEffectiveAsync(
+        DateTimeOffset instant,
+        CancellationToken cancellationToken)
+    {
+        var utcInstant = instant.ToUniversalTime();
+        return dbContext.UserAuthorizations.AsNoTracking().CountAsync(
+            x => x.Status == AuthorizationAssignmentStatus.Approved.ToString()
+                && x.EffectiveFrom <= utcInstant
+                && (x.EffectiveUntil == null || x.EffectiveUntil > utcInstant),
+            cancellationToken);
+    }
+
     public async Task<StoredUserAuthorization?> FindAsync(Guid id, CancellationToken cancellationToken)
     {
         var record = await dbContext.UserAuthorizations.AsNoTracking()

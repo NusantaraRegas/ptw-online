@@ -10,7 +10,8 @@ public sealed class PermitService(
     IPermitStore store,
     IActorContext actorContext,
     IClock clock,
-    IPermitNumberGenerator numberGenerator)
+    IPermitNumberGenerator numberGenerator,
+    IOperationalPolicyGate operationalPolicyGate)
 {
     public async Task<PermitResponse> CreateAsync(PermitDraftRequest request, string correlationId, CancellationToken cancellationToken)
     {
@@ -22,8 +23,18 @@ public sealed class PermitService(
             throw new InvalidRequestException("permit.sponsor_mismatch", "Sponsor hanya dapat membuat PTW untuk identitasnya sendiri.");
         }
 
+        var authorizationEvidence = await operationalPolicyGate.AuthorizePermitCommandAsync(
+            actor,
+            PermitPolicyOperations.CreateDraft,
+            request.LocationId,
+            cancellationToken);
         var permit = Permit.CreateDraft(request.ToDomain(), clock.UtcNow);
-        return (await store.AddAsync(permit, actor, correlationId, cancellationToken)).ToResponse();
+        return (await store.AddAsync(
+            permit,
+            actor,
+            correlationId,
+            authorizationEvidence,
+            cancellationToken)).ToResponse();
     }
 
     public async Task<PermitResponse> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -96,8 +107,20 @@ public sealed class PermitService(
         var actor = actorContext.Current;
         EnsureSponsorOwnership(actor, stored.Permit);
         EnsureLocationScope(actor, request.LocationId);
+        var authorizationEvidence = await operationalPolicyGate.AuthorizePermitCommandAsync(
+            actor,
+            PermitPolicyOperations.UpdateDraft,
+            request.LocationId,
+            cancellationToken);
         stored.Permit.UpdateDraft(request.ToDomain(), clock.UtcNow);
-        return (await store.UpdateAsync(stored.Permit, expectedETag, actor, correlationId, null, cancellationToken)).ToResponse();
+        return (await store.UpdateAsync(
+            stored.Permit,
+            expectedETag,
+            actor,
+            correlationId,
+            null,
+            authorizationEvidence,
+            cancellationToken)).ToResponse();
     }
 
     public async Task<PermitResponse> SubmitAsync(
@@ -124,6 +147,11 @@ public sealed class PermitService(
 
         var stored = await GetStoredAsync(id, cancellationToken);
         EnsureSponsorOwnership(actor, stored.Permit);
+        var authorizationEvidence = await operationalPolicyGate.AuthorizePermitCommandAsync(
+            actor,
+            PermitPolicyOperations.Submit,
+            stored.Permit.Draft.LocationId,
+            cancellationToken);
         var readiness = new SubmissionReadiness(
             request.ESimiEligible,
             request.RulesEvaluated,
@@ -131,7 +159,14 @@ public sealed class PermitService(
             request.MissingRequirements);
         stored.Permit.Submit(numberGenerator.Generate(clock.UtcNow), readiness, clock.UtcNow);
         var idempotency = new IdempotencyContext(actor.Id, operation, idempotencyKey, requestHash);
-        return (await store.UpdateAsync(stored.Permit, expectedETag, actor, correlationId, idempotency, cancellationToken)).ToResponse();
+        return (await store.UpdateAsync(
+            stored.Permit,
+            expectedETag,
+            actor,
+            correlationId,
+            idempotency,
+            authorizationEvidence,
+            cancellationToken)).ToResponse();
     }
 
     private async Task<StoredPermit> GetStoredAsync(Guid id, CancellationToken cancellationToken) =>

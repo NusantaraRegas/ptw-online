@@ -14,5 +14,6 @@ public sealed class MeController : ControllerBase
         User.Identity?.Name ?? "Unknown",
         User.FindAll(ClaimTypes.Role).Select(x => x.Value).ToArray(),
         User.FindAll("location_scope").Select(x => x.Value).ToArray(),
+        User.FindAll("competency").Select(x => x.Value).ToArray(),
         User.HasClaim("identity_source", "development"));
 }

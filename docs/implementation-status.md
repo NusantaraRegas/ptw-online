@@ -11,14 +11,14 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 | Draft PTW | Vertical slice diperkuat | create/list/get/update/submit, Angular create/list/detail/edit dengan optimistic concurrency |
 | Concurrency dan idempotency | Fondasi selesai | ETag/If-Match, request hash, unique idempotency record |
 | Data SQL Server | Fondasi selesai | schemas `ptw`, `cfg`, `audit`, `intg`, additive migrations |
-| Master lokasi | Framework decision-neutral | effective dating, hierarchy, maker-checker, version, audit/outbox; belum menjadi authority PTW |
-| Assignment otorisasi | Framework decision-neutral | multi-role, effective dating, maker-checker, delegasi non-broadening, resolver fail-safe; belum menjadi authority PTW |
+| Master lokasi | Framework + activation gate | effective dating, hierarchy, maker-checker, version, audit/outbox; enforcement default nonaktif |
+| Assignment otorisasi | Framework + activation gate | multi-role, effective dating, maker-checker, delegasi non-broadening, resolver dan competency check fail-safe |
 | Audit dan outbox | Read/write vertical slice | audit+outbox ditulis atomik; timeline scoped dan paginated tersedia pada API/UI |
-| Identity/authorization | Adapter development | actor abstraction, role/ownership/location scope; OIDC menunggu OPN-007 |
+| Identity/authorization | Adapter development | actor abstraction, role/ownership/location/competency claims; OIDC menunggu OPN-007 |
 | E-SIMI | Kontrak data pada draft saja | live adapter menunggu kontrak OPN-007 |
-| Angular SPA | Vertical slices bertahap | tema logo resmi Pertamina Nusantara Regas, dashboard, permit draft/detail/history, master lokasi dan assignment otorisasi admin, conflict/access handling, responsive layout |
+| Angular SPA | Vertical slices bertahap | tema logo resmi, dashboard, permit draft/detail/history, master lokasi, assignment otorisasi, readiness, simulator, dan paket UAT policy admin |
 | Compose | Development topology | web, API, worker, migrator, SQL Server 2025 |
-| Integration test | API–SQL baseline | SQL Server Testcontainer, scope denial, stale ETag, idempotency, immutability, hierarchy, dan maker-checker |
+| Integration test | API–SQL baseline | SQL Server disposable, scope denial, stale ETag, idempotency, maker-checker, activation gate, simulation non-mutating, UAT evidence, competency denial, dan atomic authorization evidence |
 
 ## Increment 2
 
@@ -58,8 +58,55 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 - Endpoint dan halaman `/admin/authorizations` hanya tersedia bagi Administrator.
 - Topbar Development menyediakan identity switcher untuk menguji maker-checker dengan actor berbeda;
   pilihan hanya disimpan pada session browser dan development headers diabaikan di environment lain.
-- Resolver belum dihubungkan ke transition PTW karena daftar role/action, matriks SoD, kompetensi,
-  dan approval route resmi masih menunggu pengesahan OPN-002.
+- Resolver belum menjadi authority aktif: wiring create/update/submit hanya berjalan ketika activation
+  gate dinyalakan setelah daftar role/action, kompetensi, dan OPN-001/002 dikonfigurasi.
+
+## Increment 5A
+
+- `OperationalPolicy` menyediakan activation gate opt-in; enforcement tetap `false` secara default
+  dan tidak menganggap decision record `DRAFT` sebagai kebijakan produksi.
+- Preflight memerlukan versi policy, referensi pengesahan OPN-001/002, mapping action eksplisit untuk
+  create/update/submit, serta minimal satu lokasi dan assignment disetujui yang sedang efektif.
+- Endpoint dan halaman `/admin/policy` hanya dapat dibaca Administrator serta menjelaskan setiap
+  blocker tanpa mengubah atau mengesahkan decision record.
+- Saat enforcement diaktifkan, command perubahan PTW memetakan kode lokasi ke tepat satu master
+  efektif, menyelesaikan assignment actor/action/location, dan memverifikasi competency claims.
+- Konfigurasi aktif yang belum siap ditolak HTTP `503`; lokasi, assignment, ambiguity, atau
+  kompetensi yang tidak valid ditolak HTTP `403` tanpa fallback ke development claims.
+- Bukti policy version, decision references, action, location master, assignment, dan kompetensi
+  dicatat sebagai audit `PermitAuthorizationEvaluated` dalam transaksi permit yang sama.
+- Integration test membuktikan jalur sukses, akses admin, kompetensi hilang, audit atomik, dan
+  fail-closed ketika keputusan belum dikonfigurasi.
+
+## Increment 5B
+
+- Endpoint `POST /api/v1/admin/policy-simulations` dan form UAT pada `/admin/policy` mengevaluasi
+  subject, action, kode lokasi, waktu efektif, dan competency codes tanpa mengaktifkan enforcement.
+- Outcome `ALLOW` atau `DENY` menjelaskan master lokasi, assignment/role yang cocok, kompetensi
+  wajib dan hilang, serta hasil setiap check dengan penanda `isAuthoritative: false`.
+- Lokasi hilang/overlap, assignment hilang/ambigu, dan kompetensi tidak lengkap menghasilkan
+  outcome `DENY` fail-safe; request tetap sukses HTTP `200` agar skenario negatif dapat dicatat UAT.
+- Simulator hanya dapat dijalankan Administrator dan tidak menulis permit, audit, outbox, snapshot,
+  idempotency receipt, maupun configuration history.
+- Integration test membandingkan seluruh jumlah record sebelum dan setelah simulasi untuk
+  membuktikan jalur tersebut non-mutating.
+
+## Increment 5C
+
+- Endpoint dan halaman `/admin/policy-uat` menyediakan paket skenario immutable dan berversi tanpa
+  menanam role, action, lokasi, kompetensi, atau expected outcome produksi ke source code.
+- Setiap skenario merekam subject, action, lokasi, kompetensi, waktu opsional, expected outcome, dan
+  expected code; batch menyimpan actual response simulator lengkap dan penanda match/mismatch.
+- Coverage report menghitung expected/actual ALLOW-DENY, subject, action, lokasi, role, kompetensi,
+  temporal cases, dan matched cases. Content pack serta report memiliki checksum SHA-256.
+- Create suite dan run batch memerlukan `Idempotency-Key`; replay payload sama mengembalikan evidence
+  pertama, sedangkan penggunaan key dengan payload atau suite berbeda ditolak HTTP `409`.
+- Suite, run, configuration audit, outbox, dan receipt ditulis atomik. Tidak tersedia application
+  path untuk mengubah atau menghapus paket/report historis.
+- Activation readiness kini memerlukan latest passing run untuk policy version yang sama persis.
+  Syarat ini fail-closed, tetapi tidak mengesahkan OPN-001/002 dan enforcement tetap nonaktif default.
+- Integration test membuktikan version allocation, expected-vs-actual ALLOW/DENY, checksum, replay,
+  payload mismatch, role Administrator, evidence atomik, dan passing-run activation prerequisite.
 
 ## Belum diimplementasikan karena membutuhkan keputusan bisnis
 
@@ -77,10 +124,11 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 ## Urutan implementasi berikutnya
 
 1. Lengkapi dan sahkan draft decision records OPN-001–009 bersama owner pada BRD.
-2. Muat daftar lokasi resmi serta sahkan daftar role/action, kompetensi, dan matriks SoD untuk
-   mengaktifkan master lokasi dan assignment otorisasi sebagai policy PTW.
+2. Muat daftar lokasi resmi serta sahkan daftar role/action, kompetensi, dan matriks SoD; kemudian
+   isi konfigurasi activation gate dan lakukan simulation/UAT sebelum enforcement dinyalakan.
 3. Tambahkan E-SIMI adapter dan contract tests memakai hasil OPN-007.
-4. Implement declarative ruleset + simulation tanpa free-form scripting.
+4. Perluas paket UAT dengan declarative permit ruleset setelah OPN-003/004 disahkan, tanpa free-form
+   scripting atau threshold/checklist default yang belum disetujui.
 5. Lengkapi workflow review/approval dan field operations berdasarkan OPN-002–006.
 6. Tambahkan attachment quarantine/malware integration, reports, print, notifications, integration/E2E/security tests.
 

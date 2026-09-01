@@ -28,12 +28,18 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         return records.Select(ToStored).ToArray();
     }
 
-    public async Task<StoredPermit> AddAsync(Permit permit, Actor actor, string correlationId, CancellationToken cancellationToken)
+    public async Task<StoredPermit> AddAsync(
+        Permit permit,
+        Actor actor,
+        string correlationId,
+        PolicyAuthorizationEvidence? authorizationEvidence,
+        CancellationToken cancellationToken)
     {
         var record = ToRecord(permit);
         dbContext.Permits.Add(record);
         AddVersion(permit, actor.Id);
         AddEvents(permit.DequeueEvents(), actor.Id, correlationId);
+        AddAuthorizationEvidence(permit.Id, actor.Id, correlationId, authorizationEvidence);
         await dbContext.SaveChangesAsync(cancellationToken);
         return ToStored(record);
     }
@@ -44,6 +50,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         Actor actor,
         string correlationId,
         IdempotencyContext? idempotency,
+        PolicyAuthorizationEvidence? authorizationEvidence,
         CancellationToken cancellationToken)
     {
         var persistedVersion = await dbContext.Permits.AsNoTracking()
@@ -60,6 +67,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             AddVersion(permit, actor.Id);
         }
         AddEvents(permit.DequeueEvents(), actor.Id, correlationId);
+        AddAuthorizationEvidence(permit.Id, actor.Id, correlationId, authorizationEvidence);
         if (idempotency is not null)
         {
             dbContext.IdempotencyRecords.Add(new IdempotencyRecord
@@ -196,6 +204,29 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                 OccurredAt = domainEvent.OccurredAt
             });
         }
+    }
+
+    private void AddAuthorizationEvidence(
+        Guid permitId,
+        string actorId,
+        string correlationId,
+        PolicyAuthorizationEvidence? evidence)
+    {
+        if (evidence is null)
+        {
+            return;
+        }
+
+        dbContext.AuditEvents.Add(new AuditEventRecord
+        {
+            Id = Guid.CreateVersion7(),
+            PermitId = permitId,
+            EventType = "PermitAuthorizationEvaluated",
+            ActorId = actorId,
+            OccurredAt = evidence.EvaluatedAt,
+            PayloadJson = JsonSerializer.Serialize(evidence, JsonOptions),
+            CorrelationId = correlationId
+        });
     }
 
     private static PermitRecord ToRecord(Permit permit) => new()

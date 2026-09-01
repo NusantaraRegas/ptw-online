@@ -36,6 +36,7 @@ describe('developmentIdentityInterceptor', () => {
     expect(request.request.headers.get('X-Dev-Name')).toBe('Admin Maker Demo');
     expect(request.request.headers.get('X-Dev-Roles')).toBe('Administrator');
     expect(request.request.headers.get('X-Dev-Locations')).toBe('*');
+    expect(request.request.headers.get('X-Dev-Competencies')).toBe('');
     request.flush({});
   });
 

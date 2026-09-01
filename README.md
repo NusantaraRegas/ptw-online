@@ -23,6 +23,11 @@ Sudah tersedia:
 - framework master lokasi effective-dated dengan maker-checker, immutable version snapshot, audit/outbox, dan halaman Administrasi fail-safe;
 - framework assignment otorisasi multi-role dengan periode efektif, maker-checker, delegasi
   non-broadening, resolver fail-safe, dan halaman Administrasi;
+- activation gate OPN-001/002 yang memeriksa policy version, referensi keputusan, master efektif,
+  action mapping, assignment, kompetensi, dan latest passing UAT untuk versi policy yang sama
+  sebelum enforcement dapat digunakan;
+- paket UAT policy immutable dan berversi dengan expected-vs-actual batch, coverage matrix,
+  checksum SHA-256, idempotent run, serta audit/outbox atomik;
 - worker outbox, health checks, rate limiting, `ProblemDetails`, correlation ID, development identity adapter, Docker Compose, Nginx, dan CI;
 - unit tests untuk invariants/negative paths domain serta integration test API–SQL untuk scope, concurrency, dan idempotency.
 
@@ -186,6 +191,13 @@ tetap diabaikan backend di luar environment `Development`.
 | `POST`  | `/api/v1/admin/authorizations/{id}/submit` | Mengajukan pemeriksaan maker-checker |
 | `POST`  | `/api/v1/admin/authorizations/{id}/approve` | Menyetujui dengan checker berbeda |
 | `POST`  | `/api/v1/admin/authorizations/{id}/return-for-changes` | Mengembalikan draft dengan alasan |
+| `GET`   | `/api/v1/admin/policy-readiness` | Preflight aktivasi policy OPN-001/002 (Admin) |
+| `POST`  | `/api/v1/admin/policy-simulations` | Simulasi actor/action/location/kompetensi tanpa mutasi (Admin) |
+| `GET`   | `/api/v1/admin/policy-uat-suites` | Daftar paket UAT immutable dan berversi (Admin) |
+| `POST`  | `/api/v1/admin/policy-uat-suites` | Membekukan versi paket UAT dengan `Idempotency-Key` (Admin) |
+| `GET`   | `/api/v1/admin/policy-uat-suites/{id}` | Detail skenario dan checksum paket UAT (Admin) |
+| `GET`   | `/api/v1/admin/policy-uat-suites/{id}/runs` | Riwayat report batch immutable (Admin) |
+| `POST`  | `/api/v1/admin/policy-uat-suites/{id}/runs` | Menjalankan batch dengan `Idempotency-Key` (Admin) |
 | `GET`   | `/health/live`                  | Process liveness                               |
 | `GET`   | `/health/ready`                 | Readiness termasuk SQL Server                  |
 
@@ -196,6 +208,50 @@ seed produksi. Satu user dapat memiliki beberapa role; SoD diterapkan per actor/
 delegasi tidak boleh memperluas authority sumber. Hanya identitas dengan role `Administrator` yang
 dapat mengakses endpoint administrasi. Daftar lokasi, role/action, hierarchy ownership, kompetensi,
 approval route, dan detail SoD produksi tetap menunggu OPN-001/002 berstatus `ACCEPTED`.
+
+### Activation gate master authorization
+
+Enforcement master authorization nonaktif secara default. Halaman **Administrasi → Kesiapan
+policy** dan endpoint `/api/v1/admin/policy-readiness` menampilkan prasyarat yang belum terpenuhi.
+Aktivasi hanya boleh dilakukan oleh deployment setelah OPN-001/002 disahkan, data efektif telah
+disetujui, dan tersedia passing UAT run untuk policy version yang sama persis. Contoh bentuk
+konfigurasi—nilai di bawah wajib diganti dengan keputusan resmi:
+
+```json
+{
+  "OperationalPolicy": {
+    "EnforceMasterAuthorization": true,
+    "PolicyVersion": "<versi-policy-yang-disahkan>",
+    "AcceptedDecisionReferences": {
+      "OPN-001": "<referensi-pengesahan-lokasi>",
+      "OPN-002": "<referensi-pengesahan-otorisasi>"
+    },
+    "PermitActionCodes": {
+      "CreateDraft": "<action-code-resmi>",
+      "UpdateDraft": "<action-code-resmi>",
+      "Submit": "<action-code-resmi>"
+    }
+  }
+}
+```
+
+Ketika aktif, command create/update/submit memerlukan tepat satu master lokasi efektif, assignment
+actor yang tidak ambigu untuk action tersebut, dan seluruh kompetensi wajib. Keputusan yang lolos
+dicatat sebagai `PermitAuthorizationEvaluated` bersama permit dalam transaksi yang sama. Konfigurasi
+aktif tetapi belum siap menghasilkan HTTP `503`; assignment, lokasi, atau kompetensi yang tidak
+memenuhi syarat menghasilkan HTTP `403`. Tidak ada fallback ke claim development ketika enforcement
+aktif.
+
+Halaman **Kesiapan policy** juga menyediakan simulator UAT. Simulator memakai lokasi dan assignment
+yang telah disetujui, tetapi tidak memerlukan enforcement aktif dan tidak menulis permit, audit,
+outbox, version, atau receipt. Outcome `ALLOW`/`DENY` selalu ditandai `isAuthoritative: false` dan
+tidak dapat digunakan sebagai izin untuk mulai bekerja.
+
+Halaman **UAT policy** (`/admin/policy-uat`) membekukan sekumpulan skenario expected outcome sebagai
+versi baru. Setiap batch menyimpan actual outcome, coverage subject/action/location/role/kompetensi,
+checksum report, actor, dan waktu eksekusi. Create dan run bersifat idempotent; paket serta report
+tidak memiliki endpoint update/delete. Activation readiness hanya menerima latest passing report
+untuk `PolicyVersion` yang sama persis. Passing report tetap bukan pengesahan decision record `DRAFT`.
 
 ## Lifecycle dan invariants
 

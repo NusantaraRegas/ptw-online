@@ -59,4 +59,5 @@ public sealed record MeResponse(
     string DisplayName,
     IReadOnlyList<string> Roles,
     IReadOnlyList<string> LocationScopes,
+    IReadOnlyList<string> CompetencyCodes,
     bool IsDevelopmentIdentity);

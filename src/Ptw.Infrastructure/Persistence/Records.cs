@@ -167,3 +167,45 @@ public sealed class AuthorizationCommandReceiptRecord
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
 }
+
+public sealed class PolicyUatSuiteRecord
+{
+    public Guid Id { get; set; }
+    public string SuiteKey { get; set; } = null!;
+    public string Name { get; set; } = null!;
+    public string PolicyVersion { get; set; } = null!;
+    public int Version { get; set; }
+    public string ScenariosJson { get; set; } = null!;
+    public string ContentHash { get; set; } = null!;
+    public DateTimeOffset CreatedAt { get; set; }
+    public string CreatedBy { get; set; } = null!;
+}
+
+public sealed class PolicyUatRunRecord
+{
+    public Guid Id { get; set; }
+    public Guid PolicyUatSuiteId { get; set; }
+    public string PolicyVersion { get; set; } = null!;
+    public string SuiteContentHash { get; set; } = null!;
+    public bool Passed { get; set; }
+    public int ScenarioCount { get; set; }
+    public int MatchedCount { get; set; }
+    public string CoverageJson { get; set; } = null!;
+    public string ResultsJson { get; set; } = null!;
+    public string ReportHash { get; set; } = null!;
+    public DateTimeOffset ExecutedAt { get; set; }
+    public string ExecutedBy { get; set; } = null!;
+}
+
+public sealed class PolicyUatCommandReceiptRecord
+{
+    public Guid Id { get; set; }
+    public string ActorId { get; set; } = null!;
+    public string Operation { get; set; } = null!;
+    public string Key { get; set; } = null!;
+    public string RequestHash { get; set; } = null!;
+    public Guid? PolicyUatSuiteId { get; set; }
+    public Guid? PolicyUatRunId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+}

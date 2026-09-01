@@ -1,0 +1,196 @@
+<nav class="admin-tabs" aria-label="Administrasi konfigurasi">
+  <a routerLink="/admin">Master lokasi</a>
+  <a routerLink="/admin/authorizations">Otorisasi pengguna</a>
+  <a routerLink="/admin/policy" aria-current="page">Kesiapan policy</a>
+  <a routerLink="/admin/policy-uat">UAT policy</a>
+</nav>
+
+<div class="page-title">
+  <div>
+    <p class="eyebrow">Activation gate fail-closed</p>
+    <h1>Kesiapan policy PTW</h1>
+    <p class="subtitle">
+      Verifikasi bukti keputusan dan konfigurasi efektif sebelum master lokasi serta assignment
+      menjadi authority command PTW.
+    </p>
+  </div>
+</div>
+
+@if (loading()) {
+  <section class="card loading-card" aria-live="polite">Memeriksa kesiapan policy&hellip;</section>
+} @else if (accessDenied()) {
+  <section class="card access-card">
+    <span aria-hidden="true">!</span>
+    <div>
+      <h2>Akses Administrator diperlukan</h2>
+      <p>{{ error() }}</p>
+    </div>
+  </section>
+} @else if (error()) {
+  <p class="error-summary" role="alert">{{ error() }}</p>
+} @else if (readiness(); as state) {
+  <section class="readiness-hero" [class.ready]="state.readyForActivation">
+    <div class="status-mark" aria-hidden="true">{{ state.readyForActivation ? '✓' : '!' }}</div>
+    <div>
+      <p>{{ state.enforcementEnabled ? 'Enforcement aktif' : 'Mode persiapan' }}</p>
+      <h2>
+        {{
+          state.readyForActivation ? 'Prasyarat konfigurasi terpenuhi' : 'Aktivasi masih diblokir'
+        }}
+      </h2>
+      <span>
+        {{ completedCount() }} dari {{ state.requirements.length }} pemeriksaan terpenuhi · versi
+        {{ state.policyVersion || 'belum ditetapkan' }}
+      </span>
+    </div>
+    <strong>{{ state.mode }}</strong>
+  </section>
+
+  <section class="boundary-note" aria-label="Perilaku fail-safe">
+    <span aria-hidden="true">i</span>
+    <p>
+      Menyalakan enforcement sebelum seluruh prasyarat terpenuhi akan membuat command perubahan PTW
+      ditolak. Halaman ini hanya membaca konfigurasi dan tidak mengesahkan OPN secara otomatis.
+    </p>
+  </section>
+
+  <section class="card checklist" aria-labelledby="policy-checklist-title">
+    <header>
+      <div>
+        <p class="eyebrow">Preflight</p>
+        <h2 id="policy-checklist-title">Checklist aktivasi</h2>
+      </div>
+      <time [attr.datetime]="state.evaluatedAt">
+        Diperiksa {{ state.evaluatedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
+      </time>
+    </header>
+    <div class="requirements">
+      @for (item of state.requirements; track item.code) {
+        <article [class.satisfied]="item.satisfied">
+          <span class="check" aria-hidden="true">{{ item.satisfied ? '✓' : '!' }}</span>
+          <div>
+            <strong>{{ item.label }}</strong>
+            <p>{{ item.detail }}</p>
+          </div>
+          <em>{{ item.satisfied ? 'Terpenuhi' : 'Belum siap' }}</em>
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="card simulator" aria-labelledby="policy-simulator-title">
+    <header>
+      <div>
+        <p class="eyebrow">UAT non-mutating</p>
+        <h2 id="policy-simulator-title">Simulator assignment policy</h2>
+        <p>
+          Uji actor, action, lokasi, waktu, dan kompetensi terhadap data yang telah disetujui tanpa
+          mengubah PTW atau menyalakan enforcement.
+        </p>
+      </div>
+      <span>Hasil bukan keputusan operasional</span>
+    </header>
+
+    <form [formGroup]="simulationForm" (ngSubmit)="simulate()">
+      <label>
+        <span>Subject ID</span>
+        <input formControlName="subjectId" autocomplete="off" placeholder="operator.satu" />
+      </label>
+      <label>
+        <span>Action code</span>
+        <input formControlName="actionCode" autocomplete="off" placeholder="permit.submit" />
+      </label>
+      <label>
+        <span>Kode lokasi</span>
+        <input formControlName="locationCode" autocomplete="off" placeholder="AREA-01" />
+      </label>
+      <label>
+        <span>Waktu evaluasi <small>kosong berarti sekarang</small></span>
+        <input type="datetime-local" formControlName="evaluatedAt" />
+      </label>
+      <label class="wide">
+        <span>Kompetensi tersedia <small>pisahkan dengan koma</small></span>
+        <input
+          formControlName="competencyCodes"
+          autocomplete="off"
+          placeholder="GAS_TEST_L2, HSE_INDUCTION"
+        />
+      </label>
+      <div class="form-actions wide">
+        <button type="submit" class="primary-action" [disabled]="simulating()">
+          {{ simulating() ? 'Mengevaluasi…' : 'Jalankan simulasi' }}
+        </button>
+      </div>
+    </form>
+
+    @if (simulationError()) {
+      <p class="error-summary" role="alert">{{ simulationError() }}</p>
+    }
+
+    @if (simulation(); as result) {
+      <section
+        class="simulation-result"
+        [class.allowed]="result.allowed"
+        aria-labelledby="simulation-result-title"
+      >
+        <header>
+          <span aria-hidden="true">{{ result.allowed ? '✓' : '!' }}</span>
+          <div>
+            <p>Outcome simulasi</p>
+            <h3 id="simulation-result-title">{{ result.outcome }} — {{ result.code }}</h3>
+            <small>{{ result.summary }}</small>
+          </div>
+          <time [attr.datetime]="result.evaluatedAt">
+            {{ result.evaluatedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
+          </time>
+        </header>
+
+        @if (result.location) {
+          <div class="simulation-context">
+            <div>
+              <small>Lokasi</small><strong>{{ result.location.code }}</strong>
+            </div>
+            <div>
+              <small>Nama area</small><strong>{{ result.location.name }}</strong>
+            </div>
+            <div>
+              <small>Assignment cocok</small><strong>{{ result.assignments.length }}</strong>
+            </div>
+            <div>
+              <small>Kompetensi kurang</small
+              ><strong>{{ result.missingCompetencyCodes.length }}</strong>
+            </div>
+          </div>
+        }
+
+        @if (result.assignments.length > 0) {
+          <div class="matched-assignments">
+            <h4>Assignment yang digunakan</h4>
+            @for (assignment of result.assignments; track assignment.id) {
+              <article>
+                <strong>{{ assignment.roleCode }}</strong>
+                <span>{{ assignment.kind }} · {{ assignment.id }}</span>
+              </article>
+            }
+          </div>
+        }
+
+        <div class="simulation-checks">
+          @for (check of result.checks; track check.code) {
+            <article [class.passed]="check.passed">
+              <span aria-hidden="true">{{ check.passed ? '✓' : '!' }}</span>
+              <div>
+                <strong>{{ check.label }}</strong>
+                <p>{{ check.detail }}</p>
+              </div>
+              <em>{{ check.passed ? 'Lulus' : 'Ditolak' }}</em>
+            </article>
+          }
+        </div>
+        <footer>
+          Simulasi tidak authoritative, tidak menghasilkan izin kerja, dan tidak mengubah data.
+        </footer>
+      </section>
+    }
+  </section>
+}

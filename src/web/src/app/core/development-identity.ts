@@ -8,6 +8,7 @@ export interface DevelopmentIdentityProfile {
   displayName: string;
   roles: string[];
   locationScopes: string[];
+  competencyCodes: string[];
 }
 
 export interface CurrentIdentity {
@@ -15,6 +16,7 @@ export interface CurrentIdentity {
   displayName: string;
   roles: string[];
   locationScopes: string[];
+  competencyCodes: string[];
   isDevelopmentIdentity: boolean;
 }
 
@@ -25,6 +27,7 @@ export const DEVELOPMENT_IDENTITIES: DevelopmentIdentityProfile[] = [
     displayName: 'Sponsor Demo',
     roles: ['Sponsor', 'Administrator'],
     locationScopes: ['*'],
+    competencyCodes: [],
   },
   {
     key: 'admin-maker',
@@ -32,6 +35,7 @@ export const DEVELOPMENT_IDENTITIES: DevelopmentIdentityProfile[] = [
     displayName: 'Admin Maker Demo',
     roles: ['Administrator'],
     locationScopes: ['*'],
+    competencyCodes: [],
   },
   {
     key: 'admin-checker',
@@ -39,6 +43,7 @@ export const DEVELOPMENT_IDENTITIES: DevelopmentIdentityProfile[] = [
     displayName: 'Admin Checker Demo',
     roles: ['Administrator'],
     locationScopes: ['*'],
+    competencyCodes: [],
   },
   {
     key: 'sponsor-only',
@@ -46,6 +51,7 @@ export const DEVELOPMENT_IDENTITIES: DevelopmentIdentityProfile[] = [
     displayName: 'Sponsor Only Demo',
     roles: ['Sponsor'],
     locationScopes: ['*'],
+    competencyCodes: [],
   },
 ];
 
@@ -101,6 +107,7 @@ export const developmentIdentityInterceptor: HttpInterceptorFn = (request, next)
         'X-Dev-Name': identity.displayName,
         'X-Dev-Roles': identity.roles.join(','),
         'X-Dev-Locations': identity.locationScopes.join(','),
+        'X-Dev-Competencies': identity.competencyCodes.join(','),
       },
     }),
   );

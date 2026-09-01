@@ -21,6 +21,36 @@ public sealed class LocationMasterStore(PtwDbContext dbContext) : ILocationMaste
         return records.Select(ToStored).ToArray();
     }
 
+    public async Task<IReadOnlyList<StoredLocationMaster>> FindApprovedEffectiveByCodeAsync(
+        string code,
+        DateTimeOffset instant,
+        CancellationToken cancellationToken)
+    {
+        var normalizedCode = code.Trim();
+        var utcInstant = instant.ToUniversalTime();
+        var records = await dbContext.LocationMasters.AsNoTracking()
+            .Where(x => x.Code == normalizedCode
+                && x.Status == LocationMasterStatus.Approved.ToString()
+                && x.EffectiveFrom <= utcInstant
+                && (x.EffectiveUntil == null || x.EffectiveUntil > utcInstant))
+            .OrderByDescending(x => x.EffectiveFrom)
+            .Take(2)
+            .ToListAsync(cancellationToken);
+        return records.Select(ToStored).ToArray();
+    }
+
+    public Task<int> CountApprovedEffectiveAsync(
+        DateTimeOffset instant,
+        CancellationToken cancellationToken)
+    {
+        var utcInstant = instant.ToUniversalTime();
+        return dbContext.LocationMasters.AsNoTracking().CountAsync(
+            x => x.Status == LocationMasterStatus.Approved.ToString()
+                && x.EffectiveFrom <= utcInstant
+                && (x.EffectiveUntil == null || x.EffectiveUntil > utcInstant),
+            cancellationToken);
+    }
+
     public async Task<StoredLocationMaster?> FindAsync(Guid id, CancellationToken cancellationToken)
     {
         var record = await dbContext.LocationMasters.AsNoTracking()
