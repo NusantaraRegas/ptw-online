@@ -78,5 +78,71 @@ public sealed class PermitsController(PermitService service) : ControllerBase
         return response;
     }
 
+    [HttpPost("{id:guid}/validations/hsse/endorse")]
+    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<PermitResponse>> EndorseHsseValidation(
+        Guid id,
+        EndorsePermitValidationRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.EndorseHsseValidationAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
+    [HttpPost("{id:guid}/validations/gas-distribution/endorse")]
+    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<PermitResponse>> EndorseGasDistributionValidation(
+        Guid id,
+        EndorsePermitValidationRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.EndorseGasDistributionValidationAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
+    [HttpPost("{id:guid}/approve")]
+    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<PermitResponse>> Approve(
+        Guid id,
+        ApprovePermitRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.ApproveAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
+    [HttpPost("{id:guid}/issue")]
+    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<PermitResponse>> Issue(
+        Guid id,
+        IssuePermitRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.IssueAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
+    private async Task<ActionResult<PermitResponse>> CommandAsync(
+        Func<string, string, Task<PermitResponse>> command)
+    {
+        var response = await command(
+            Request.Headers.IfMatch.ToString(),
+            Request.Headers["Idempotency-Key"].ToString());
+        Response.Headers.ETag = response.ETag;
+        return response;
+    }
+
     private string CorrelationId => HttpContext.Items["X-Correlation-ID"]?.ToString() ?? HttpContext.TraceIdentifier;
 }

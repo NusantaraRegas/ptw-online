@@ -23,6 +23,9 @@ public sealed class Permit
     public DateTimeOffset UpdatedAt { get; private set; }
     public Guid? ActiveWorkPeriodId { get; private set; }
     public string? SuspensionReason { get; private set; }
+    public PermitValidationEvidence? HsseValidation { get; private set; }
+    public PermitValidationEvidence? GasDistributionValidation { get; private set; }
+    public PermitApprovalEvidence? Approval { get; private set; }
     public IReadOnlyList<DomainEvent> Events => _events;
 
     public static Permit CreateDraft(PermitDraft draft, DateTimeOffset now)
@@ -41,7 +44,10 @@ public sealed class Permit
         DateTimeOffset createdAt,
         DateTimeOffset updatedAt,
         Guid? activeWorkPeriodId,
-        string? suspensionReason) =>
+        string? suspensionReason,
+        PermitValidationEvidence? hsseValidation = null,
+        PermitValidationEvidence? gasDistributionValidation = null,
+        PermitApprovalEvidence? approval = null) =>
         new(id, draft, createdAt)
         {
             PermitNumber = permitNumber,
@@ -49,13 +55,17 @@ public sealed class Permit
             Version = version,
             UpdatedAt = updatedAt,
             ActiveWorkPeriodId = activeWorkPeriodId,
-            SuspensionReason = suspensionReason
+            SuspensionReason = suspensionReason,
+            HsseValidation = hsseValidation,
+            GasDistributionValidation = gasDistributionValidation,
+            Approval = approval
         };
 
     public void UpdateDraft(PermitDraft draft, DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.Draft, PermitStatus.RevisionRequired);
         Draft = NormalizeAndValidate(draft);
+        ClearWorkflowEvidence();
         Version++;
         Touch(now);
         Raise("permit_draft_updated", new { Version });
@@ -81,6 +91,7 @@ public sealed class Permit
     public void StartReview(DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.Submitted);
+        ClearWorkflowEvidence();
         MoveTo(PermitStatus.UnderReview, "review_started", now);
     }
 
@@ -88,19 +99,67 @@ public sealed class Permit
     {
         EnsureStatus(PermitStatus.UnderReview, PermitStatus.AwaitingApproval);
         EnsureReason(reason);
+        ClearWorkflowEvidence();
         MoveTo(PermitStatus.RevisionRequired, "revision_requested", now, new { Reason = reason.Trim() });
     }
 
-    public void EndorseAllReviews(DateTimeOffset now)
+    public void EndorseValidation(
+        PermitValidationKind kind,
+        string actorId,
+        string statement,
+        DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.UnderReview);
-        MoveTo(PermitStatus.AwaitingApproval, "reviews_endorsed", now);
+        EnsureEvidence(actorId, statement);
+        var evidence = new PermitValidationEvidence(
+            kind,
+            actorId.Trim(),
+            statement.Trim(),
+            now.ToUniversalTime());
+        switch (kind)
+        {
+            case PermitValidationKind.Hsse when HsseValidation is null:
+                HsseValidation = evidence;
+                break;
+            case PermitValidationKind.GasDistribution when GasDistributionValidation is null:
+                GasDistributionValidation = evidence;
+                break;
+            default:
+                throw new DomainRuleViolationException(
+                    "permit.validation.already_completed",
+                    $"Validasi {kind} sudah diselesaikan untuk versi PTW ini.");
+        }
+
+        Touch(now);
+        Raise("permit_validation_endorsed", new
+        {
+            Validation = kind.ToString(),
+            evidence.ActorId,
+            evidence.Statement
+        });
+        if (HsseValidation is not null && GasDistributionValidation is not null)
+        {
+            MoveTo(PermitStatus.AwaitingApproval, "parallel_validations_completed", now);
+        }
     }
 
-    public void Approve(DateTimeOffset now)
+    public void Approve(string actorId, string statement, DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.AwaitingApproval);
-        MoveTo(PermitStatus.Approved, "permit_approved", now);
+        EnsureEvidence(actorId, statement);
+        if (HsseValidation is null || GasDistributionValidation is null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.validation.incomplete",
+                "Validasi HSSE dan Distribusi Gas & Pengelolaan ORF wajib selesai sebelum approval.");
+        }
+
+        Approval = new PermitApprovalEvidence(actorId.Trim(), statement.Trim(), now.ToUniversalTime());
+        MoveTo(PermitStatus.Approved, "permit_approved", now, new
+        {
+            Approval.ActorId,
+            Approval.Statement
+        });
     }
 
     public void MarkReadyForIssue(DateTimeOffset now)
@@ -109,9 +168,10 @@ public sealed class Permit
         MoveTo(PermitStatus.ReadyForIssue, "readiness_completed", now);
     }
 
-    public Guid OpenWorkPeriod(FieldIssueReadiness readiness, DateTimeOffset now)
+    public Guid OpenWorkPeriod(FieldIssueReadiness readiness, string actorId, DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.Approved, PermitStatus.ReadyForIssue);
+        EnsureEvidence(actorId, "Penerbitan PTW");
         if (ActiveWorkPeriodId is not null)
         {
             throw new DomainRuleViolationException("work_period.already_active", "Hanya satu periode kerja yang boleh aktif.");
@@ -119,16 +179,24 @@ public sealed class Permit
 
         if (now < Draft.ValidFrom || now > Draft.ValidUntil)
         {
-            throw new DomainRuleViolationException("permit.outside_validity", "Waktu pembukaan berada di luar masa berlaku PTW.");
+            throw new DomainRuleViolationException(
+                "permit.outside_validity",
+                "Waktu penerbitan berada di luar masa berlaku PTW.");
         }
 
         if (!readiness.IsReady)
         {
-            throw new DomainRuleViolationException("permit.open.guards_failed", "Prasyarat aktual belum lengkap; PTW tidak dapat dibuka.");
+            throw new DomainRuleViolationException(
+                "permit.issue.guards_failed",
+                "Prasyarat aktual belum lengkap; PTW tidak dapat diterbitkan.");
         }
 
         ActiveWorkPeriodId = Guid.CreateVersion7();
-        MoveTo(PermitStatus.Open, "work_period_opened", now, new { WorkPeriodId = ActiveWorkPeriodId });
+        MoveTo(PermitStatus.Open, "permit_issued", now, new
+        {
+            WorkPeriodId = ActiveWorkPeriodId,
+            IssuedBy = actorId.Trim()
+        });
         return ActiveWorkPeriodId.Value;
     }
 
@@ -276,6 +344,23 @@ public sealed class Permit
         {
             throw new DomainRuleViolationException("permit.reason_required", "Alasan wajib diisi.");
         }
+    }
+
+    private static void EnsureEvidence(string actorId, string statement)
+    {
+        if (string.IsNullOrWhiteSpace(actorId) || string.IsNullOrWhiteSpace(statement))
+        {
+            throw new DomainRuleViolationException(
+                "permit.evidence_required",
+                "Identitas actor dan pernyataan keputusan wajib dicatat.");
+        }
+    }
+
+    private void ClearWorkflowEvidence()
+    {
+        HsseValidation = null;
+        GasDistributionValidation = null;
+        Approval = null;
     }
 
     private void EnsureActiveWorkPeriod()

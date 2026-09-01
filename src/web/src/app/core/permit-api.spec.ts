@@ -72,4 +72,33 @@ describe('PermitApi', () => {
     expect(request.request.method).toBe('GET');
     request.flush({ items: [], count: 0 });
   });
+
+  it('sends explicit validation command with concurrency and idempotency headers', () => {
+    api.endorseHsse('permit-id', '"etag-value"', 'Persyaratan HSSE sesuai.').subscribe();
+    const request = http.expectOne('/api/v1/permits/permit-id/validations/hsse/endorse');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
+    expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
+    expect(request.request.body).toEqual({ statement: 'Persyaratan HSSE sesuai.' });
+    request.flush({});
+  });
+
+  it('uses the issue command rather than exposing a generic status update', () => {
+    const readiness = {
+      eSimiEligible: true,
+      locationVerified: true,
+      toolboxTalkComplete: true,
+      personnelAcknowledged: true,
+      ppeAndControlsVerified: true,
+      isolationVerified: true,
+      simopsVerified: true,
+      gasTestSatisfied: true,
+      hasUnresolvedSuspension: false,
+    };
+    api.issue('permit-id', '"etag-value"', readiness).subscribe();
+    const request = http.expectOne('/api/v1/permits/permit-id/issue');
+    expect(request.request.body).toEqual(readiness);
+    expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
+    request.flush({});
+  });
 });

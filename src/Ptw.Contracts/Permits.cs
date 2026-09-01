@@ -25,6 +25,36 @@ public sealed record SubmitPermitRequest(
     bool RequiredDocumentsSafe,
     IReadOnlyList<string> MissingRequirements);
 
+public sealed record EndorsePermitValidationRequest(string Statement);
+
+public sealed record ApprovePermitRequest(string Statement);
+
+public sealed record IssuePermitRequest(
+    bool ESimiEligible,
+    bool LocationVerified,
+    bool ToolboxTalkComplete,
+    bool PersonnelAcknowledged,
+    bool PpeAndControlsVerified,
+    bool IsolationVerified,
+    bool SimopsVerified,
+    bool GasTestSatisfied,
+    bool HasUnresolvedSuspension);
+
+public sealed record PermitValidationResponse(
+    string Code,
+    string Label,
+    bool Completed,
+    string? ActorId,
+    string? Statement,
+    DateTimeOffset? CompletedAt);
+
+public sealed record PermitWorkflowResponse(
+    PermitValidationResponse Hsse,
+    PermitValidationResponse GasDistribution,
+    string? ApprovedBy,
+    string? ApprovalStatement,
+    DateTimeOffset? ApprovedAt);
+
 public sealed record PermitResponse(
     Guid Id,
     string? PermitNumber,
@@ -35,6 +65,7 @@ public sealed record PermitResponse(
     DateTimeOffset UpdatedAt,
     Guid? ActiveWorkPeriodId,
     string? SuspensionReason,
+    PermitWorkflowResponse Workflow,
     string ETag);
 
 public sealed record PagedResponse<T>(IReadOnlyList<T> Items, int Count);

@@ -9,6 +9,11 @@ public sealed record LocationDraftRequest(
 
 public sealed record ReturnLocationForChangesRequest(string Reason);
 
+public sealed record LocationOptionResponse(
+    Guid Id,
+    string Code,
+    string Name);
+
 public sealed record LocationMasterResponse(
     Guid Id,
     string Code,

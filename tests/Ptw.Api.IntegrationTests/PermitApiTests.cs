@@ -143,7 +143,9 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
         var submitted = await firstResponse.Content.ReadFromJsonAsync<PermitResponse>();
         Assert.NotNull(submitted);
-        Assert.Equal("SUBMITTED", submitted.Status);
+        Assert.Equal("UNDER_REVIEW", submitted.Status);
+        Assert.False(submitted.Workflow.Hsse.Completed);
+        Assert.False(submitted.Workflow.GasDistribution.Completed);
 
         using var replay = Submit(created.Id, created.ETag, key, request);
         using var replayResponse = await client.SendAsync(replay);
@@ -160,6 +162,129 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         using var mismatchResponse = await client.SendAsync(mismatch);
         Assert.Equal(HttpStatusCode.Conflict, mismatchResponse.StatusCode);
         Assert.Equal("idempotency.payload_mismatch", await ProblemCodeAsync(mismatchResponse));
+    }
+
+    [Fact]
+    public async Task ParallelValidationsGateAreaApprovalAndIssuance()
+    {
+        const string location = "ORF";
+        using var sponsor = factory.CreateClient();
+        using var createResponse = await sponsor.PostAsJsonAsync(
+            "/api/v1/permits",
+            Draft(location, "Flow paralel") with
+            {
+                ValidFrom = DateTimeOffset.UtcNow.AddMinutes(-5),
+                ValidUntil = DateTimeOffset.UtcNow.AddHours(8)
+            });
+        createResponse.EnsureSuccessStatusCode();
+        var created = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
+
+        using var submit = Submit(
+            created.Id,
+            created.ETag,
+            Guid.NewGuid().ToString("N"),
+            new SubmitPermitRequest(true, true, true, []));
+        using var submitResponse = await sponsor.SendAsync(submit);
+        submitResponse.EnsureSuccessStatusCode();
+        var underReview = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("UNDER_REVIEW", underReview.Status);
+
+        using var hsse = WorkflowClient("hsse.validator", "HSSEValidator", "*");
+        using var unauthorizedGasValidation = WorkflowCommand(
+            underReview.Id,
+            "validations/gas-distribution/endorse",
+            underReview.ETag,
+            new EndorsePermitValidationRequest("Tidak berwenang."));
+        using var unauthorizedGasResponse = await hsse.SendAsync(unauthorizedGasValidation);
+        Assert.Equal(HttpStatusCode.Forbidden, unauthorizedGasResponse.StatusCode);
+
+        using var gas = WorkflowClient(
+            "gas.validator",
+            "GasDistributionValidator",
+            "*");
+        using var gasValidation = WorkflowCommand(
+            underReview.Id,
+            "validations/gas-distribution/endorse",
+            underReview.ETag,
+            new EndorsePermitValidationRequest("Kontrol operasional sesuai."));
+        using var gasResponse = await gas.SendAsync(gasValidation);
+        gasResponse.EnsureSuccessStatusCode();
+        var gasValidated = Required(await gasResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("UNDER_REVIEW", gasValidated.Status);
+        Assert.True(gasValidated.Workflow.GasDistribution.Completed);
+        Assert.False(gasValidated.Workflow.Hsse.Completed);
+
+        using var hsseValidation = WorkflowCommand(
+            gasValidated.Id,
+            "validations/hsse/endorse",
+            gasValidated.ETag,
+            new EndorsePermitValidationRequest("Persyaratan HSSE sesuai."));
+        using var hsseResponse = await hsse.SendAsync(hsseValidation);
+        hsseResponse.EnsureSuccessStatusCode();
+        var awaitingApproval = Required(await hsseResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("AWAITING_APPROVAL", awaitingApproval.Status);
+        Assert.True(awaitingApproval.Workflow.Hsse.Completed);
+        Assert.True(awaitingApproval.Workflow.GasDistribution.Completed);
+
+        using var outsideAreaOwner = WorkflowClient(
+            "area.owner.other",
+            "AreaOwnerApprover",
+            "HO");
+        using var outsideApproval = WorkflowCommand(
+            awaitingApproval.Id,
+            "approve",
+            awaitingApproval.ETag,
+            new ApprovePermitRequest("Approval di luar area."));
+        using var outsideApprovalResponse = await outsideAreaOwner.SendAsync(outsideApproval);
+        Assert.Equal(HttpStatusCode.Forbidden, outsideApprovalResponse.StatusCode);
+
+        using var areaOwner = WorkflowClient(
+            "area.owner.orf",
+            "AreaOwnerApprover,IssuingAuthority",
+            location);
+        using var approval = WorkflowCommand(
+            awaitingApproval.Id,
+            "approve",
+            awaitingApproval.ETag,
+            new ApprovePermitRequest("Disetujui pemilik area ORF."));
+        using var approvalResponse = await areaOwner.SendAsync(approval);
+        approvalResponse.EnsureSuccessStatusCode();
+        var approved = Required(await approvalResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("APPROVED", approved.Status);
+        Assert.Null(approved.ActiveWorkPeriodId);
+
+        var ready = new IssuePermitRequest(true, true, true, true, true, true, true, true, false);
+        using var sameActorIssue = WorkflowCommand(
+            approved.Id,
+            "issue",
+            approved.ETag,
+            ready);
+        using var sameActorIssueResponse = await areaOwner.SendAsync(sameActorIssue);
+        Assert.Equal(HttpStatusCode.Conflict, sameActorIssueResponse.StatusCode);
+        Assert.Equal(
+            "permit.sod.approver_issuer_conflict",
+            await ProblemCodeAsync(sameActorIssueResponse));
+
+        using var issuer = WorkflowClient("issuer.orf", "IssuingAuthority", location);
+        using var failedIssue = WorkflowCommand(
+            approved.Id,
+            "issue",
+            approved.ETag,
+            ready with { GasTestSatisfied = false });
+        using var failedIssueResponse = await issuer.SendAsync(failedIssue);
+        Assert.Equal(HttpStatusCode.Conflict, failedIssueResponse.StatusCode);
+        Assert.Equal("permit.issue.guards_failed", await ProblemCodeAsync(failedIssueResponse));
+
+        using var issue = WorkflowCommand(
+            approved.Id,
+            "issue",
+            approved.ETag,
+            ready);
+        using var issueResponse = await issuer.SendAsync(issue);
+        issueResponse.EnsureSuccessStatusCode();
+        var issued = Required(await issueResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("OPEN", issued.Status);
+        Assert.NotNull(issued.ActiveWorkPeriodId);
     }
 
     private static async Task<PermitResponse> CreatePermitAsync(HttpClient client, string location)
@@ -203,6 +328,31 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         return request;
     }
 
+    private HttpClient WorkflowClient(string userId, string role, string locations)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Dev-User", userId);
+        client.DefaultRequestHeaders.Add("X-Dev-Name", userId);
+        client.DefaultRequestHeaders.Add("X-Dev-Roles", role);
+        client.DefaultRequestHeaders.Add("X-Dev-Locations", locations);
+        return client;
+    }
+
+    private static HttpRequestMessage WorkflowCommand<TRequest>(
+        Guid id,
+        string command,
+        string etag,
+        TRequest body)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/permits/{id}/{command}")
+        {
+            Content = JsonContent.Create(body)
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", etag);
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+        return request;
+    }
+
     private static PermitDraftRequest Draft(string location, string title) => new(
         title,
         "Pekerjaan terencana untuk integration test.",
@@ -225,4 +375,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return document.RootElement.GetProperty("code").GetString();
     }
+
+    private static T Required<T>(T? value) where T : class =>
+        value ?? throw new InvalidOperationException("API tidak mengembalikan response yang diharapkan.");
 }

@@ -1,6 +1,8 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { LocationApi, LocationOption } from '../../core/location-api';
 import { PermitApi, PermitDraft } from '../../core/permit-api';
 
 function localDate(hoursFromNow: number): string {
@@ -43,7 +45,27 @@ function localDate(hoursFromNow: number): string {
             placeholder="Jelaskan ruang lingkup dan metode kerja"
           ></textarea>
         </label>
-        <label>Lokasi<input formControlName="locationId" placeholder="PROCESS-AREA-A" /></label>
+        <label
+          >Lokasi<select formControlName="locationId" [attr.aria-describedby]="'location-help'">
+            <option value="" disabled>
+              {{ loadingLocations() ? 'Memuat lokasi...' : 'Pilih lokasi' }}
+            </option>
+            @for (location of locations(); track location.id) {
+              <option [value]="location.code">
+                {{ location.code }} &mdash; {{ location.name }}
+              </option>
+            }
+          </select>
+          <small id="location-help">
+            @if (locationError()) {
+              {{ locationError() }}
+            } @else if (!loadingLocations() && locations().length === 0) {
+              Tidak ada lokasi yang disetujui dan efektif untuk scope Anda.
+            } @else {
+              Hanya lokasi aktif sesuai scope Anda yang ditampilkan.
+            }
+          </small></label
+        >
         <label
           >Perusahaan pelaksana<input formControlName="company" placeholder="PT Mitra Kerja"
         /></label>
@@ -211,9 +233,14 @@ function localDate(hoursFromNow: number): string {
 export class PermitCreate {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(PermitApi);
+  private readonly locationApi = inject(LocationApi);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly saving = signal(false);
   protected readonly error = signal('');
+  protected readonly locations = signal<LocationOption[]>([]);
+  protected readonly loadingLocations = signal(true);
+  protected readonly locationError = signal('');
   protected readonly form = this.fb.nonNullable.group({
     title: ['', Validators.required],
     description: ['', Validators.required],
@@ -229,6 +256,25 @@ export class PermitCreate {
     hazards: ['', Validators.required],
     controls: ['', Validators.required],
   });
+
+  constructor() {
+    this.locationApi
+      .list()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (page) => {
+          this.locations.set(page.items);
+          this.loadingLocations.set(false);
+        },
+        error: (response) => {
+          this.loadingLocations.set(false);
+          this.locationError.set(
+            response?.error?.detail ?? 'Daftar lokasi gagal dimuat. Coba muat ulang halaman.',
+          );
+        },
+      });
+  }
+
   protected save(): void {
     if (this.form.invalid) return;
     this.saving.set(true);

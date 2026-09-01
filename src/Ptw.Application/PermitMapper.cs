@@ -42,15 +42,43 @@ internal static class PermitMapper
         return new PermitResponse(
             permit.Id,
             permit.PermitNumber,
-            permit.Status.ToString().ToUpperInvariant(),
+            ToUpperSnakeCase(permit.Status.ToString()),
             permit.Version,
             draft.ToRequest(),
             permit.CreatedAt,
             permit.UpdatedAt,
             permit.ActiveWorkPeriodId,
             permit.SuspensionReason,
+            new PermitWorkflowResponse(
+                ToValidationResponse(
+                    "HSSE",
+                    "Validasi HSSE",
+                    permit.HsseValidation),
+                ToValidationResponse(
+                    "GAS_DISTRIBUTION",
+                    "Validasi Distribusi Gas & Pengelolaan ORF",
+                    permit.GasDistributionValidation),
+                permit.Approval?.ActorId,
+                permit.Approval?.Statement,
+                permit.Approval?.ApprovedAt),
             stored.ETag);
     }
+
+    private static PermitValidationResponse ToValidationResponse(
+        string code,
+        string label,
+        PermitValidationEvidence? evidence) => new(
+        code,
+        label,
+        evidence is not null,
+        evidence?.ActorId,
+        evidence?.Statement,
+        evidence?.ValidatedAt);
+
+    private static string ToUpperSnakeCase(string value) => string.Concat(
+        value.Select((character, index) =>
+            index > 0 && char.IsUpper(character) ? $"_{character}" : character.ToString()))
+        .ToUpperInvariant();
 
     public static PermitDraftRequest ToRequest(this PermitDraft draft) => new(
         draft.Title,

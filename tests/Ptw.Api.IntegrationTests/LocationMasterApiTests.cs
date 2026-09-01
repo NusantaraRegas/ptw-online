@@ -141,6 +141,57 @@ public sealed class LocationMasterApiTests(PtwApiFactory factory)
         Assert.Equal("idempotency.payload_mismatch", await ProblemCodeAsync(mismatchResponse));
     }
 
+    [Fact]
+    public async Task LocationLookupOnlyReturnsApprovedEffectiveLocationsWithinActorScope()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var approvedCode = $"LOOKUP-{suffix}";
+        var pendingCode = $"PENDING-{suffix}";
+        using var maker = AdminClient($"lookup.maker.{suffix}");
+        var approvedDraft = await CreateAsync(maker, Draft(approvedCode));
+        var pendingDraft = await CreateAsync(maker, Draft(pendingCode));
+
+        using var submitApproved = Command(
+            approvedDraft.Id,
+            "submit",
+            approvedDraft.ETag,
+            Guid.NewGuid().ToString("N"));
+        using var submitApprovedResponse = await maker.SendAsync(submitApproved);
+        submitApprovedResponse.EnsureSuccessStatusCode();
+        var pendingApproval = Required(
+            await submitApprovedResponse.Content.ReadFromJsonAsync<LocationMasterResponse>());
+
+        using var submitPending = Command(
+            pendingDraft.Id,
+            "submit",
+            pendingDraft.ETag,
+            Guid.NewGuid().ToString("N"));
+        using var submitPendingResponse = await maker.SendAsync(submitPending);
+        submitPendingResponse.EnsureSuccessStatusCode();
+
+        using var checker = AdminClient($"lookup.checker.{suffix}");
+        using var approve = Command(
+            approvedDraft.Id,
+            "approve",
+            pendingApproval.ETag,
+            Guid.NewGuid().ToString("N"));
+        using var approveResponse = await checker.SendAsync(approve);
+        approveResponse.EnsureSuccessStatusCode();
+
+        using var sponsor = factory.CreateClient();
+        sponsor.DefaultRequestHeaders.Add("X-Dev-Roles", "Sponsor");
+        sponsor.DefaultRequestHeaders.Add("X-Dev-Locations", approvedCode);
+        using var lookupResponse = await sponsor.GetAsync("/api/v1/locations");
+        lookupResponse.EnsureSuccessStatusCode();
+        var lookup = Required(
+            await lookupResponse.Content.ReadFromJsonAsync<PagedResponse<LocationOptionResponse>>());
+
+        var option = Assert.Single(lookup.Items);
+        Assert.Equal(approvedDraft.Id, option.Id);
+        Assert.Equal(approvedCode, option.Code);
+        Assert.DoesNotContain(lookup.Items, item => item.Code == pendingCode);
+    }
+
     private HttpClient AdminClient(string userId)
     {
         var client = factory.CreateClient();

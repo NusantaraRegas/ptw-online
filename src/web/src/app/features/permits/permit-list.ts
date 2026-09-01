@@ -42,7 +42,7 @@ import { Permit, PermitApi } from '../../core/permit-api';
               {{ permit.draft.company }}
             </p>
           </div>
-          <span class="badge">{{ permit.status }}</span
+          <span class="badge">{{ statusLabel(permit.status) }}</span
           ><time>{{ permit.updatedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</time>
         </a>
       } @empty {
@@ -147,6 +147,27 @@ export class PermitList {
   protected readonly permits = signal<Permit[]>([]);
   protected readonly loading = signal(true);
   protected readonly error = signal('');
+
+  protected statusLabel(status: string): string {
+    return (
+      {
+        DRAFT: 'Draft',
+        REVISION_REQUIRED: 'Perlu revisi',
+        UNDER_REVIEW: 'Validasi berjalan',
+        AWAITING_APPROVAL: 'Menunggu persetujuan',
+        APPROVED: 'Disetujui',
+        READY_FOR_ISSUE: 'Siap diterbitkan',
+        OPEN: 'Diterbitkan',
+        SUSPENDED: 'Ditangguhkan',
+        WORK_COMPLETED: 'Pekerjaan selesai',
+        CLOSED: 'Ditutup',
+        REJECTED: 'Ditolak',
+        CANCELLED: 'Dibatalkan',
+        EXPIRED: 'Kedaluwarsa',
+      }[status] ?? status
+    );
+  }
+
   constructor() {
     this.api
       .list()

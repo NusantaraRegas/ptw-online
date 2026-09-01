@@ -29,7 +29,7 @@ export class Dashboard {
       },
       { label: 'Menunggu tindakan', value: 4, tone: 'amber', icon: 'clock' },
       {
-        label: 'Disetujui, belum open',
+        label: 'Disetujui, belum diterbitkan',
         value: permits.filter((x) =>
           ['APPROVED', 'READYFORISSUE', 'READY_FOR_ISSUE'].includes(x.status),
         ).length,
@@ -37,7 +37,7 @@ export class Dashboard {
         icon: 'check',
       },
       {
-        label: 'Open',
+        label: 'Diterbitkan',
         value: permits.filter((x) => x.status === 'OPEN').length,
         tone: 'green',
         icon: 'open',

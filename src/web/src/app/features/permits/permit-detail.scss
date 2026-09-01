@@ -188,10 +188,14 @@ dd {
   gap: 16px;
 }
 .meta-card,
+.workflow-card,
+.workflow-action,
 .next-step {
   padding: 21px;
 }
-.meta-card h2 {
+.meta-card h2,
+.workflow-card h2,
+.workflow-action h2 {
   margin-bottom: 15px;
   color: #294650;
   font-size: 14px;
@@ -236,6 +240,49 @@ dd {
   color: var(--nr-muted);
   font-size: 11px;
   line-height: 1.55;
+}
+.validation-row {
+  padding: 10px 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  border-bottom: 1px solid #edf1f1;
+}
+.validation-row > span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #8c651f;
+  background: #fff2d8;
+  font-size: 8px;
+  font-weight: 800;
+}
+.validation-row.completed > span {
+  color: #216849;
+  background: #e7f6ee;
+}
+.validation-row small,
+.approval-row span,
+.workflow-action p {
+  color: var(--nr-muted);
+  font-size: 10px;
+}
+.workflow-action {
+  display: grid;
+  gap: 10px;
+}
+.workflow-action .check {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 8px;
+}
+.workflow-action .check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+.action-buttons {
+  display: grid;
+  gap: 8px;
 }
 .message {
   padding: 12px 15px;

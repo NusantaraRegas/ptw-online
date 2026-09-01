@@ -22,14 +22,22 @@
   @if (success()) {
     <div class="message success" role="status">{{ success() }}</div>
   }
+  @if (error() && !editing()) {
+    <div class="message error workflow-error" role="alert">
+      <span>{{ error() }}</span>
+      @if (conflict()) {
+        <button type="button" (click)="reload()">Muat versi terbaru</button>
+      }
+    </div>
+  }
 
   <section class="safety-note" aria-label="Pengingat keselamatan">
     <svg aria-hidden="true" viewBox="0 0 24 24">
       <path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z" />
     </svg>
     <p>
-      <strong>APPROVED belum mengizinkan pekerjaan dimulai.</strong> Hanya status OPEN dengan
-      prasyarat lapangan tervalidasi yang mengizinkan pekerjaan.
+      <strong>DISETUJUI belum mengizinkan pekerjaan dimulai.</strong> Pekerjaan baru boleh berjalan
+      setelah PTW berstatus DITERBITKAN dan seluruh prasyarat lapangan tervalidasi.
     </p>
   </section>
 
@@ -133,12 +141,161 @@
             </div>
           </dl>
         </section>
+        <section class="card workflow-card" aria-labelledby="validation-progress-title">
+          <h2 id="validation-progress-title">Validasi paralel</h2>
+          <div class="validation-row" [class.completed]="permit()!.workflow.hsse.completed">
+            <span>{{ permit()!.workflow.hsse.completed ? 'Selesai' : 'Menunggu' }}</span>
+            <div>
+              <strong>HSSE</strong><br />
+              <small>{{ permit()!.workflow.hsse.actorId || 'Belum divalidasi' }}</small>
+            </div>
+          </div>
+          <div
+            class="validation-row"
+            [class.completed]="permit()!.workflow.gasDistribution.completed"
+          >
+            <span>{{ permit()!.workflow.gasDistribution.completed ? 'Selesai' : 'Menunggu' }}</span>
+            <div>
+              <strong>Distribusi Gas &amp; Pengelolaan ORF</strong><br />
+              <small>{{ permit()!.workflow.gasDistribution.actorId || 'Belum divalidasi' }}</small>
+            </div>
+          </div>
+          <div class="approval-row">
+            <span>Approval pemilik area</span>
+            <strong>{{ permit()!.workflow.approvedBy || 'Menunggu dua validasi' }}</strong>
+          </div>
+        </section>
+
+        @if (canSubmit()) {
+          <form class="card workflow-action" [formGroup]="submissionForm">
+            <h2>Ajukan validasi</h2>
+            <p>Konfirmasi seluruh prasyarat submit sebelum mengirim PTW ke dua validator.</p>
+            <label class="check"
+              ><input type="checkbox" formControlName="eSimiEligible" /> E-SIMI layak</label
+            >
+            <label class="check"
+              ><input type="checkbox" formControlName="rulesEvaluated" /> Rules telah
+              dievaluasi</label
+            >
+            <label class="check"
+              ><input type="checkbox" formControlName="requiredDocumentsSafe" /> Dokumen wajib
+              lengkap dan aman</label
+            >
+            <label class="check"
+              ><input type="checkbox" formControlName="noMissingRequirements" /> Tidak ada
+              persyaratan yang belum terpenuhi</label
+            >
+            <button
+              class="primary-button"
+              type="button"
+              [disabled]="saving() || submissionForm.invalid"
+              (click)="submitForValidation()"
+            >
+              Ajukan PTW
+            </button>
+          </form>
+        }
+
+        @if (hasDecisionAction()) {
+          <section class="card workflow-action">
+            <h2>Keputusan workflow</h2>
+            <label
+              >Pernyataan atau alasan<textarea
+                rows="3"
+                maxlength="1000"
+                [formControl]="decisionStatement"
+              ></textarea>
+            </label>
+            <div class="action-buttons">
+              @if (canValidateHsse()) {
+                <button
+                  class="primary-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid"
+                  (click)="endorseHsse()"
+                >
+                  Sahkan validasi HSSE
+                </button>
+              }
+              @if (canValidateGas()) {
+                <button
+                  class="primary-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid"
+                  (click)="endorseGas()"
+                >
+                  Sahkan validasi operasional
+                </button>
+              }
+              @if (canApprove()) {
+                <button
+                  class="primary-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid"
+                  (click)="approve()"
+                >
+                  Setujui sebagai pemilik area
+                </button>
+              }
+            </div>
+          </section>
+        }
+
+        @if (canIssue()) {
+          <form class="card workflow-action" [formGroup]="issueForm">
+            <h2>Penerbitan PTW</h2>
+            <p>Seluruh guard diperiksa ulang pada saat PTW diterbitkan.</p>
+            <label class="check"
+              ><input type="checkbox" formControlName="eSimiEligible" /> E-SIMI masih layak</label
+            >
+            <label class="check"
+              ><input type="checkbox" formControlName="locationVerified" /> Lokasi
+              terverifikasi</label
+            >
+            <label class="check"
+              ><input type="checkbox" formControlName="toolboxTalkComplete" /> Toolbox talk
+              selesai</label
+            >
+            <label class="check"
+              ><input type="checkbox" formControlName="personnelAcknowledged" /> Personel telah
+              melakukan acknowledgement</label
+            >
+            <label class="check"
+              ><input type="checkbox" formControlName="ppeAndControlsVerified" /> APD dan kontrol
+              terverifikasi</label
+            >
+            <label class="check"
+              ><input type="checkbox" formControlName="isolationVerified" /> Isolasi
+              terverifikasi</label
+            >
+            <label class="check"
+              ><input type="checkbox" formControlName="simopsVerified" /> Kondisi SIMOPS
+              terverifikasi</label
+            >
+            <label class="check"
+              ><input type="checkbox" formControlName="gasTestSatisfied" /> Gas test memenuhi
+              persyaratan</label
+            >
+            <label class="check"
+              ><input type="checkbox" formControlName="noUnresolvedSuspension" /> Tidak ada
+              suspension yang belum diselesaikan</label
+            >
+            <button
+              class="primary-button"
+              type="button"
+              [disabled]="saving() || issueForm.invalid"
+              (click)="issue()"
+            >
+              Terbitkan PTW
+            </button>
+          </form>
+        }
         <section class="card next-step">
           <span>Langkah berikutnya</span>
           <strong>{{
             canEdit() ? 'Lengkapi dan verifikasi draft' : 'Pantau status workflow'
           }}</strong>
-          <p>Submit final menunggu seluruh requirement dan aturan yang disahkan tersedia.</p>
+          <p>Dua validasi berjalan paralel; approval baru tersedia setelah keduanya selesai.</p>
         </section>
       </aside>
     </section>
@@ -157,7 +314,25 @@
         <label class="wide"
           >Uraian pekerjaan<textarea formControlName="description" rows="4"></textarea>
         </label>
-        <label>Lokasi<input formControlName="locationId" /></label>
+        <label
+          >Lokasi<select formControlName="locationId" aria-describedby="edit-location-help">
+            <option value="" disabled>
+              {{ loadingLocations() ? 'Memuat lokasi...' : 'Pilih lokasi' }}
+            </option>
+            @for (location of locations(); track location.id) {
+              <option [value]="location.code">
+                {{ location.code }} &mdash; {{ location.name }}
+              </option>
+            }
+          </select>
+          <small id="edit-location-help">
+            @if (locationError()) {
+              {{ locationError() }}
+            } @else {
+              Hanya lokasi aktif sesuai scope Anda yang ditampilkan.
+            }
+          </small></label
+        >
         <label>Perusahaan pelaksana<input formControlName="company" /></label>
         <label>Nama pelaksana<input formControlName="performingAuthority" /></label>
         <label

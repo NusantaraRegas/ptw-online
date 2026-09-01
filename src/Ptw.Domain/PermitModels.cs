@@ -15,6 +15,23 @@ public enum RiskLevel
     Extreme
 }
 
+public enum PermitValidationKind
+{
+    Hsse,
+    GasDistribution
+}
+
+public sealed record PermitValidationEvidence(
+    PermitValidationKind Kind,
+    string ActorId,
+    string Statement,
+    DateTimeOffset ValidatedAt);
+
+public sealed record PermitApprovalEvidence(
+    string ActorId,
+    string Statement,
+    DateTimeOffset ApprovedAt);
+
 public sealed record PermitDraft(
     string Title,
     string Description,

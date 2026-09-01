@@ -9,6 +9,7 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 | Struktur modular .NET 10 | Selesai | `PtwOnline.sln`, batas Domain/Application/Infrastructure/API/Worker |
 | Domain state machine | Fondasi selesai | `Ptw.Domain/Permit.cs`, unit tests |
 | Draft PTW | Vertical slice diperkuat | create/list/get/update/submit, Angular create/list/detail/edit dengan optimistic concurrency |
+| Workflow utama PTW | Fondasi MVP | submit ke review, validasi HSSE dan Distribusi Gas paralel, approval pemilik area, penerbitan terpisah dengan field guards |
 | Concurrency dan idempotency | Fondasi selesai | ETag/If-Match, request hash, unique idempotency record |
 | Data SQL Server | Fondasi selesai | schemas `ptw`, `cfg`, `audit`, `intg`, additive migrations |
 | Master lokasi | Framework + activation gate | effective dating, hierarchy, maker-checker, version, audit/outbox; enforcement default nonaktif |
@@ -41,6 +42,9 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 - Approved entry immutable in-place. Koreksi atau periode berikutnya dibuat sebagai entry baru sehingga interpretasi historis tetap tersedia.
 - Setiap perubahan menyimpan snapshot versi, configuration audit, dan outbox secara atomik. Transition memakai `If-Match` dan `Idempotency-Key`.
 - Endpoint dan halaman Administrasi hanya tersedia bagi role `Administrator`; akses role lain ditolak server.
+- Endpoint lookup `/api/v1/locations` hanya mengembalikan kode/nama lokasi `APPROVED` yang efektif
+  dan berada dalam scope actor. Form buat/edit PTW memakai lookup ini sebagai dropdown dan tidak
+  membaca endpoint Administrasi atau menerima input lokasi bebas dari journey normal.
 - Framework belum digunakan untuk memutuskan scope atau authority PTW sampai OPN-001/002 disahkan.
 
 ## Increment 4B
@@ -108,6 +112,26 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 - Integration test membuktikan version allocation, expected-vs-actual ALLOW/DENY, checksum, replay,
   payload mismatch, role Administrator, evidence atomik, dan passing-run activation prerequisite.
 
+## Increment 6A
+
+- Submit PTW langsung membentuk tahap `UNDER_REVIEW`; dua evidence validasi yang berbeda disimpan
+  untuk HSSE serta Departemen Distribusi Gas & Pengelolaan ORF dan dapat diselesaikan dalam urutan apa
+  pun.
+- Approval pemilik area hanya dapat dijalankan setelah dua validasi selesai. Penerbitan merupakan
+  command eksplisit terpisah yang mengevaluasi seluruh field guards dan baru kemudian membuat satu
+  active work period.
+- Semua transition baru memakai role dan location scope server-side, `If-Match`, `Idempotency-Key`,
+  audit, outbox, dan transaction persistence yang sama dengan aggregate permit.
+- UI Development menyediakan identity validator dan PIC area untuk menguji scope HO, ORF/Site
+  Office, serta FSRU/Water-Based Activity. Istilah pengguna adalah **Diterbitkan**; `OPEN` hanya tetap
+  sebagai status domain internal yang menandai hak kerja aktif.
+- Identity PIC Development dipisahkan menjadi actor approver dan penerbit untuk setiap kelompok area.
+  Konfigurasi Development menolak penerbitan oleh actor yang sebelumnya menyetujui PTW yang sama;
+  konfigurasi default production tetap `false` sampai SoD resmi disahkan.
+- Role/action konkret, kompetensi, SoD, assignment PIC, SLA, serta checklist/ambang lapangan final
+  masih bergantung pada pengesahan OPN-002 sampai OPN-005. Activation gate tetap fail-closed dan
+  nonaktif secara default.
+
 ## Belum diimplementasikan karena membutuhkan keputusan bisnis
 
 - daftar resmi lokasi, owner/area authority, aturan overlap/delegasi, dan aktivasi master sebagai policy PTW (OPN-001);
@@ -115,7 +139,7 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
   aktivasi framework assignment (OPN-002);
 - checklist per permit class dan mapping final formulir (OPN-003);
 - gas thresholds, units, test lifetime, retest, dan continuous monitoring (OPN-004);
-- urutan serta SLA HSE–Operations review (OPN-005);
+- SLA, eskalasi, detail rework/reject, dan dampak perubahan setelah validasi paralel (OPN-005);
 - contractor acknowledgement mechanism (OPN-006);
 - production IdP/SSO dan kontrak API/webhook E-SIMI (OPN-007);
 - retention, electronic signature, data classification, RPO/RTO final (OPN-008);
@@ -129,7 +153,7 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 3. Tambahkan E-SIMI adapter dan contract tests memakai hasil OPN-007.
 4. Perluas paket UAT dengan declarative permit ruleset setelah OPN-003/004 disahkan, tanpa free-form
    scripting atau threshold/checklist default yang belum disetujui.
-5. Lengkapi workflow review/approval dan field operations berdasarkan OPN-002–006.
+5. Sahkan assignment/SoD flow validasi paralel, lalu lengkapi field operations berdasarkan OPN-002–006.
 6. Tambahkan attachment quarantine/malware integration, reports, print, notifications, integration/E2E/security tests.
 
 Tidak ada default gas threshold, approval matrix, atau safety checklist yang ditanam diam-diam di source code.

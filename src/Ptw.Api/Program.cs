@@ -18,6 +18,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IActorContext, HttpActorContext>();
 builder.Services.AddScoped<PermitService>();
 builder.Services.AddScoped<LocationMasterService>();
+builder.Services.AddScoped<LocationLookupService>();
 builder.Services.AddScoped<UserAuthorizationService>();
 builder.Services.AddScoped<OperationalPolicyService>();
 builder.Services.AddScoped<PolicySimulationService>();
@@ -26,6 +27,9 @@ builder.Services.AddScoped<IOperationalPolicyGate, OperationalPolicyGate>();
 builder.Services.AddSingleton(
     builder.Configuration.GetSection("OperationalPolicy").Get<OperationalPolicySettings>()
     ?? new OperationalPolicySettings());
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection("PermitWorkflow").Get<PermitWorkflowSettings>()
+    ?? new PermitWorkflowSettings());
 builder.Services.AddPtwInfrastructure(builder.Configuration);
 builder.Services
     .AddAuthentication(DevelopmentAuthenticationHandler.SchemeName)
@@ -76,8 +80,8 @@ app.Use(async (context, next) =>
     context.Response.Headers[header] = correlationId;
     await next();
 });
-app.UseRateLimiter();
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers().RequireAuthorization();
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();

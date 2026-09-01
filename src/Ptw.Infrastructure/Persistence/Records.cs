@@ -15,6 +15,7 @@ public sealed class PermitRecord
     public DateTimeOffset UpdatedAt { get; set; }
     public Guid? ActiveWorkPeriodId { get; set; }
     public string? SuspensionReason { get; set; }
+    public string? WorkflowEvidenceJson { get; set; }
     public byte[] RowVersion { get; set; } = [];
 }
 

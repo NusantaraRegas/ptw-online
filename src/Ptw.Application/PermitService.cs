@@ -11,8 +11,14 @@ public sealed class PermitService(
     IActorContext actorContext,
     IClock clock,
     IPermitNumberGenerator numberGenerator,
-    IOperationalPolicyGate operationalPolicyGate)
+    IOperationalPolicyGate operationalPolicyGate,
+    PermitWorkflowSettings workflowSettings)
 {
+    private const string HsseValidatorRole = "HSSEValidator";
+    private const string GasDistributionValidatorRole = "GasDistributionValidator";
+    private const string AreaOwnerApproverRole = "AreaOwnerApprover";
+    private const string IssuingAuthorityRole = "IssuingAuthority";
+
     public async Task<PermitResponse> CreateAsync(PermitDraftRequest request, string correlationId, CancellationToken cancellationToken)
     {
         var actor = actorContext.Current;
@@ -47,7 +53,15 @@ public sealed class PermitService(
     public async Task<PagedResponse<PermitResponse>> ListAsync(CancellationToken cancellationToken)
     {
         var actor = actorContext.Current;
-        var sponsorFilter = actor.Roles.Overlaps(["Auditor", "Administrator", "HSEReviewer", "OperationsReviewer"])
+        var sponsorFilter = actor.Roles.Overlaps(
+            [
+                "Auditor",
+                "Administrator",
+                HsseValidatorRole,
+                GasDistributionValidatorRole,
+                AreaOwnerApproverRole,
+                IssuingAuthorityRole
+            ])
             ? null
             : actor.Id;
         var items = (await store.ListAsync(sponsorFilter, cancellationToken))
@@ -158,6 +172,154 @@ public sealed class PermitService(
             request.RequiredDocumentsSafe,
             request.MissingRequirements);
         stored.Permit.Submit(numberGenerator.Generate(clock.UtcNow), readiness, clock.UtcNow);
+        stored.Permit.StartReview(clock.UtcNow);
+        var idempotency = new IdempotencyContext(actor.Id, operation, idempotencyKey, requestHash);
+        return (await store.UpdateAsync(
+            stored.Permit,
+            expectedETag,
+            actor,
+            correlationId,
+            idempotency,
+            authorizationEvidence,
+            cancellationToken)).ToResponse();
+    }
+
+    public Task<PermitResponse> EndorseHsseValidationAsync(
+        Guid id,
+        EndorsePermitValidationRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken) =>
+        ExecuteCommandAsync(
+            id,
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.ValidateHsse,
+            [HsseValidatorRole],
+            (permit, actor, now) => permit.EndorseValidation(
+                PermitValidationKind.Hsse,
+                actor.Id,
+                request.Statement,
+                now),
+            cancellationToken);
+
+    public Task<PermitResponse> EndorseGasDistributionValidationAsync(
+        Guid id,
+        EndorsePermitValidationRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken) =>
+        ExecuteCommandAsync(
+            id,
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.ValidateGasDistribution,
+            [GasDistributionValidatorRole],
+            (permit, actor, now) => permit.EndorseValidation(
+                PermitValidationKind.GasDistribution,
+                actor.Id,
+                request.Statement,
+                now),
+            cancellationToken);
+
+    public Task<PermitResponse> ApproveAsync(
+        Guid id,
+        ApprovePermitRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken) =>
+        ExecuteCommandAsync(
+            id,
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.Approve,
+            [AreaOwnerApproverRole],
+            (permit, actor, now) => permit.Approve(actor.Id, request.Statement, now),
+            cancellationToken);
+
+    public Task<PermitResponse> IssueAsync(
+        Guid id,
+        IssuePermitRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken) =>
+        ExecuteCommandAsync(
+            id,
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.Issue,
+            [IssuingAuthorityRole],
+            (permit, actor, now) =>
+            {
+                EnsureApproverIssuerSeparation(permit, actor, workflowSettings);
+                permit.OpenWorkPeriod(
+                    new FieldIssueReadiness(
+                        request.ESimiEligible,
+                        request.LocationVerified,
+                        request.ToolboxTalkComplete,
+                        request.PersonnelAcknowledged,
+                        request.PpeAndControlsVerified,
+                        request.IsolationVerified,
+                        request.SimopsVerified,
+                        request.GasTestSatisfied,
+                        request.HasUnresolvedSuspension),
+                    actor.Id,
+                    now);
+            },
+            cancellationToken);
+
+    private async Task<PermitResponse> ExecuteCommandAsync<TRequest>(
+        Guid id,
+        TRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        string operation,
+        IReadOnlyCollection<string> allowedRoles,
+        Action<Permit, Actor, DateTimeOffset> execute,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            throw new InvalidRequestException(
+                "idempotency.required",
+                "Header Idempotency-Key wajib untuk command transisi.");
+        }
+
+        var actor = actorContext.Current;
+        EnsureAnyRole(actor, allowedRoles);
+        var requestHash = Hash(request);
+        var prior = await store.FindIdempotentResultAsync(
+            actor.Id,
+            operation,
+            idempotencyKey,
+            requestHash,
+            cancellationToken);
+        if (prior is not null)
+        {
+            return prior.ToResponse();
+        }
+
+        var stored = await GetStoredAsync(id, cancellationToken);
+        EnsureLocationScope(actor, stored.Permit.Draft.LocationId);
+        var authorizationEvidence = await operationalPolicyGate.AuthorizePermitCommandAsync(
+            actor,
+            operation,
+            stored.Permit.Draft.LocationId,
+            cancellationToken);
+        execute(stored.Permit, actor, clock.UtcNow);
         var idempotency = new IdempotencyContext(actor.Id, operation, idempotencyKey, requestHash);
         return (await store.UpdateAsync(
             stored.Permit,
@@ -177,6 +339,29 @@ public sealed class PermitService(
         if (!actor.Roles.Overlaps(["Sponsor", "Administrator"]))
         {
             throw new UnauthorizedAccessException("Peran Sponsor diperlukan untuk menyusun PTW.");
+        }
+    }
+
+    private static void EnsureAnyRole(Actor actor, IReadOnlyCollection<string> allowedRoles)
+    {
+        if (!actor.Roles.Overlaps(allowedRoles))
+        {
+            throw new UnauthorizedAccessException(
+                $"Aksi memerlukan salah satu role: {string.Join(", ", allowedRoles)}.");
+        }
+    }
+
+    private static void EnsureApproverIssuerSeparation(
+        Permit permit,
+        Actor actor,
+        PermitWorkflowSettings settings)
+    {
+        if (settings.EnforceApproverIssuerSeparation
+            && string.Equals(permit.Approval?.ActorId, actor.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleViolationException(
+                "permit.sod.approver_issuer_conflict",
+                "PIC yang menyetujui PTW tidak boleh menjadi penerbit PTW yang sama pada konfigurasi demo ini.");
         }
     }
 

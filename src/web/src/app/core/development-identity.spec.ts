@@ -1,7 +1,11 @@
 import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { DevelopmentIdentityStore, developmentIdentityInterceptor } from './development-identity';
+import {
+  DEVELOPMENT_IDENTITIES,
+  DevelopmentIdentityStore,
+  developmentIdentityInterceptor,
+} from './development-identity';
 
 describe('developmentIdentityInterceptor', () => {
   let httpClient: HttpClient;
@@ -43,5 +47,16 @@ describe('developmentIdentityInterceptor', () => {
   it('rejects unknown identity keys', () => {
     expect(identityStore.select('unknown')).toBe(false);
     expect(identityStore.selectedKey()).toBe('sponsor-admin');
+  });
+
+  it('uses separate demo actors for area approval and issuance', () => {
+    const approver = DEVELOPMENT_IDENTITIES.find((item) => item.key === 'area-approver-orf');
+    const issuer = DEVELOPMENT_IDENTITIES.find((item) => item.key === 'area-issuer-orf');
+
+    expect(approver?.roles).toEqual(['AreaOwnerApprover']);
+    expect(issuer?.roles).toEqual(['IssuingAuthority']);
+    expect(approver?.userId).not.toBe(issuer?.userId);
+    expect(approver?.locationScopes).toEqual(['ORF', 'SITE-OFFICE']);
+    expect(issuer?.locationScopes).toEqual(['ORF', 'SITE-OFFICE']);
   });
 });

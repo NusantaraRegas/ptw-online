@@ -7,8 +7,21 @@ public static class PermitPolicyOperations
     public const string CreateDraft = "CreateDraft";
     public const string UpdateDraft = "UpdateDraft";
     public const string Submit = "Submit";
+    public const string ValidateHsse = "ValidateHsse";
+    public const string ValidateGasDistribution = "ValidateGasDistribution";
+    public const string Approve = "Approve";
+    public const string Issue = "Issue";
 
-    public static readonly IReadOnlyList<string> Required = [CreateDraft, UpdateDraft, Submit];
+    public static readonly IReadOnlyList<string> Required =
+    [
+        CreateDraft,
+        UpdateDraft,
+        Submit,
+        ValidateHsse,
+        ValidateGasDistribution,
+        Approve,
+        Issue
+    ];
 }
 
 public sealed class OperationalPolicySettings

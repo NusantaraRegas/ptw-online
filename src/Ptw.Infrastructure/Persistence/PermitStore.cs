@@ -243,13 +243,23 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         CreatedAt = permit.CreatedAt,
         UpdatedAt = permit.UpdatedAt,
         ActiveWorkPeriodId = permit.ActiveWorkPeriodId,
-        SuspensionReason = permit.SuspensionReason
+        SuspensionReason = permit.SuspensionReason,
+        WorkflowEvidenceJson = JsonSerializer.Serialize(
+            new PermitWorkflowSnapshot(
+                permit.HsseValidation,
+                permit.GasDistributionValidation,
+                permit.Approval),
+            JsonOptions)
     };
 
     private static StoredPermit ToStored(PermitRecord record)
     {
         var draft = JsonSerializer.Deserialize<PermitDraft>(record.DraftJson, JsonOptions)
             ?? throw new InvalidOperationException("Snapshot draft PTW tidak valid.");
+        var workflow = string.IsNullOrWhiteSpace(record.WorkflowEvidenceJson)
+            ? new PermitWorkflowSnapshot(null, null, null)
+            : JsonSerializer.Deserialize<PermitWorkflowSnapshot>(record.WorkflowEvidenceJson, JsonOptions)
+                ?? throw new InvalidOperationException("Bukti workflow PTW tidak valid.");
         var permit = Permit.Rehydrate(
             record.Id,
             record.PermitNumber,
@@ -259,9 +269,17 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             record.CreatedAt,
             record.UpdatedAt,
             record.ActiveWorkPeriodId,
-            record.SuspensionReason);
+            record.SuspensionReason,
+            workflow.HsseValidation,
+            workflow.GasDistributionValidation,
+            workflow.Approval);
         return new StoredPermit(permit, EncodeETag(record.RowVersion));
     }
+
+    private sealed record PermitWorkflowSnapshot(
+        PermitValidationEvidence? HsseValidation,
+        PermitValidationEvidence? GasDistributionValidation,
+        PermitApprovalEvidence? Approval);
 
     private static string EncodeETag(byte[] rowVersion) => $"\"{Convert.ToBase64String(rowVersion)}\"";
 
