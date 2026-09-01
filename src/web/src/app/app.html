@@ -97,7 +97,9 @@
               (change)="switchIdentity(identitySelector.value)"
             >
               @for (profile of developmentProfiles; track profile.key) {
-                <option [value]="profile.key">{{ profile.displayName }}</option>
+                <option [value]="profile.key" [selected]="profile.key === selectedIdentityKey()">
+                  {{ profile.displayName }}
+                </option>
               }
             </select>
           </label>
