@@ -125,9 +125,8 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 - UI Development menyediakan identity validator dan PIC area untuk menguji scope HO, ORF/Site
   Office, serta FSRU/Water-Based Activity. Istilah pengguna adalah **Diterbitkan**; `OPEN` hanya tetap
   sebagai status domain internal yang menandai hak kerja aktif.
-- Identity PIC Development dipisahkan menjadi actor approver dan penerbit untuk setiap kelompok area.
-  Konfigurasi Development menolak penerbitan oleh actor yang sebelumnya menyetujui PTW yang sama;
-  konfigurasi default production tetap `false` sampai SoD resmi disahkan.
+- Satu identity PIC pemilik area Development menjalankan approval dan penerbitan untuk kelompok
+  areanya. Assignment PIC konkret dan kompetensi production tetap menunggu pengesahan policy.
 - Role/action konkret, kompetensi, SoD, assignment PIC, SLA, serta checklist/ambang lapangan final
   masih bergantung pada pengesahan OPN-002 sampai OPN-005. Activation gate tetap fail-closed dan
   nonaktif secara default.

@@ -27,9 +27,6 @@ builder.Services.AddScoped<IOperationalPolicyGate, OperationalPolicyGate>();
 builder.Services.AddSingleton(
     builder.Configuration.GetSection("OperationalPolicy").Get<OperationalPolicySettings>()
     ?? new OperationalPolicySettings());
-builder.Services.AddSingleton(
-    builder.Configuration.GetSection("PermitWorkflow").Get<PermitWorkflowSettings>()
-    ?? new PermitWorkflowSettings());
 builder.Services.AddPtwInfrastructure(builder.Configuration);
 builder.Services
     .AddAuthentication(DevelopmentAuthenticationHandler.SchemeName)

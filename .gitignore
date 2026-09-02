@@ -1,6 +1,12 @@
 # .NET
 **/bin/
 **/obj/
+**/TestResults/
+*.trx
+*.coverage
+*.coveragexml
+artifacts/
+.dotnet/
 *.user
 *.suo
 
@@ -9,6 +15,11 @@
 **/dist/
 **/.angular/
 coverage/
+**/coverage/
+test-results/
+playwright-report/
+blob-report/
+.eslintcache
 
 # Local configuration and secrets
 .env
@@ -27,3 +38,6 @@ Thumbs.db
 # Runtime data
 attachments/
 sql-data/
+logs/
+*.log
+*.pid

@@ -11,8 +11,7 @@ public sealed class PermitService(
     IActorContext actorContext,
     IClock clock,
     IPermitNumberGenerator numberGenerator,
-    IOperationalPolicyGate operationalPolicyGate,
-    PermitWorkflowSettings workflowSettings)
+    IOperationalPolicyGate operationalPolicyGate)
 {
     private const string HsseValidatorRole = "HSSEValidator";
     private const string GasDistributionValidatorRole = "GasDistributionValidator";
@@ -261,23 +260,19 @@ public sealed class PermitService(
             correlationId,
             PermitPolicyOperations.Issue,
             [IssuingAuthorityRole],
-            (permit, actor, now) =>
-            {
-                EnsureApproverIssuerSeparation(permit, actor, workflowSettings);
-                permit.OpenWorkPeriod(
-                    new FieldIssueReadiness(
-                        request.ESimiEligible,
-                        request.LocationVerified,
-                        request.ToolboxTalkComplete,
-                        request.PersonnelAcknowledged,
-                        request.PpeAndControlsVerified,
-                        request.IsolationVerified,
-                        request.SimopsVerified,
-                        request.GasTestSatisfied,
-                        request.HasUnresolvedSuspension),
-                    actor.Id,
-                    now);
-            },
+            (permit, actor, now) => permit.OpenWorkPeriod(
+                new FieldIssueReadiness(
+                    request.ESimiEligible,
+                    request.LocationVerified,
+                    request.ToolboxTalkComplete,
+                    request.PersonnelAcknowledged,
+                    request.PpeAndControlsVerified,
+                    request.IsolationVerified,
+                    request.SimopsVerified,
+                    request.GasTestSatisfied,
+                    request.HasUnresolvedSuspension),
+                actor.Id,
+                now),
             cancellationToken);
 
     private async Task<PermitResponse> ExecuteCommandAsync<TRequest>(
@@ -348,20 +343,6 @@ public sealed class PermitService(
         {
             throw new UnauthorizedAccessException(
                 $"Aksi memerlukan salah satu role: {string.Join(", ", allowedRoles)}.");
-        }
-    }
-
-    private static void EnsureApproverIssuerSeparation(
-        Permit permit,
-        Actor actor,
-        PermitWorkflowSettings settings)
-    {
-        if (settings.EnforceApproverIssuerSeparation
-            && string.Equals(permit.Approval?.ActorId, actor.Id, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new DomainRuleViolationException(
-                "permit.sod.approver_issuer_conflict",
-                "PIC yang menyetujui PTW tidak boleh menjadi penerbit PTW yang sama pada konfigurasi demo ini.");
         }
     }
 

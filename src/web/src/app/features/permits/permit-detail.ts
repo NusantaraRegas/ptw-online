@@ -8,6 +8,7 @@ import { DevelopmentIdentityStore } from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
 import { IssuePermitRequest, Permit, PermitApi, PermitDraft } from '../../core/permit-api';
 import { PermitHistory } from './permit-history';
+import { PermitValidationProgress } from './permit-validation-progress';
 
 function toLocalInput(value: string): string {
   const date = new Date(value);
@@ -17,7 +18,7 @@ function toLocalInput(value: string): string {
 
 @Component({
   selector: 'app-permit-detail',
-  imports: [DatePipe, ReactiveFormsModule, RouterLink, PermitHistory],
+  imports: [DatePipe, ReactiveFormsModule, RouterLink, PermitHistory, PermitValidationProgress],
   templateUrl: './permit-detail.html',
   styleUrl: './permit-detail.scss',
 })

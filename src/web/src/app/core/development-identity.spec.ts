@@ -49,14 +49,10 @@ describe('developmentIdentityInterceptor', () => {
     expect(identityStore.selectedKey()).toBe('sponsor-admin');
   });
 
-  it('uses separate demo actors for area approval and issuance', () => {
-    const approver = DEVELOPMENT_IDENTITIES.find((item) => item.key === 'area-approver-orf');
-    const issuer = DEVELOPMENT_IDENTITIES.find((item) => item.key === 'area-issuer-orf');
+  it('uses one area owner actor for approval and issuance', () => {
+    const areaOwner = DEVELOPMENT_IDENTITIES.find((item) => item.key === 'area-owner-orf');
 
-    expect(approver?.roles).toEqual(['AreaOwnerApprover']);
-    expect(issuer?.roles).toEqual(['IssuingAuthority']);
-    expect(approver?.userId).not.toBe(issuer?.userId);
-    expect(approver?.locationScopes).toEqual(['ORF', 'SITE-OFFICE']);
-    expect(issuer?.locationScopes).toEqual(['ORF', 'SITE-OFFICE']);
+    expect(areaOwner?.roles).toEqual(['AreaOwnerApprover', 'IssuingAuthority']);
+    expect(areaOwner?.locationScopes).toEqual(['ORF', 'SITE-OFFICE']);
   });
 });

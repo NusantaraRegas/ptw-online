@@ -66,12 +66,24 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 ## Frontend dan UX
 
 - Gunakan Bahasa Indonesia untuk journey pengguna; istilah Inggris hanya jika membantu konsistensi SOP.
+- Gunakan istilah **Diterbitkan** pada UI dan komunikasi pengguna untuk status domain internal
+  `OPEN`; jangan menampilkan `OPEN` sebagai istilah proses bisnis.
 - Status harus memakai teks dan tidak hanya warna.
 - Pertahankan peringatan bahwa `APPROVED` belum boleh mulai bekerja.
 - Form panjang memakai reactive forms, error association/summary, dan remediation yang jelas.
 - Target minimal WCAG 2.2 AA: keyboard, visible focus, semantic heading, label, contrast, dan associated errors.
 - Gunakan Signals untuk local UI state dan RxJS untuk asynchronous HTTP streams.
 - Jangan menyimpan access token di `localStorage`.
+
+## Kontrak flow MVP saat ini
+
+- Setelah Sponsor submit, validasi HSSE dan validasi Departemen Distribusi Gas & Pengelolaan ORF
+  berjalan paralel; keduanya wajib selesai sebelum approval.
+- Validasi operasional tersebut tetap berlaku untuk PTW berlokasi HO.
+- PIC pemilik area yang melakukan approval juga menerbitkan PTW untuk kelompok area yang sama.
+  Jangan memisahkan actor approver dan penerbit tanpa keputusan pengguna atau decision record baru.
+- Profile dan nama actor Development adalah dummy. Assignment PIC konkret, kompetensi, serta
+  activation policy production tetap harus melalui konfigurasi effective-dated dan pengesahan.
 
 ## Testing dan quality gate
 

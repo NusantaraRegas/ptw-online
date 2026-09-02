@@ -3,7 +3,9 @@
 NR PTW Online adalah aplikasi internal untuk mendigitalkan lifecycle _Permit to Work_ Nusantara Regas. Sistem ini melengkapi E-SIMI: E-SIMI mengendalikan izin masuk instalasi, sedangkan PTW mengendalikan izin melaksanakan pekerjaan tertentu pada lokasi, periode, dan kondisi lapangan tertentu.
 
 > [!IMPORTANT]
-> `APPROVED` bukan izin untuk mulai bekerja. Pekerjaan hanya boleh berjalan ketika PTW berstatus `OPEN`, memiliki satu work period aktif, dan seluruh prasyarat lapangan aktual lulus validasi server.
+> `APPROVED` bukan izin untuk mulai bekerja. Pekerjaan hanya boleh berjalan setelah PTW
+> **Diterbitkan**, memiliki satu work period aktif, dan seluruh prasyarat lapangan aktual lulus
+> validasi server. `OPEN` tetap dipakai sebagai status domain internal untuk kondisi tersebut.
 
 ## Status implementasi
 
@@ -14,13 +16,18 @@ Sudah tersedia:
 - modular monolith ASP.NET Core 10 dengan batas Domain, Application, Contracts, Infrastructure, API, dan Worker;
 - explicit state machine PTW dari `DRAFT` sampai terminal state;
 - guard validity maksimum tujuh hari, submit fail-closed, field readiness, single active work period, suspend/resolution, dan handback;
-- API `/api/v1` untuk identitas development serta create, list, get, update, submit draft, audit timeline, dan immutable version history;
+- API `/api/v1` untuk identitas development, lookup lokasi, create/list/get/update/submit PTW,
+  dua validasi paralel, approval pemilik area, penerbitan, audit timeline, dan immutable version history;
 - optimistic concurrency memakai `ETag`/`If-Match` dan idempotency untuk transition command;
 - SQL Server persistence, immutable permit-version snapshot, audit event, transactional outbox, dan initial EF migration;
 - Angular 22 SPA bertema logo resmi Pertamina Nusantara Regas dengan dashboard keselamatan,
-  daftar, detail, create/edit draft ber-ETag, audit timeline, version history, responsive navigation,
-  dan Bahasa Indonesia;
+  daftar, detail, create/edit draft ber-ETag, progres validasi paralel, approval/penerbitan sesuai
+  role, audit timeline, version history, responsive navigation, dan Bahasa Indonesia;
 - framework master lokasi effective-dated dengan maker-checker, immutable version snapshot, audit/outbox, dan halaman Administrasi fail-safe;
+- lookup lokasi approved/effective dan scope-filtered; katalog MVP yang dikonfirmasi mencakup HO,
+  ORF, Site Office, FSRU, dan Water-Based Activity, dan form PTW memakai dropdown lookup;
+- flow MVP `submit → validasi HSSE + Distribusi Gas & Pengelolaan ORF secara paralel → approval →
+  penerbitan`; PIC pemilik area yang sama menjalankan approval dan penerbitan untuk kelompok areanya;
 - framework assignment otorisasi multi-role dengan periode efektif, maker-checker, delegasi
   non-broadening, resolver fail-safe, dan halaman Administrasi;
 - activation gate OPN-001/002 yang memeriksa policy version, referensi keputusan, master efektif,
@@ -56,6 +63,9 @@ docker compose --env-file .env -f deploy/compose/compose.dev.yaml up --build
 ```
 
 Buka `http://localhost:8080`. Startup menunggu SQL Server sehat, menjalankan migrator one-shot, lalu memulai API, Worker, dan web.
+
+Database baru tidak melakukan seed lokasi/assignment produksi. Gunakan Admin Maker dan Admin Checker
+untuk membuat serta menyetujui lima lokasi MVP sebelum menguji form PTW pada database kosong.
 
 Periksa status:
 
@@ -161,17 +171,27 @@ Frontend Development menyediakan pemilih **Akun demo** pada topbar:
 | Admin Maker Demo | `admin.maker.demo` | `Administrator` |
 | Admin Checker Demo | `admin.checker.demo` | `Administrator` |
 | Sponsor Only Demo | `sponsor.only.demo` | `Sponsor` |
+| Validator HSSE Demo | `hsse.validator.demo` | `HSSEValidator` |
+| Validator Distribusi Gas Demo | `gas.validator.demo` | `GasDistributionValidator` |
+| PIC Pemilik Area HO Demo | `area.owner.ho.demo` | `AreaOwnerApprover`, `IssuingAuthority` |
+| PIC Pemilik Area ORF & Site Office Demo | `area.owner.orf.demo` | `AreaOwnerApprover`, `IssuingAuthority` |
+| PIC Pemilik Area FSRU & Water-Based Demo | `area.owner.fsru.demo` | `AreaOwnerApprover`, `IssuingAuthority` |
 
 Pilihan disimpan di `sessionStorage` dan diterapkan sebagai header hanya untuk request `/api/`.
 Gunakan Admin Maker untuk mengajukan konfigurasi, lalu Admin Checker untuk menyetujuinya. Selector
 tidak ditampilkan bila `/api/v1/me` tidak mengembalikan development identity, dan header tersebut
 tetap diabaikan backend di luar environment `Development`.
 
+Untuk UAT flow PTW, gunakan Sponsor untuk submit, dua validator dalam urutan apa pun, lalu PIC
+pemilik area yang sesuai untuk approval dan penerbitan. Profile PIC dibatasi menurut kelompok lokasi:
+HO; ORF/Site Office; serta FSRU/Water-Based Activity.
+
 ## API yang tersedia
 
 | Method  | Endpoint                                  | Fungsi                                         |
 | ------- | ----------------------------------------- | ---------------------------------------------- |
 | `GET`   | `/api/v1/me`                    | Identitas, role, dan scope efektif             |
+| `GET`   | `/api/v1/locations`             | Lookup lokasi approved/effective dan scoped    |
 | `GET`   | `/api/v1/permits`               | Daftar PTW scoped                              |
 | `POST`  | `/api/v1/permits`               | Membuat draft                                  |
 | `GET`   | `/api/v1/permits/{id}`          | Membaca detail scoped                          |
@@ -179,6 +199,10 @@ tetap diabaikan backend di luar environment `Development`.
 | `GET`   | `/api/v1/permits/{id}/versions` | Snapshot versi immutable, scoped dan paginated |
 | `PATCH` | `/api/v1/permits/{id}/draft`    | Update draft dengan `If-Match`                 |
 | `POST`  | `/api/v1/permits/{id}/submit`   | Submit dengan `If-Match` dan `Idempotency-Key` |
+| `POST`  | `/api/v1/permits/{id}/validations/hsse/endorse` | Validasi HSSE |
+| `POST`  | `/api/v1/permits/{id}/validations/gas-distribution/endorse` | Validasi Distribusi Gas & Pengelolaan ORF |
+| `POST`  | `/api/v1/permits/{id}/approve`  | Approval oleh PIC pemilik area                 |
+| `POST`  | `/api/v1/permits/{id}/issue`    | Menerbitkan PTW setelah field guards lulus     |
 | `GET`   | `/api/v1/admin/locations`        | Daftar seluruh konfigurasi lokasi (Admin)      |
 | `POST`  | `/api/v1/admin/locations`        | Membuat draft lokasi (Admin)                   |
 | `PATCH` | `/api/v1/admin/locations/{id}/draft`      | Memperbarui draft dengan `If-Match`            |
@@ -203,9 +227,10 @@ tetap diabaikan backend di luar environment `Development`.
 
 OpenAPI tersedia di development melalui `/openapi/v1.json`. Stale write dikembalikan sebagai HTTP `409`; idempotency key yang sama dengan payload berbeda juga ditolak.
 
-Master lokasi dan assignment otorisasi belum dipakai sebagai sumber authority PTW dan tidak memiliki
-seed produksi. Satu user dapat memiliki beberapa role; SoD diterapkan per actor/action/konteks, dan
-delegasi tidak boleh memperluas authority sumber. Hanya identitas dengan role `Administrator` yang
+Master lokasi dan assignment otorisasi belum diaktifkan sebagai sumber authority produksi PTW.
+Satu user dapat memiliki beberapa role; PIC pemilik area pada flow MVP memegang approval dan
+penerbitan, sedangkan SoD lain tetap dievaluasi per actor/action/konteks. Delegasi tidak boleh
+memperluas authority sumber. Hanya identitas dengan role `Administrator` yang
 dapat mengakses endpoint administrasi. Daftar lokasi, role/action, hierarchy ownership, kompetensi,
 approval route, dan detail SoD produksi tetap menunggu OPN-001/002 berstatus `ACCEPTED`.
 
@@ -229,14 +254,18 @@ konfigurasi—nilai di bawah wajib diganti dengan keputusan resmi:
     "PermitActionCodes": {
       "CreateDraft": "<action-code-resmi>",
       "UpdateDraft": "<action-code-resmi>",
-      "Submit": "<action-code-resmi>"
+      "Submit": "<action-code-resmi>",
+      "ValidateHsse": "<action-code-resmi>",
+      "ValidateGasDistribution": "<action-code-resmi>",
+      "Approve": "<action-code-resmi>",
+      "Issue": "<action-code-resmi>"
     }
   }
 }
 ```
 
-Ketika aktif, command create/update/submit memerlukan tepat satu master lokasi efektif, assignment
-actor yang tidak ambigu untuk action tersebut, dan seluruh kompetensi wajib. Keputusan yang lolos
+Ketika aktif, seluruh command PTW yang dipetakan memerlukan tepat satu master lokasi efektif,
+assignment actor yang tidak ambigu untuk action tersebut, dan seluruh kompetensi wajib. Keputusan yang lolos
 dicatat sebagai `PermitAuthorizationEvaluated` bersama permit dalam transaksi yang sama. Konfigurasi
 aktif tetapi belum siap menghasilkan HTTP `503`; assignment, lokasi, atau kompetensi yang tidak
 memenuhi syarat menghasilkan HTTP `403`. Tidak ada fallback ke claim development ketika enforcement
@@ -256,12 +285,12 @@ untuk `PolicyVersion` yang sama persis. Passing report tetap bukan pengesahan de
 ## Lifecycle dan invariants
 
 ```text
-DRAFT → SUBMITTED → UNDER_REVIEW → AWAITING_APPROVAL → APPROVED
-   ↘ CANCELLED       ↘ REVISION_REQUIRED / REJECTED
+DRAFT ─submit→ UNDER_REVIEW → AWAITING_APPROVAL → APPROVED
+   ↘ CANCELLED        ↘ REVISION_REQUIRED / REJECTED
 
-APPROVED → READY_FOR_ISSUE → OPEN → APPROVED (pekerjaan berlanjut)
-                            ↘ SUSPENDED → READY_FOR_ISSUE
-                            ↘ WORK_COMPLETED → CLOSED
+APPROVED → READY_FOR_ISSUE → DITERBITKAN (internal: OPEN) → APPROVED (pekerjaan berlanjut)
+                                              ↘ SUSPENDED → READY_FOR_ISSUE
+                                              ↘ WORK_COMPLETED → CLOSED
 ```
 
 Invariant utama:

@@ -1,0 +1,94 @@
+<section class="card workflow-card" aria-labelledby="validation-progress-title">
+  <header class="workflow-header">
+    <div>
+      <span class="workflow-kicker">Workflow PTW</span>
+      <h2 id="validation-progress-title">Validasi paralel</h2>
+    </div>
+    <span class="progress-summary" [class.completed]="completedCount() === 2">
+      {{ completedCount() }}/2 selesai
+    </span>
+  </header>
+
+  <p class="workflow-note">Kedua fungsi wajib menyelesaikan validasi sebelum approval tersedia.</p>
+
+  <ol class="validation-list">
+    <li class="validation-item" [class.completed]="workflow().hsse.completed">
+      <span class="validation-marker" aria-hidden="true">
+        @if (workflow().hsse.completed) {
+          <svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-9" /></svg>
+        } @else {
+          1
+        }
+      </span>
+      <div class="validation-content">
+        <div class="validation-heading">
+          <strong>HSSE</strong>
+          <span class="status-pill">
+            {{ workflow().hsse.completed ? 'Selesai' : 'Menunggu' }}
+          </span>
+        </div>
+        <span class="actor-label">Validator</span>
+        <span class="actor-id">{{ workflow().hsse.actorId || 'Belum ditentukan' }}</span>
+        @if (workflow().hsse.completedAt) {
+          <time [attr.datetime]="workflow().hsse.completedAt">
+            {{ workflow().hsse.completedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
+          </time>
+        }
+      </div>
+    </li>
+
+    <li class="validation-item" [class.completed]="workflow().gasDistribution.completed">
+      <span class="validation-marker" aria-hidden="true">
+        @if (workflow().gasDistribution.completed) {
+          <svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-9" /></svg>
+        } @else {
+          2
+        }
+      </span>
+      <div class="validation-content">
+        <div class="validation-heading">
+          <strong>Distribusi Gas &amp; Pengelolaan ORF</strong>
+          <span class="status-pill">
+            {{ workflow().gasDistribution.completed ? 'Selesai' : 'Menunggu' }}
+          </span>
+        </div>
+        <span class="actor-label">Validator</span>
+        <span class="actor-id">
+          {{ workflow().gasDistribution.actorId || 'Belum ditentukan' }}
+        </span>
+        @if (workflow().gasDistribution.completedAt) {
+          <time [attr.datetime]="workflow().gasDistribution.completedAt">
+            {{
+              workflow().gasDistribution.completedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta'
+            }}
+            WIB
+          </time>
+        }
+      </div>
+    </li>
+  </ol>
+
+  <div class="approval-panel" [class.completed]="!!workflow().approvedBy">
+    <span class="approval-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z" />
+        @if (workflow().approvedBy) {
+          <path d="m8.5 12 2.2 2.2 4.8-5" />
+        }
+      </svg>
+    </span>
+    <div class="approval-content">
+      <div class="approval-heading">
+        <span>PIC pemilik area</span>
+        <span class="approval-status">{{ approvalState() }}</span>
+      </div>
+      <strong>{{ workflow().approvedBy || 'Belum ada approver' }}</strong>
+      <span class="approval-role">Approver &amp; penerbit PTW</span>
+      @if (workflow().approvedAt) {
+        <time [attr.datetime]="workflow().approvedAt">
+          {{ workflow().approvedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
+        </time>
+      }
+    </div>
+  </div>
+</section>

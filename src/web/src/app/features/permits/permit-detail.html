@@ -141,30 +141,7 @@
             </div>
           </dl>
         </section>
-        <section class="card workflow-card" aria-labelledby="validation-progress-title">
-          <h2 id="validation-progress-title">Validasi paralel</h2>
-          <div class="validation-row" [class.completed]="permit()!.workflow.hsse.completed">
-            <span>{{ permit()!.workflow.hsse.completed ? 'Selesai' : 'Menunggu' }}</span>
-            <div>
-              <strong>HSSE</strong><br />
-              <small>{{ permit()!.workflow.hsse.actorId || 'Belum divalidasi' }}</small>
-            </div>
-          </div>
-          <div
-            class="validation-row"
-            [class.completed]="permit()!.workflow.gasDistribution.completed"
-          >
-            <span>{{ permit()!.workflow.gasDistribution.completed ? 'Selesai' : 'Menunggu' }}</span>
-            <div>
-              <strong>Distribusi Gas &amp; Pengelolaan ORF</strong><br />
-              <small>{{ permit()!.workflow.gasDistribution.actorId || 'Belum divalidasi' }}</small>
-            </div>
-          </div>
-          <div class="approval-row">
-            <span>Approval pemilik area</span>
-            <strong>{{ permit()!.workflow.approvedBy || 'Menunggu dua validasi' }}</strong>
-          </div>
-        </section>
+        <app-permit-validation-progress [workflow]="permit()!.workflow" />
 
         @if (canSubmit()) {
           <form class="card workflow-action" [formGroup]="submissionForm">

@@ -254,24 +254,12 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.Null(approved.ActiveWorkPeriodId);
 
         var ready = new IssuePermitRequest(true, true, true, true, true, true, true, true, false);
-        using var sameActorIssue = WorkflowCommand(
-            approved.Id,
-            "issue",
-            approved.ETag,
-            ready);
-        using var sameActorIssueResponse = await areaOwner.SendAsync(sameActorIssue);
-        Assert.Equal(HttpStatusCode.Conflict, sameActorIssueResponse.StatusCode);
-        Assert.Equal(
-            "permit.sod.approver_issuer_conflict",
-            await ProblemCodeAsync(sameActorIssueResponse));
-
-        using var issuer = WorkflowClient("issuer.orf", "IssuingAuthority", location);
         using var failedIssue = WorkflowCommand(
             approved.Id,
             "issue",
             approved.ETag,
             ready with { GasTestSatisfied = false });
-        using var failedIssueResponse = await issuer.SendAsync(failedIssue);
+        using var failedIssueResponse = await areaOwner.SendAsync(failedIssue);
         Assert.Equal(HttpStatusCode.Conflict, failedIssueResponse.StatusCode);
         Assert.Equal("permit.issue.guards_failed", await ProblemCodeAsync(failedIssueResponse));
 
@@ -280,7 +268,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             "issue",
             approved.ETag,
             ready);
-        using var issueResponse = await issuer.SendAsync(issue);
+        using var issueResponse = await areaOwner.SendAsync(issue);
         issueResponse.EnsureSuccessStatusCode();
         var issued = Required(await issueResponse.Content.ReadFromJsonAsync<PermitResponse>());
         Assert.Equal("OPEN", issued.Status);
