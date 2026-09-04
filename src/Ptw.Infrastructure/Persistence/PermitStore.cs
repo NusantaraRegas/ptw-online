@@ -13,7 +13,16 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
     public async Task<StoredPermit?> FindAsync(Guid id, CancellationToken cancellationToken)
     {
         var record = await dbContext.Permits.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
-        return record is null ? null : ToStored(record);
+        if (record is null)
+        {
+            return null;
+        }
+
+        var renewalPermitId = await dbContext.Permits.AsNoTracking()
+            .Where(x => x.RenewedFromPermitId == id)
+            .Select(x => (Guid?)x.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        return ToStored(record, renewalPermitId);
     }
 
     public async Task<IReadOnlyList<StoredPermit>> ListAsync(string? sponsorId, CancellationToken cancellationToken)
@@ -25,7 +34,14 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         }
 
         var records = await query.OrderByDescending(x => x.UpdatedAt).Take(200).ToListAsync(cancellationToken);
-        return records.Select(ToStored).ToArray();
+        var recordIds = records.Select(x => x.Id).ToArray();
+        var renewals = await dbContext.Permits.AsNoTracking()
+            .Where(x => x.RenewedFromPermitId != null && recordIds.Contains(x.RenewedFromPermitId.Value))
+            .Select(x => new { SourceId = x.RenewedFromPermitId!.Value, RenewalId = x.Id })
+            .ToDictionaryAsync(x => x.SourceId, x => x.RenewalId, cancellationToken);
+        return records.Select(record => ToStored(
+            record,
+            renewals.GetValueOrDefault(record.Id))).ToArray();
     }
 
     public async Task<StoredPermit> AddAsync(
@@ -43,6 +59,55 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         AddAuthorizationEvidence(permit.Id, actor.Id, correlationId, authorizationEvidence);
         await dbContext.SaveChangesAsync(cancellationToken);
         return ToStored(record);
+    }
+
+    public async Task<StoredPermitRenewal> AddRenewalAsync(
+        Permit source,
+        Permit renewal,
+        string expectedSourceETag,
+        Actor actor,
+        string correlationId,
+        IdempotencyContext idempotency,
+        PolicyAuthorizationEvidence? authorizationEvidence,
+        CancellationToken cancellationToken)
+    {
+        var sourceRecord = ToRecord(source);
+        sourceRecord.RowVersion = DecodeETag(expectedSourceETag);
+        dbContext.Permits.Attach(sourceRecord);
+        dbContext.Entry(sourceRecord).State = EntityState.Modified;
+        dbContext.Entry(sourceRecord).Property(x => x.RowVersion).OriginalValue = sourceRecord.RowVersion;
+
+        var renewalRecord = ToRecord(renewal);
+        dbContext.Permits.Add(renewalRecord);
+        AddVersion(source, actor.Id);
+        AddVersion(renewal, actor.Id);
+        AddEvents(source.DequeueEvents(), actor.Id, correlationId);
+        AddEvents(renewal.DequeueEvents(), actor.Id, correlationId);
+        AddAuthorizationEvidence(source.Id, actor.Id, correlationId, authorizationEvidence);
+        dbContext.IdempotencyRecords.Add(new IdempotencyRecord
+        {
+            Id = Guid.CreateVersion7(),
+            ActorId = idempotency.ActorId,
+            Operation = idempotency.Operation,
+            Key = idempotency.Key,
+            RequestHash = idempotency.RequestHash,
+            PermitId = renewal.Id,
+            CreatedAt = source.UpdatedAt,
+            ExpiresAt = source.UpdatedAt.AddHours(24)
+        });
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            throw new ConcurrencyConflictException() { Source = exception.Source };
+        }
+
+        return new StoredPermitRenewal(
+            ToStored(sourceRecord, renewal.Id),
+            ToStored(renewalRecord));
     }
 
     public async Task<StoredPermit> UpdateAsync(
@@ -479,6 +544,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         CreatedAt = permit.CreatedAt,
         UpdatedAt = permit.UpdatedAt,
         ActiveWorkPeriodId = permit.ActiveWorkPeriodId,
+        RenewedFromPermitId = permit.RenewedFromPermitId,
         SuspensionReason = permit.SuspensionReason,
         WorkflowEvidenceJson = JsonSerializer.Serialize(
             new PermitWorkflowSnapshot(
@@ -492,7 +558,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             JsonOptions)
     };
 
-    private static StoredPermit ToStored(PermitRecord record)
+    private static StoredPermit ToStored(PermitRecord record, Guid? renewalPermitId = null)
     {
         var draft = JsonSerializer.Deserialize<PermitDraft>(record.DraftJson, JsonOptions)
             ?? throw new InvalidOperationException("Snapshot draft PTW tidak valid.");
@@ -516,7 +582,9 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             workflow.Suspension,
             workflow.SponsorCompletion,
             workflow.HsseCompletion,
-            workflow.AreaOwnerCompletion);
+            workflow.AreaOwnerCompletion,
+            record.RenewedFromPermitId,
+            renewalPermitId);
         return new StoredPermit(permit, EncodeETag(record.RowVersion));
     }
 

@@ -125,6 +125,7 @@ nav a.active .nav-icon {
 nav em {
   min-width: 21px;
   height: 21px;
+  padding: 0 6px;
   display: grid;
   place-items: center;
   border-radius: 11px;
@@ -132,6 +133,7 @@ nav em {
   background: var(--nr-red);
   font-size: 10px;
   font-style: normal;
+  white-space: nowrap;
 }
 .sidebar-foot {
   padding: 15px 12px;

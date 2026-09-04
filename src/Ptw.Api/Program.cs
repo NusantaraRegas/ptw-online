@@ -1,6 +1,7 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Ptw.Api;
 using Ptw.Api.Security;
@@ -17,6 +18,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IActorContext, HttpActorContext>();
 builder.Services.AddScoped<PermitService>();
+builder.Services.AddScoped<PermitAttachmentService>();
 builder.Services.AddScoped<LocationMasterService>();
 builder.Services.AddScoped<LocationLookupService>();
 builder.Services.AddScoped<UserAuthorizationService>();
@@ -28,6 +30,15 @@ builder.Services.AddSingleton(
     builder.Configuration.GetSection("OperationalPolicy").Get<OperationalPolicySettings>()
     ?? new OperationalPolicySettings());
 builder.Services.AddPtwInfrastructure(builder.Configuration);
+var attachmentMaxFileBytes = builder.Configuration.GetValue<long>("Attachments:MaxFileBytes");
+if (attachmentMaxFileBytes > 0)
+{
+    builder.Services.Configure<FormOptions>(options =>
+    {
+        options.MemoryBufferThreshold = 64 * 1024;
+        options.MultipartBodyLengthLimit = attachmentMaxFileBytes + 1024 * 1024;
+    });
+}
 builder.Services
     .AddAuthentication(DevelopmentAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, DevelopmentAuthenticationHandler>(

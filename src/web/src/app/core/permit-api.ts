@@ -31,6 +31,8 @@ export interface Permit {
   updatedAt: string;
   activeWorkPeriodId?: string;
   suspensionReason?: string;
+  renewedFromPermitId?: string | null;
+  renewalPermitId?: string | null;
   workflow: PermitWorkflow;
   eTag: string;
 }
@@ -88,6 +90,17 @@ export interface SubmitPermitRequest {
   rulesEvaluated: boolean;
   requiredDocumentsSafe: boolean;
   missingRequirements: string[];
+}
+
+export interface RequestPermitRenewal {
+  validFrom: string;
+  validUntil: string;
+}
+
+export interface PermitRenewalResult {
+  sourcePermitVersion: number;
+  sourceETag: string;
+  renewal: Permit;
 }
 
 export interface PagedPermits {
@@ -163,6 +176,19 @@ export class PermitApi {
 
   submit(id: string, eTag: string, readiness: SubmitPermitRequest): Observable<Permit> {
     return this.command(id, 'submit', eTag, readiness);
+  }
+
+  requestRenewal(
+    id: string,
+    eTag: string,
+    request: RequestPermitRenewal,
+  ): Observable<PermitRenewalResult> {
+    return this.http.post<PermitRenewalResult>(`/api/v1/permits/${id}/renewals`, request, {
+      headers: new HttpHeaders({
+        'If-Match': eTag,
+        'Idempotency-Key': crypto.randomUUID(),
+      }),
+    });
   }
 
   endorseHsse(id: string, eTag: string, statement: string): Observable<Permit> {

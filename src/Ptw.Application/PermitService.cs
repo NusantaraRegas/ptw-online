@@ -11,7 +11,9 @@ public sealed class PermitService(
     IActorContext actorContext,
     IClock clock,
     IPermitNumberGenerator numberGenerator,
-    IOperationalPolicyGate operationalPolicyGate)
+    IOperationalPolicyGate operationalPolicyGate,
+    IPermitAttachmentStore attachmentStore,
+    AttachmentPolicy attachmentPolicy)
 {
     private const string HsseValidatorRole = "HSSEValidator";
     private const string AreaOwnerApproverRole = "AreaOwnerApprover";
@@ -141,6 +143,19 @@ public sealed class PermitService(
         var stored = await GetStoredAsync(id, cancellationToken);
         var actor = actorContext.Current;
         EnsureSponsorOwnership(actor, stored.Permit);
+        if (stored.Permit.RenewedFromPermitId is Guid sourcePermitId)
+        {
+            var source = await GetStoredAsync(sourcePermitId, cancellationToken);
+            if (!string.Equals(request.LocationId, source.Permit.Draft.LocationId, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(request.SponsorId, source.Permit.Draft.SponsorId, StringComparison.OrdinalIgnoreCase)
+                || request.ValidFrom < source.Permit.Draft.ValidUntil)
+            {
+                throw new InvalidRequestException(
+                    "permit.renewal.source_mismatch",
+                    "Sponsor, lokasi, dan awal masa renewal harus tetap mengikuti batas PTW asal.");
+            }
+        }
+
         EnsureLocationScope(actor, request.LocationId);
         var authorizationEvidence = await operationalPolicyGate.AuthorizePermitCommandAsync(
             actor,
@@ -156,6 +171,77 @@ public sealed class PermitService(
             null,
             authorizationEvidence,
             cancellationToken)).ToResponse();
+    }
+
+    public async Task<PermitRenewalResponse> RequestRenewalAsync(
+        Guid sourcePermitId,
+        RequestPermitRenewalRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        EnsureIdempotencyKey(idempotencyKey);
+        var actor = actorContext.Current;
+        EnsureSponsorOrAdmin(actor);
+        var requestHash = Hash(new { SourcePermitId = sourcePermitId, Request = request });
+        var prior = await store.FindIdempotentResultAsync(
+            actor.Id,
+            PermitPolicyOperations.RequestRenewal,
+            idempotencyKey,
+            requestHash,
+            cancellationToken);
+        if (prior is not null)
+        {
+            if (prior.Permit.RenewedFromPermitId != sourcePermitId)
+            {
+                throw new InvalidOperationException("Hasil idempotensi renewal tidak konsisten.");
+            }
+
+            var priorSource = await GetStoredAsync(sourcePermitId, cancellationToken);
+            EnsureLocationScope(actor, priorSource.Permit.Draft.LocationId);
+            return new PermitRenewalResponse(
+                priorSource.Permit.Version,
+                priorSource.ETag,
+                prior.ToResponse());
+        }
+
+        var source = await GetStoredAsync(sourcePermitId, cancellationToken);
+        EnsureSponsorOwnership(actor, source.Permit);
+        EnsureLocationScope(actor, source.Permit.Draft.LocationId);
+        var authorizationEvidence = await operationalPolicyGate.AuthorizePermitCommandAsync(
+            actor,
+            PermitPolicyOperations.RequestRenewal,
+            source.Permit.Draft.LocationId,
+            cancellationToken);
+        var now = clock.UtcNow;
+        var renewal = Permit.CreateRenewal(
+            sourcePermitId,
+            source.Permit.Draft with
+            {
+                ValidFrom = request.ValidFrom,
+                ValidUntil = request.ValidUntil
+            },
+            now);
+        source.Permit.RequestRenewal(renewal, now);
+        var idempotency = new IdempotencyContext(
+            actor.Id,
+            PermitPolicyOperations.RequestRenewal,
+            idempotencyKey,
+            requestHash);
+        var created = await store.AddRenewalAsync(
+            source.Permit,
+            renewal,
+            expectedETag,
+            actor,
+            correlationId,
+            idempotency,
+            authorizationEvidence,
+            cancellationToken);
+        return new PermitRenewalResponse(
+            created.Source.Permit.Version,
+            created.Source.ETag,
+            created.Renewal.ToResponse());
     }
 
     public async Task<PermitResponse> SubmitAsync(
@@ -182,6 +268,18 @@ public sealed class PermitService(
 
         var stored = await GetStoredAsync(id, cancellationToken);
         EnsureSponsorOwnership(actor, stored.Permit);
+        if (attachmentPolicy.Enabled)
+        {
+            var attachments = await attachmentStore.ListActiveAsync(id, cancellationToken);
+            if (attachmentPolicy.RequireMalwareScan
+                && attachments.Any(x => !string.Equals(x.ScanStatus, "CLEAN", StringComparison.Ordinal)))
+            {
+                throw new InvalidRequestException(
+                    "attachment.scan_incomplete",
+                    "Seluruh lampiran wajib lulus malware scan sebelum PTW diajukan.");
+            }
+        }
+
         var authorizationEvidence = await operationalPolicyGate.AuthorizePermitCommandAsync(
             actor,
             PermitPolicyOperations.Submit,
@@ -393,44 +491,82 @@ public sealed class PermitService(
             (permit, actor, now) => permit.Close(actor.Id, request.Statement, now),
             cancellationToken);
 
-    public Task<PermitResponse> IssueAsync(
+    public async Task<PermitResponse> IssueAsync(
         Guid id,
         IssuePermitRequest request,
         string expectedETag,
         string idempotencyKey,
         string correlationId,
-        CancellationToken cancellationToken) =>
-        ExecuteCommandAsync(
-            id,
-            request,
-            expectedETag,
-            idempotencyKey,
-            correlationId,
+        CancellationToken cancellationToken)
+    {
+        EnsureIdempotencyKey(idempotencyKey);
+        var actor = actorContext.Current;
+        EnsureAnyRole(actor, [AreaOwnerApproverRole]);
+        var requestHash = Hash(request);
+        var prior = await store.FindIdempotentResultAsync(
+            actor.Id,
             PermitPolicyOperations.Issue,
-            [AreaOwnerApproverRole],
-            (permit, actor, now) =>
-            {
-                if (!string.Equals(permit.Approval?.ActorId, actor.Id, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new UnauthorizedAccessException(
-                        "PTW hanya dapat diterbitkan oleh PIC pemilik area yang menyetujuinya.");
-                }
-
-                permit.OpenWorkPeriod(
-                    new FieldIssueReadiness(
-                        request.ESimiEligible,
-                        request.LocationVerified,
-                        request.ToolboxTalkComplete,
-                        request.PersonnelAcknowledged,
-                        request.PpeAndControlsVerified,
-                        request.IsolationVerified,
-                        request.SimopsVerified,
-                        request.GasTestSatisfied,
-                        request.HasUnresolvedSuspension),
-                    actor.Id,
-                    now);
-            },
+            idempotencyKey,
+            requestHash,
             cancellationToken);
+        if (prior is not null)
+        {
+            return prior.ToResponse();
+        }
+
+        var stored = await GetStoredAsync(id, cancellationToken);
+        EnsureLocationScope(actor, stored.Permit.Draft.LocationId);
+        var authorizationEvidence = await operationalPolicyGate.AuthorizePermitCommandAsync(
+            actor,
+            PermitPolicyOperations.Issue,
+            stored.Permit.Draft.LocationId,
+            cancellationToken);
+        var now = clock.UtcNow;
+        if (stored.Permit.RenewedFromPermitId is Guid sourcePermitId)
+        {
+            var source = await GetStoredAsync(sourcePermitId, cancellationToken);
+            var sourceEnded = source.Permit.Status is PermitStatus.Closed or PermitStatus.Expired;
+            if (!sourceEnded)
+            {
+                throw new InvalidRequestException(
+                    "permit.renewal.source_still_active",
+                    "Renewal belum dapat diterbitkan selama PTW asal masih aktif atau belum ditutup.");
+            }
+        }
+
+        if (!string.Equals(stored.Permit.Approval?.ActorId, actor.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException(
+                "PTW hanya dapat diterbitkan oleh PIC pemilik area yang menyetujuinya.");
+        }
+
+        stored.Permit.OpenWorkPeriod(
+            new FieldIssueReadiness(
+                request.ESimiEligible,
+                request.LocationVerified,
+                request.ToolboxTalkComplete,
+                request.PersonnelAcknowledged,
+                request.PpeAndControlsVerified,
+                request.IsolationVerified,
+                request.SimopsVerified,
+                request.GasTestSatisfied,
+                request.HasUnresolvedSuspension),
+            actor.Id,
+            now);
+        var idempotency = new IdempotencyContext(
+            actor.Id,
+            PermitPolicyOperations.Issue,
+            idempotencyKey,
+            requestHash);
+        return (await store.UpdateAsync(
+            stored.Permit,
+            expectedETag,
+            actor,
+            correlationId,
+            idempotency,
+            authorizationEvidence,
+            cancellationToken)).ToResponse();
+    }
 
     private async Task<PermitResponse> ExecuteCommandAsync<TRequest>(
         Guid id,
@@ -600,6 +736,16 @@ public sealed class PermitService(
         if (!actor.Roles.Overlaps(["Sponsor", "Administrator"]))
         {
             throw new UnauthorizedAccessException("Peran Sponsor diperlukan untuk menyusun PTW.");
+        }
+    }
+
+    private static void EnsureIdempotencyKey(string idempotencyKey)
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 200)
+        {
+            throw new InvalidRequestException(
+                "idempotency.required",
+                "Header Idempotency-Key wajib dan maksimum 200 karakter untuk command transisi.");
         }
     }
 

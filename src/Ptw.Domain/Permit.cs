@@ -22,6 +22,8 @@ public sealed class Permit
     public DateTimeOffset CreatedAt { get; }
     public DateTimeOffset UpdatedAt { get; private set; }
     public Guid? ActiveWorkPeriodId { get; private set; }
+    public Guid? RenewedFromPermitId { get; private set; }
+    public Guid? RenewalPermitId { get; private set; }
     public string? SuspensionReason { get; private set; }
     public PermitValidationEvidence? HsseValidation { get; private set; }
     public PermitValidationEvidence? GasDistributionValidation { get; private set; }
@@ -36,6 +38,27 @@ public sealed class Permit
     {
         var permit = new Permit(Guid.CreateVersion7(), draft, now);
         permit.Raise("permit_draft_created", new { permit.Version });
+        return permit;
+    }
+
+    public static Permit CreateRenewal(Guid sourcePermitId, PermitDraft draft, DateTimeOffset now)
+    {
+        if (sourcePermitId == Guid.Empty)
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.source_required",
+                "PTW asal wajib tersedia untuk membuat renewal.");
+        }
+
+        var permit = new Permit(Guid.CreateVersion7(), draft, now)
+        {
+            RenewedFromPermitId = sourcePermitId
+        };
+        permit.Raise("permit_renewal_draft_created", new
+        {
+            SourcePermitId = sourcePermitId,
+            permit.Version
+        });
         return permit;
     }
 
@@ -55,7 +78,9 @@ public sealed class Permit
         PermitSuspensionEvidence? suspension = null,
         PermitCompletionEvidence? sponsorCompletion = null,
         PermitCompletionEvidence? hsseCompletion = null,
-        PermitCompletionEvidence? areaOwnerCompletion = null) =>
+        PermitCompletionEvidence? areaOwnerCompletion = null,
+        Guid? renewedFromPermitId = null,
+        Guid? renewalPermitId = null) =>
         new(id, draft, createdAt)
         {
             PermitNumber = permitNumber,
@@ -70,8 +95,56 @@ public sealed class Permit
             Suspension = suspension,
             SponsorCompletion = sponsorCompletion,
             HsseCompletion = hsseCompletion,
-            AreaOwnerCompletion = areaOwnerCompletion
+            AreaOwnerCompletion = areaOwnerCompletion,
+            RenewedFromPermitId = renewedFromPermitId,
+            RenewalPermitId = renewalPermitId
         };
+
+    public void RequestRenewal(Permit renewal, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Open);
+        EnsureActiveWorkPeriod();
+        if (now < Draft.ValidFrom || now > Draft.ValidUntil)
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.source_not_active",
+                "Renewal hanya dapat diajukan ketika masa PTW asal sedang aktif.");
+        }
+
+        if (RenewalPermitId is not null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.already_requested",
+                "Renewal untuk PTW ini sudah pernah diajukan.");
+        }
+
+        if (renewal.RenewedFromPermitId != Id
+            || !string.Equals(renewal.Draft.SponsorId, Draft.SponsorId, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(renewal.Draft.LocationId, Draft.LocationId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.source_mismatch",
+                "Draft renewal harus terhubung ke Sponsor dan lokasi PTW asal.");
+        }
+
+        if (renewal.Draft.ValidFrom < Draft.ValidUntil)
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.validity_overlap",
+                "Masa renewal harus dimulai pada atau setelah masa berlaku PTW asal berakhir.");
+        }
+
+        RenewalPermitId = renewal.Id;
+        Version++;
+        Touch(now);
+        Raise("permit_renewal_requested", new
+        {
+            RenewalPermitId = renewal.Id,
+            RenewalValidFrom = renewal.Draft.ValidFrom,
+            RenewalValidUntil = renewal.Draft.ValidUntil,
+            Version
+        });
+    }
 
     public void UpdateDraft(PermitDraft draft, DateTimeOffset now)
     {
@@ -81,6 +154,22 @@ public sealed class Permit
         Version++;
         Touch(now);
         Raise("permit_draft_updated", new { Version });
+    }
+
+    public void AddAttachment(Guid attachmentId, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Draft, PermitStatus.RevisionRequired);
+        Version++;
+        Touch(now);
+        Raise("permit_attachment_added", new { AttachmentId = attachmentId, Version });
+    }
+
+    public void RemoveAttachment(Guid attachmentId, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Draft, PermitStatus.RevisionRequired);
+        Version++;
+        Touch(now);
+        Raise("permit_attachment_removed", new { AttachmentId = attachmentId, Version });
     }
 
     public void Submit(string permitNumber, SubmissionReadiness readiness, DateTimeOffset now)

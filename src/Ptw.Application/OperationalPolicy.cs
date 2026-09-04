@@ -6,6 +6,7 @@ public static class PermitPolicyOperations
 {
     public const string CreateDraft = "CreateDraft";
     public const string UpdateDraft = "UpdateDraft";
+    public const string RequestRenewal = "RequestRenewal";
     public const string Submit = "Submit";
     public const string ValidateHsse = "ValidateHsse";
     public const string Approve = "Approve";
@@ -23,6 +24,7 @@ public static class PermitPolicyOperations
     [
         CreateDraft,
         UpdateDraft,
+        RequestRenewal,
         Submit,
         ValidateHsse,
         Approve,

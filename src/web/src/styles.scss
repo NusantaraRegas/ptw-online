@@ -226,3 +226,71 @@ h3 {
     flex-direction: column;
   }
 }
+/* Popup tugas berada di global stylesheet agar tidak membebani budget style shell. */
+.notification-menu {
+  position: relative;
+}
+.notification-popover {
+  position: absolute;
+  top: 46px;
+  right: 0;
+  z-index: 30;
+  width: min(360px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 1px solid var(--nr-border);
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 18px 50px rgb(19 48 58 / 18%);
+}
+.notification-popover header {
+  padding: 15px 16px;
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--nr-border);
+}
+.notification-popover header span,
+.notification-popover small {
+  color: var(--nr-muted);
+  font-size: 10px;
+}
+.notification-popover ul {
+  max-height: 330px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.notification-popover li + li {
+  border-top: 1px solid #edf1f1;
+}
+.notification-popover li a {
+  padding: 13px 16px;
+  display: grid;
+  gap: 4px;
+  color: var(--nr-ink);
+  text-decoration: none;
+}
+.notification-popover li a:hover {
+  background: var(--nr-blue-soft);
+}
+.notification-popover li span {
+  color: #4e6069;
+  font-size: 11px;
+}
+.notification-popover > p {
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--nr-muted);
+  text-align: center;
+  font-size: 11px;
+}
+.notification-all {
+  padding: 12px 16px;
+  display: block;
+  border-top: 1px solid var(--nr-border);
+  color: var(--nr-blue-dark);
+  text-align: center;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 800;
+}

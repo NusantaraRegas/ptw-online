@@ -56,6 +56,20 @@ describe('PermitApi', () => {
     request.flush({});
   });
 
+  it('requests renewal as a new permit with concurrency and idempotency headers', () => {
+    const renewal = {
+      validFrom: '2026-08-26T09:00:00.000Z',
+      validUntil: '2026-08-26T17:00:00.000Z',
+    };
+    api.requestRenewal('permit-id', '"etag-value"', renewal).subscribe();
+    const request = http.expectOne('/api/v1/permits/permit-id/renewals');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
+    expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
+    expect(request.request.body).toEqual(renewal);
+    request.flush({});
+  });
+
   it('loads scoped activity with pagination', () => {
     api.listActivity('permit-id', 10, 5).subscribe();
     const request = http.expectOne(

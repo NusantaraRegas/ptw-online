@@ -49,6 +49,8 @@ internal static class PermitMapper
             permit.UpdatedAt,
             permit.ActiveWorkPeriodId,
             permit.SuspensionReason,
+            permit.RenewedFromPermitId,
+            permit.RenewalPermitId,
             new PermitWorkflowResponse(
                 ToValidationResponse(
                     "HSSE",

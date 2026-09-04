@@ -22,6 +22,12 @@
   @if (success()) {
     <div class="message success" role="status">{{ success() }}</div>
   }
+  @if (renewalCreatedId()) {
+    <div class="message success renewal-created" role="status">
+      <span>Draft renewal siap diperiksa dan dilengkapi.</span>
+      <a [routerLink]="['/permits', renewalCreatedId()]">Buka draft renewal</a>
+    </div>
+  }
   @if (error() && !editing()) {
     <div class="message error workflow-error" role="alert">
       <span>{{ error() }}</span>
@@ -117,6 +123,12 @@
             }
           </div>
         </div>
+        <app-permit-attachments
+          [permitId]="permit()!.id"
+          [eTag]="permit()!.eTag"
+          [canManage]="canManageAttachments()"
+          (permitChanged)="applyAttachmentPermitChange($event)"
+        />
       </article>
 
       <aside class="side-stack">
@@ -139,6 +151,22 @@
               <dt>Diperbarui</dt>
               <dd>{{ permit()!.updatedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</dd>
             </div>
+            @if (permit()!.renewedFromPermitId) {
+              <div>
+                <dt>Renewal dari</dt>
+                <dd>
+                  <a [routerLink]="['/permits', permit()!.renewedFromPermitId]">Lihat PTW asal</a>
+                </dd>
+              </div>
+            }
+            @if (permit()!.renewalPermitId) {
+              <div>
+                <dt>Dilanjutkan oleh</dt>
+                <dd>
+                  <a [routerLink]="['/permits', permit()!.renewalPermitId]">Lihat draft renewal</a>
+                </dd>
+              </div>
+            }
           </dl>
         </section>
         <app-permit-validation-progress [workflow]="permit()!.workflow" />
@@ -181,6 +209,65 @@
               }}</strong>
             </span>
           </section>
+        }
+
+        @if (canRequestRenewal() && !showingRenewalForm()) {
+          <section class="card workflow-action">
+            <h2>Perpanjangan PTW</h2>
+            <p>
+              Buat draft renewal dengan nomor PTW baru. PTW lama tetap berlaku dan tidak berubah.
+            </p>
+            <button class="secondary-button" type="button" (click)="openRenewalForm()">
+              Ajukan perpanjangan
+            </button>
+          </section>
+        }
+
+        @if (showingRenewalForm()) {
+          <form
+            class="card workflow-action"
+            [formGroup]="renewalForm"
+            (ngSubmit)="requestRenewal()"
+          >
+            <h2>Masa berlaku renewal</h2>
+            <p>
+              Masa renewal maksimum tujuh hari dan tidak boleh tumpang tindih dengan PTW asal.
+              Lampiran tidak disalin otomatis.
+            </p>
+            <label>
+              Mulai renewal
+              <input type="datetime-local" formControlName="validFrom" />
+            </label>
+            <label>
+              Selesai renewal
+              <input type="datetime-local" formControlName="validUntil" />
+            </label>
+            @if (renewalError()) {
+              <div class="message error renewal-error" role="alert">
+                <span>{{ renewalError() }}</span>
+                @if (renewalConflict()) {
+                  <button type="button" (click)="reload()">Muat versi terbaru</button>
+                }
+              </div>
+            }
+            <div class="action-buttons renewal-actions">
+              <button
+                class="text-button"
+                type="button"
+                [disabled]="saving()"
+                (click)="cancelRenewal()"
+              >
+                Batal
+              </button>
+              <button
+                class="primary-button"
+                type="submit"
+                [disabled]="saving() || renewalForm.invalid"
+              >
+                {{ saving() ? 'Membuat draft…' : 'Buat draft renewal' }}
+              </button>
+            </div>
+          </form>
         }
 
         @if (canSubmit()) {

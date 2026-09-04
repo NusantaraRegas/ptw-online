@@ -3,6 +3,7 @@ using Ptw.Domain;
 namespace Ptw.Application;
 
 public sealed record StoredPermit(Permit Permit, string ETag);
+public sealed record StoredPermitRenewal(StoredPermit Source, StoredPermit Renewal);
 public sealed record StorePage<T>(IReadOnlyList<T> Items, int Count);
 public sealed record PermitActivityEntry(
     long Sequence,
@@ -30,6 +31,32 @@ public sealed record PermitTaskEntry(
     string LocationId,
     DateTimeOffset CreatedAt,
     DateTimeOffset? CompletedAt);
+public sealed record PermitAttachmentEntry(
+    Guid Id,
+    Guid PermitId,
+    int AddedInVersion,
+    int? RemovedInVersion,
+    string FileName,
+    long SizeBytes,
+    string MediaType,
+    string Sha256,
+    string StorageKey,
+    string ScanStatus,
+    string UploadedBy,
+    DateTimeOffset UploadedAt);
+public sealed record StoredAttachmentContent(
+    string StorageKey,
+    long SizeBytes,
+    string Sha256,
+    string DetectedMediaType);
+public sealed record StoredPermitAttachment(
+    StoredPermit Permit,
+    PermitAttachmentEntry Attachment);
+public sealed record AttachmentPolicy(
+    bool Enabled,
+    long MaxFileBytes,
+    int MaxFilesPerPermit,
+    bool RequireMalwareScan);
 
 public interface IPermitStore
 {
@@ -39,6 +66,15 @@ public interface IPermitStore
         Permit permit,
         Actor actor,
         string correlationId,
+        PolicyAuthorizationEvidence? authorizationEvidence,
+        CancellationToken cancellationToken);
+    Task<StoredPermitRenewal> AddRenewalAsync(
+        Permit source,
+        Permit renewal,
+        string expectedSourceETag,
+        Actor actor,
+        string correlationId,
+        IdempotencyContext idempotency,
         PolicyAuthorizationEvidence? authorizationEvidence,
         CancellationToken cancellationToken);
     Task<StoredPermit> UpdateAsync(
@@ -70,6 +106,50 @@ public interface IPermitStore
         IReadOnlySet<string> roles,
         IReadOnlySet<string> locationScopes,
         CancellationToken cancellationToken);
+}
+
+public interface IPermitAttachmentStore
+{
+    Task<IReadOnlyList<PermitAttachmentEntry>> ListActiveAsync(
+        Guid permitId,
+        CancellationToken cancellationToken);
+    Task<PermitAttachmentEntry?> FindActiveAsync(
+        Guid permitId,
+        Guid attachmentId,
+        CancellationToken cancellationToken);
+    Task<StoredPermitAttachment?> FindIdempotentResultAsync(
+        string actorId,
+        string operation,
+        string key,
+        string requestHash,
+        CancellationToken cancellationToken);
+    Task<StoredPermitAttachment> AddAsync(
+        Permit permit,
+        PermitAttachmentEntry attachment,
+        string expectedETag,
+        Actor actor,
+        string correlationId,
+        IdempotencyContext idempotency,
+        CancellationToken cancellationToken);
+    Task<StoredPermitAttachment> RemoveAsync(
+        Permit permit,
+        PermitAttachmentEntry attachment,
+        string expectedETag,
+        Actor actor,
+        string correlationId,
+        IdempotencyContext idempotency,
+        CancellationToken cancellationToken);
+}
+
+public interface IAttachmentStorage
+{
+    Task<StoredAttachmentContent> StoreAsync(
+        Guid attachmentId,
+        Stream content,
+        long maxBytes,
+        CancellationToken cancellationToken);
+    Task<Stream> OpenReadAsync(string storageKey, CancellationToken cancellationToken);
+    Task DeleteOrphanAsync(string storageKey, CancellationToken cancellationToken);
 }
 
 public sealed record Actor(

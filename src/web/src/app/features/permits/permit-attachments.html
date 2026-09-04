@@ -1,0 +1,67 @@
+<section class="attachments" aria-labelledby="attachments-title">
+  <header>
+    <div>
+      <h3 id="attachments-title">Lampiran PTW</h3>
+      <p>Dokumen PDF pendukung. Tambahkan file sebanyak yang diperlukan dalam batas teknis.</p>
+    </div>
+    @if (canManage()) {
+      <label class="upload-button" [class.disabled]="busy()">
+        <input
+          type="file"
+          accept="application/pdf,.pdf"
+          multiple
+          [disabled]="busy()"
+          (change)="selectFiles($event)"
+        />
+        {{ busy() ? 'Mengunggah…' : 'Tambah PDF' }}
+      </label>
+    }
+  </header>
+
+  @if (error()) {
+    <p class="attachment-error" role="alert">{{ error() }}</p>
+  }
+
+  @if (pending().length > 0) {
+    <ul class="pending-list" aria-live="polite">
+      @for (item of pending(); track item.id) {
+        <li>
+          <span>{{ item.name }}</span>
+          <strong [class.failed]="item.status === 'gagal'">{{ item.status }}</strong>
+          @if (item.error) {
+            <small>{{ item.error }}</small>
+          }
+        </li>
+      }
+    </ul>
+  }
+
+  @if (loading()) {
+    <p class="empty">Memuat lampiran…</p>
+  } @else if (attachments().length === 0) {
+    <p class="empty">Belum ada lampiran PDF.</p>
+  } @else {
+    <ul class="attachment-list">
+      @for (attachment of attachments(); track attachment.id) {
+        <li>
+          <div class="file-icon" aria-hidden="true">PDF</div>
+          <div class="file-info">
+            <strong>{{ attachment.fileName }}</strong>
+            <span>
+              {{ formatSize(attachment.sizeBytes) }} · diunggah {{ attachment.uploadedBy }} ·
+              {{ attachment.uploadedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
+            </span>
+          </div>
+          <div class="file-actions">
+            <button type="button" class="download" (click)="download(attachment)">Unduh</button>
+            @if (canManage()) {
+              <button type="button" class="remove" [disabled]="busy()" (click)="remove(attachment)">
+                Hapus
+              </button>
+            }
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Ptw.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using Ptw.Infrastructure.Persistence;
 namespace Ptw.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PtwDbContext))]
-    partial class PtwDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260904060741_AddPermitAttachments")]
+    partial class AddPermitAttachments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -563,9 +566,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("nvarchar(40)");
 
-                    b.Property<Guid?>("RenewedFromPermitId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -605,10 +605,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                     b.HasIndex("PermitNumber")
                         .IsUnique()
                         .HasFilter("[PermitNumber] IS NOT NULL");
-
-                    b.HasIndex("RenewedFromPermitId")
-                        .IsUnique()
-                        .HasFilter("[RenewedFromPermitId] IS NOT NULL");
 
                     b.HasIndex("SponsorId", "UpdatedAt");
 
@@ -1065,14 +1061,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .HasForeignKey("PermitId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Ptw.Infrastructure.Persistence.PermitRecord", b =>
-                {
-                    b.HasOne("Ptw.Infrastructure.Persistence.PermitRecord", null)
-                        .WithMany()
-                        .HasForeignKey("RenewedFromPermitId")
-                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Ptw.Infrastructure.Persistence.PermitTaskRecord", b =>

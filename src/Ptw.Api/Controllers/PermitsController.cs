@@ -6,7 +6,9 @@ namespace Ptw.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/permits")]
-public sealed class PermitsController(PermitService service) : ControllerBase
+public sealed class PermitsController(
+    PermitService service,
+    PermitAttachmentService attachmentService) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType<PagedResponse<PermitResponse>>(StatusCodes.Status200OK)]
@@ -24,6 +26,68 @@ public sealed class PermitsController(PermitService service) : ControllerBase
         var response = await service.GetAsync(id, cancellationToken);
         Response.Headers.ETag = response.ETag;
         return response;
+    }
+
+    [HttpGet("{id:guid}/attachments")]
+    [ProducesResponseType<IReadOnlyList<PermitAttachmentResponse>>(StatusCodes.Status200OK)]
+    public Task<IReadOnlyList<PermitAttachmentResponse>> ListAttachments(
+        Guid id,
+        CancellationToken cancellationToken) =>
+        attachmentService.ListAsync(id, cancellationToken);
+
+    [HttpPost("{id:guid}/attachments")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<PermitAttachmentMutationResponse>(StatusCodes.Status201Created)]
+    public async Task<ActionResult<PermitAttachmentMutationResponse>> UploadAttachment(
+        Guid id,
+        [FromForm] IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        await using var content = file.OpenReadStream();
+        var result = await attachmentService.UploadAsync(
+            id,
+            file.FileName,
+            file.ContentType,
+            file.Length,
+            content,
+            Request.Headers.IfMatch.ToString(),
+            Request.Headers["Idempotency-Key"].ToString(),
+            CorrelationId,
+            cancellationToken);
+        Response.Headers.ETag = result.ETag;
+        return CreatedAtAction(
+            nameof(DownloadAttachment),
+            new { id, attachmentId = result.Attachment.Id },
+            result);
+    }
+
+    [HttpGet("{id:guid}/attachments/{attachmentId:guid}/content")]
+    public async Task<IActionResult> DownloadAttachment(
+        Guid id,
+        Guid attachmentId,
+        CancellationToken cancellationToken)
+    {
+        var download = await attachmentService.DownloadAsync(id, attachmentId, cancellationToken);
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(download.Content, download.MediaType, download.FileName, enableRangeProcessing: true);
+    }
+
+    [HttpPost("{id:guid}/attachments/{attachmentId:guid}/remove")]
+    [ProducesResponseType<PermitAttachmentMutationResponse>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PermitAttachmentMutationResponse>> RemoveAttachment(
+        Guid id,
+        Guid attachmentId,
+        CancellationToken cancellationToken)
+    {
+        var result = await attachmentService.RemoveAsync(
+            id,
+            attachmentId,
+            Request.Headers.IfMatch.ToString(),
+            Request.Headers["Idempotency-Key"].ToString(),
+            CorrelationId,
+            cancellationToken);
+        Response.Headers.ETag = result.ETag;
+        return result;
     }
 
     [HttpGet("{id:guid}/activity")]
@@ -63,6 +127,24 @@ public sealed class PermitsController(PermitService service) : ControllerBase
         var response = await service.UpdateDraftAsync(id, request, Request.Headers.IfMatch.ToString(), CorrelationId, cancellationToken);
         Response.Headers.ETag = response.ETag;
         return response;
+    }
+
+    [HttpPost("{id:guid}/renewals")]
+    [ProducesResponseType<PermitRenewalResponse>(StatusCodes.Status201Created)]
+    public async Task<ActionResult<PermitRenewalResponse>> RequestRenewal(
+        Guid id,
+        RequestPermitRenewalRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await service.RequestRenewalAsync(
+            id,
+            request,
+            Request.Headers.IfMatch.ToString(),
+            Request.Headers["Idempotency-Key"].ToString(),
+            CorrelationId,
+            cancellationToken);
+        Response.Headers.ETag = response.Renewal.ETag;
+        return CreatedAtAction(nameof(Get), new { id = response.Renewal.Id }, response);
     }
 
     [HttpPost("{id:guid}/submit")]

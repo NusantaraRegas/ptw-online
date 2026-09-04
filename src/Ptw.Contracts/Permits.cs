@@ -31,6 +31,10 @@ public sealed record ApprovePermitRequest(string Statement);
 
 public sealed record PermitReasonRequest(string Reason);
 
+public sealed record RequestPermitRenewalRequest(
+    DateTimeOffset ValidFrom,
+    DateTimeOffset ValidUntil);
+
 public sealed record IssuePermitRequest(
     bool ESimiEligible,
     bool LocationVerified,
@@ -86,8 +90,15 @@ public sealed record PermitResponse(
     DateTimeOffset UpdatedAt,
     Guid? ActiveWorkPeriodId,
     string? SuspensionReason,
+    Guid? RenewedFromPermitId,
+    Guid? RenewalPermitId,
     PermitWorkflowResponse Workflow,
     string ETag);
+
+public sealed record PermitRenewalResponse(
+    int SourcePermitVersion,
+    string SourceETag,
+    PermitResponse Renewal);
 
 public sealed record PagedResponse<T>(IReadOnlyList<T> Items, int Count);
 
@@ -119,6 +130,24 @@ public sealed record PermitTaskResponse(
     string LocationId,
     DateTimeOffset CreatedAt,
     DateTimeOffset? CompletedAt);
+
+public sealed record PermitAttachmentResponse(
+    Guid Id,
+    Guid PermitId,
+    int AddedInVersion,
+    int? RemovedInVersion,
+    string FileName,
+    long SizeBytes,
+    string MediaType,
+    string Sha256,
+    string ScanStatus,
+    string UploadedBy,
+    DateTimeOffset UploadedAt);
+
+public sealed record PermitAttachmentMutationResponse(
+    PermitAttachmentResponse Attachment,
+    int PermitVersion,
+    string ETag);
 
 public sealed record MeResponse(
     string UserId,

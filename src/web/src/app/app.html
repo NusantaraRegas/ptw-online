@@ -25,12 +25,20 @@
         </svg>
         <span>PTW Saya</span>
       </a>
-      <a routerLink="/tasks" routerLinkActive="active" (click)="closeMenu()">
+      <a
+        routerLink="/tasks"
+        routerLinkActive="active"
+        [attr.aria-label]="taskLinkLabel()"
+        (click)="closeMenu()"
+      >
         <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
           <path d="M9 11 11 13 15 9" />
           <path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
         </svg>
         <span>Tugas Saya</span>
+        @if (pendingTaskCount() > 0) {
+          <em class="task-attention-badge" aria-hidden="true">{{ taskBadgeText() }}</em>
+        }
       </a>
       <a routerLink="/operations" routerLinkActive="active" (click)="closeMenu()">
         <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
@@ -104,18 +112,59 @@
             </select>
           </label>
         }
-        <button
-          class="notification-button"
-          type="button"
-          aria-label="Notifikasi, ada notifikasi belum dibaca"
-          title="Notifikasi"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-            <path d="M10 21h4" />
-          </svg>
-          <span class="unread-dot" aria-hidden="true"></span>
-        </button>
+        <div class="notification-menu" (click)="keepNotificationsOpen($event)">
+          <button
+            class="notification-button"
+            type="button"
+            [attr.aria-label]="taskLinkLabel()"
+            aria-haspopup="dialog"
+            aria-controls="task-notifications"
+            [attr.aria-expanded]="notificationsOpen()"
+            title="Tugas yang perlu perhatian"
+            (click)="toggleNotifications($event)"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+              <path d="M10 21h4" />
+            </svg>
+            @if (pendingTaskCount() > 0) {
+              <span class="unread-dot" aria-hidden="true"></span>
+            }
+          </button>
+          @if (notificationsOpen()) {
+            <section
+              id="task-notifications"
+              class="notification-popover"
+              role="dialog"
+              aria-label="Tugas yang perlu perhatian"
+            >
+              <header>
+                <strong>Perlu perhatian</strong>
+                <span>{{ pendingTaskCount() }} tugas aktif</span>
+              </header>
+              @if (attentionTasks().length > 0) {
+                <ul>
+                  @for (task of attentionTasks(); track task.id) {
+                    <li>
+                      <a [routerLink]="['/permits', task.permitId]" (click)="closeNotifications()">
+                        <strong>{{ task.label }}</strong>
+                        <span>{{ task.permitTitle }}</span>
+                        <small
+                          >{{ task.locationId }} · {{ task.permitNumber || 'Draft PTW' }}</small
+                        >
+                      </a>
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <p>Belum ada tugas aktif untuk akun ini.</p>
+              }
+              <a class="notification-all" routerLink="/tasks" (click)="closeNotifications()">
+                Lihat semua tugas
+              </a>
+            </section>
+          }
+        </div>
         <span class="profile-divider" aria-hidden="true"></span>
         <span class="avatar" aria-hidden="true">{{ initials() }}</span>
         <span class="user">

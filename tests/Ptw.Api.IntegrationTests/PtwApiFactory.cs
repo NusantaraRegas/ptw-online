@@ -19,6 +19,10 @@ public sealed class PtwApiTestGroup : ICollectionFixture<PtwApiFactory>
 public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private readonly MsSqlContainer? _database;
+    private readonly string _attachmentPath = Path.Combine(
+        Path.GetTempPath(),
+        "ptw-online-tests",
+        Guid.NewGuid().ToString("N"));
     private string _connectionString;
 
     public PtwApiFactory()
@@ -38,7 +42,12 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         builder.ConfigureAppConfiguration((_, configuration) =>
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:PtwDb"] = _connectionString
+                ["ConnectionStrings:PtwDb"] = _connectionString,
+                ["Attachments:Enabled"] = "true",
+                ["Attachments:MaxFileBytes"] = "1048576",
+                ["Attachments:MaxFilesPerPermit"] = "20",
+                ["Attachments:RequireMalwareScan"] = "false",
+                ["Attachments:StoragePath"] = _attachmentPath
             }));
         builder.ConfigureServices(services =>
         {
@@ -65,6 +74,10 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         if (_database is not null)
         {
             await _database.DisposeAsync();
+        }
+        if (Directory.Exists(_attachmentPath))
+        {
+            Directory.Delete(_attachmentPath, recursive: true);
         }
         Dispose();
     }

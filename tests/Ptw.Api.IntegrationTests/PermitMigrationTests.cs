@@ -33,7 +33,9 @@ public sealed class PermitMigrationTests(PtwApiFactory factory)
             var hsseCompleted = Permit(now, "UnderReview", HsseEvidence(now));
             var awaitingHsse = Permit(now, "UnderReview", "{}");
             var alreadyAwaitingApproval = Permit(now, "AwaitingApproval", HsseEvidence(now));
-            db.Permits.AddRange(hsseCompleted, awaitingHsse, alreadyAwaitingApproval);
+            await InsertHistoricalPermitAsync(db, hsseCompleted);
+            await InsertHistoricalPermitAsync(db, awaitingHsse);
+            await InsertHistoricalPermitAsync(db, alreadyAwaitingApproval);
             db.PermitTasks.AddRange(
                 Task(hsseCompleted, "GAS_DISTRIBUTION_VALIDATION", "GasDistributionValidator", now),
                 Task(awaitingHsse, "GAS_DISTRIBUTION_VALIDATION", "GasDistributionValidator", now),
@@ -114,6 +116,19 @@ public sealed class PermitMigrationTests(PtwApiFactory factory)
             Status = "PENDING",
             CreatedAt = now
         };
+
+    private static Task<int> InsertHistoricalPermitAsync(PtwDbContext db, PermitRecord permit) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [ptw].[Permit]
+                ([Id], [PermitNumber], [Status], [Version], [LocationId], [SponsorId],
+                 [ValidFrom], [ValidUntil], [DraftJson], [CreatedAt], [UpdatedAt],
+                 [ActiveWorkPeriodId], [SuspensionReason], [WorkflowEvidenceJson])
+            VALUES
+                ({permit.Id}, {permit.PermitNumber}, {permit.Status}, {permit.Version},
+                 {permit.LocationId}, {permit.SponsorId}, {permit.ValidFrom}, {permit.ValidUntil},
+                 {permit.DraftJson}, {permit.CreatedAt}, {permit.UpdatedAt},
+                 {permit.ActiveWorkPeriodId}, {permit.SuspensionReason}, {permit.WorkflowEvidenceJson})
+            """);
 
     private static string HsseEvidence(DateTimeOffset now) => JsonSerializer.Serialize(new
     {

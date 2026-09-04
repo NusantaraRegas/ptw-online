@@ -164,7 +164,42 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
   audit, outbox, dan task persistence dalam transaksi permit yang sama.
 - Panel tindakan dashboard dan halaman Tugas Saya memakai task `PENDING` aktual yang telah difilter
   server berdasarkan role, actor assignment, dan cakupan lokasi; setiap task membuka detail PTW
-  terkait tanpa menjalankan transition secara langsung.
+  terkait tanpa menjalankan transition secara langsung. Navigasi utama menampilkan badge jumlah
+  task aktif sebagai indikator atensi untuk akun saat ini; lonceng membuka ringkasan maksimal lima
+  tugas beserta tautan ke permit dan halaman Tugas Saya.
+
+## Increment 6D
+
+- Sponsor pemilik PTW dapat menambah beberapa lampiran PDF secara dinamis serta melakukan logical
+  removal selama permit berada pada `DRAFT` atau `REVISION_REQUIRED`.
+- Setiap upload/remove memperbarui version dan ETag permit. Metadata attachment, immutable version
+  snapshot, audit event, outbox, dan idempotency receipt disimpan dalam transaksi SQL yang sama.
+- Binary disimpan melalui application storage port. Adapter Development memakai private filesystem,
+  nama storage UUID, validasi ekstensi/signature PDF, streaming, checksum SHA-256, dan limit yang
+  dikonfigurasi.
+- Semua role yang lolos authorization parent permit dan location scope dapat melihat serta mengunduh
+  lampiran aktif. File tidak diletakkan di web root dan response download memakai `nosniff`.
+- Multiple selection Angular diproses sequential agar setiap response ETag menjadi input upload
+  berikutnya; status dan kegagalan ditampilkan per file.
+- Malware scan, object storage, klasifikasi, dan retention production masih terbuka. Konfigurasi
+  non-Development menonaktifkan fitur dan mewajibkan scanner secara default. UI Development tidak
+  menampilkan warning scan per lampiran karena kapabilitas tersebut berada di luar scope saat ini.
+
+## Increment 6E
+
+- Sponsor pemilik dapat menjalankan command eksplisit `RequestRenewal` hanya ketika PTW asal
+  berstatus Diterbitkan dengan active work period dan masih berada dalam masa berlaku.
+- Command membuat draft permit baru dan memperbarui version PTW asal secara atomik. Keduanya
+  dihubungkan oleh `RenewedFromPermitId`, memiliki version snapshot sendiri, audit/outbox, concurrency
+  `If-Match`, dan idempotency receipt.
+- Data pekerjaan disalin dari snapshot PTW asal. Sponsor menentukan periode renewal yang tidak
+  overlap dan tetap maksimum tujuh hari; attachment tidak disalin otomatis.
+- Renewal memperoleh nomor baru ketika disubmit dan mengikuti validasi HSSE serta approval PIC
+  pemilik area yang sama seperti permit biasa.
+- Guard server menolak penerbitan renewal selama PTW asal masih aktif atau belum ditutup. UI
+  menampilkan hubungan PTW asal dan successor serta form periode renewal khusus Sponsor.
+- Mapping action production untuk `RequestRenewal`, perilaku pengajuan ulang setelah successor
+  dibatalkan/ditolak, dan otomasi expiry/handover tetap membutuhkan pengesahan lanjutan.
 
 ## Belum diimplementasikan karena membutuhkan keputusan bisnis
 
@@ -190,6 +225,7 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
    scripting atau threshold/checklist default yang belum disetujui.
 5. Sahkan assignment/SoD flow validasi HSSE, penangguhan, penyelesaian, dan penutupan; lalu lengkapi
    field operations berdasarkan OPN-002–006.
-6. Tambahkan attachment quarantine/malware integration, reports, print, notifications, integration/E2E/security tests.
+6. Tambahkan attachment quarantine/malware scanner dan object storage production, lalu reports,
+   print, notifications, integration/E2E/security tests lanjutan.
 
 Tidak ada default gas threshold, approval matrix, atau safety checklist yang ditanam diam-diam di source code.

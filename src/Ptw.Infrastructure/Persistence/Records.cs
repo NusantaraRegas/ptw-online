@@ -14,6 +14,7 @@ public sealed class PermitRecord
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public Guid? ActiveWorkPeriodId { get; set; }
+    public Guid? RenewedFromPermitId { get; set; }
     public string? SuspensionReason { get; set; }
     public string? WorkflowEvidenceJson { get; set; }
     public byte[] RowVersion { get; set; } = [];
@@ -81,6 +82,39 @@ public sealed class PermitTaskRecord
     public DateTimeOffset? CompletedAt { get; set; }
     public string? CompletedBy { get; set; }
     public DateTimeOffset? CancelledAt { get; set; }
+}
+
+public sealed class PermitAttachmentRecord
+{
+    public Guid Id { get; set; }
+    public Guid PermitId { get; set; }
+    public int AddedInVersion { get; set; }
+    public int? RemovedInVersion { get; set; }
+    public string FileName { get; set; } = null!;
+    public long SizeBytes { get; set; }
+    public string MediaType { get; set; } = null!;
+    public string Sha256 { get; set; } = null!;
+    public string StorageKey { get; set; } = null!;
+    public string ScanStatus { get; set; } = null!;
+    public string UploadedBy { get; set; } = null!;
+    public DateTimeOffset UploadedAt { get; set; }
+    public string? RemovedBy { get; set; }
+    public DateTimeOffset? RemovedAt { get; set; }
+    public byte[] RowVersion { get; set; } = [];
+}
+
+public sealed class PermitAttachmentCommandReceiptRecord
+{
+    public Guid Id { get; set; }
+    public string ActorId { get; set; } = null!;
+    public string Operation { get; set; } = null!;
+    public string Key { get; set; } = null!;
+    public string RequestHash { get; set; } = null!;
+    public Guid PermitId { get; set; }
+    public Guid AttachmentId { get; set; }
+    public int ResultVersion { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 }
 
 public sealed class LocationMasterRecord

@@ -30,6 +30,97 @@ public sealed class PermitStateMachineTests
     }
 
     [Fact]
+    public void AttachmentChangesCreateNewDraftVersions()
+    {
+        var permit = CreatePermit();
+        var attachmentId = Guid.NewGuid();
+
+        permit.AddAttachment(attachmentId, Now.AddMinutes(1));
+        permit.RemoveAttachment(attachmentId, Now.AddMinutes(2));
+
+        Assert.Equal(3, permit.Version);
+        Assert.Contains(permit.Events, x => x.Type == "permit_attachment_added");
+        Assert.Contains(permit.Events, x => x.Type == "permit_attachment_removed");
+    }
+
+    [Fact]
+    public void AttachmentCannotChangeAfterSubmit()
+    {
+        var permit = SubmittedForReview();
+
+        var addError = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.AddAttachment(Guid.NewGuid(), Now.AddMinutes(3)));
+        var removeError = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.RemoveAttachment(Guid.NewGuid(), Now.AddMinutes(3)));
+
+        Assert.Equal("permit.invalid_transition", addError.Code);
+        Assert.Equal("permit.invalid_transition", removeError.Code);
+        Assert.Equal(1, permit.Version);
+    }
+
+    [Fact]
+    public void OpenPermitCanRequestNonOverlappingRenewalDraft()
+    {
+        var source = ApprovedPermit();
+        source.OpenWorkPeriod(ReadyForField(), "area.owner", Now.AddHours(1));
+        var renewal = Permit.CreateRenewal(
+            source.Id,
+            ValidDraft() with
+            {
+                ValidFrom = source.Draft.ValidUntil,
+                ValidUntil = source.Draft.ValidUntil.AddHours(8)
+            },
+            Now.AddHours(2));
+
+        source.RequestRenewal(renewal, Now.AddHours(2));
+
+        Assert.Equal(renewal.Id, source.RenewalPermitId);
+        Assert.Equal(source.Id, renewal.RenewedFromPermitId);
+        Assert.Equal(PermitStatus.Draft, renewal.Status);
+        Assert.Null(renewal.PermitNumber);
+        Assert.Equal(2, source.Version);
+        Assert.Contains(source.Events, x => x.Type == "permit_renewal_requested");
+        Assert.Contains(renewal.Events, x => x.Type == "permit_renewal_draft_created");
+    }
+
+    [Fact]
+    public void RenewalRejectsOverlapAndDuplicateRequest()
+    {
+        var source = ApprovedPermit();
+        source.OpenWorkPeriod(ReadyForField(), "area.owner", Now.AddHours(1));
+        var overlapping = Permit.CreateRenewal(
+            source.Id,
+            ValidDraft() with
+            {
+                ValidFrom = source.Draft.ValidUntil.AddMinutes(-1),
+                ValidUntil = source.Draft.ValidUntil.AddHours(8)
+            },
+            Now.AddHours(2));
+
+        var overlap = Assert.Throws<DomainRuleViolationException>(() =>
+            source.RequestRenewal(overlapping, Now.AddHours(2)));
+        Assert.Equal("permit.renewal.validity_overlap", overlap.Code);
+
+        var valid = Permit.CreateRenewal(
+            source.Id,
+            ValidDraft() with
+            {
+                ValidFrom = source.Draft.ValidUntil,
+                ValidUntil = source.Draft.ValidUntil.AddHours(8)
+            },
+            Now.AddHours(2));
+        source.RequestRenewal(valid, Now.AddHours(2));
+        var duplicate = Permit.CreateRenewal(
+            source.Id,
+            valid.Draft,
+            Now.AddHours(3));
+
+        var duplicateError = Assert.Throws<DomainRuleViolationException>(() =>
+            source.RequestRenewal(duplicate, Now.AddHours(3)));
+        Assert.Equal("permit.renewal.already_requested", duplicateError.Code);
+    }
+
+    [Fact]
     public void ApprovalDoesNotOpenThePermit()
     {
         var permit = ApprovedPermit();

@@ -7,6 +7,7 @@ import { Observable } from 'rxjs';
 import { DevelopmentIdentityStore } from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
 import { IssuePermitRequest, Permit, PermitApi, PermitDraft } from '../../core/permit-api';
+import { PermitAttachmentPermitChange, PermitAttachments } from './permit-attachments';
 import { PermitHistory } from './permit-history';
 import { PermitValidationProgress } from './permit-validation-progress';
 
@@ -18,7 +19,14 @@ function toLocalInput(value: string): string {
 
 @Component({
   selector: 'app-permit-detail',
-  imports: [DatePipe, ReactiveFormsModule, RouterLink, PermitHistory, PermitValidationProgress],
+  imports: [
+    DatePipe,
+    ReactiveFormsModule,
+    RouterLink,
+    PermitAttachments,
+    PermitHistory,
+    PermitValidationProgress,
+  ],
   templateUrl: './permit-detail.html',
   styleUrl: './permit-detail.scss',
 })
@@ -29,7 +37,7 @@ export class PermitDetail {
   private readonly route = inject(ActivatedRoute);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly permitId = this.route.snapshot.paramMap.get('id') ?? '';
+  private permitId = '';
 
   protected readonly permit = signal<Permit | null>(null);
   protected readonly loading = signal(true);
@@ -38,6 +46,10 @@ export class PermitDetail {
   protected readonly error = signal('');
   protected readonly success = signal('');
   protected readonly conflict = signal(false);
+  protected readonly showingRenewalForm = signal(false);
+  protected readonly renewalError = signal('');
+  protected readonly renewalConflict = signal(false);
+  protected readonly renewalCreatedId = signal<string | null>(null);
   protected readonly locations = signal<LocationOption[]>([]);
   protected readonly loadingLocations = signal(true);
   protected readonly locationError = signal('');
@@ -47,6 +59,12 @@ export class PermitDetail {
     const status = this.permit()?.status;
     return status === 'DRAFT' || status === 'REVISION_REQUIRED';
   });
+  protected readonly canManageAttachments = computed(
+    () =>
+      this.canEdit() &&
+      (this.roles.includes('Administrator') ||
+        (this.roles.includes('Sponsor') && this.permit()?.draft.sponsorId === this.actorId)),
+  );
   protected readonly statusLabel = computed(() => {
     const labels: Record<string, string> = {
       DRAFT: 'Draft',
@@ -100,6 +118,13 @@ export class PermitDetail {
   protected readonly canRequestSuspension = computed(
     () =>
       this.permit()?.status === 'OPEN' &&
+      this.roles.includes('Sponsor') &&
+      this.permit()?.draft.sponsorId === this.actorId,
+  );
+  protected readonly canRequestRenewal = computed(
+    () =>
+      this.permit()?.status === 'OPEN' &&
+      !this.permit()?.renewalPermitId &&
       this.roles.includes('Sponsor') &&
       this.permit()?.draft.sponsorId === this.actorId,
   );
@@ -176,10 +201,30 @@ export class PermitDetail {
     gasTestSatisfied: [false, Validators.requiredTrue],
     noUnresolvedSuspension: [false, Validators.requiredTrue],
   });
+  protected readonly renewalForm = this.fb.nonNullable.group({
+    validFrom: ['', Validators.required],
+    validUntil: ['', Validators.required],
+  });
 
   constructor() {
     this.loadLocations();
-    this.load();
+    this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      this.permitId = params.get('id') ?? '';
+      this.editing.set(false);
+      this.showingRenewalForm.set(false);
+      this.renewalError.set('');
+      this.renewalConflict.set(false);
+      this.renewalCreatedId.set(null);
+      this.permit.set(null);
+
+      if (!this.permitId) {
+        this.loading.set(false);
+        this.error.set('PTW tidak ditemukan atau tidak lagi tersedia.');
+        return;
+      }
+
+      this.load();
+    });
   }
 
   protected startEdit(): void {
@@ -258,7 +303,82 @@ export class PermitDetail {
 
   protected reload(): void {
     this.editing.set(false);
+    this.showingRenewalForm.set(false);
+    this.renewalError.set('');
+    this.renewalConflict.set(false);
     this.load();
+  }
+
+  protected applyAttachmentPermitChange(change: PermitAttachmentPermitChange): void {
+    this.permit.update((permit) =>
+      permit ? { ...permit, eTag: change.eTag, version: change.version } : permit,
+    );
+  }
+
+  protected openRenewalForm(): void {
+    const permit = this.permit();
+    if (!permit || !this.canRequestRenewal()) return;
+    this.renewalForm.reset({
+      validFrom: toLocalInput(permit.draft.validUntil),
+      validUntil: '',
+    });
+    this.error.set('');
+    this.success.set('');
+    this.renewalError.set('');
+    this.renewalConflict.set(false);
+    this.showingRenewalForm.set(true);
+  }
+
+  protected cancelRenewal(): void {
+    this.showingRenewalForm.set(false);
+    this.renewalError.set('');
+    this.renewalConflict.set(false);
+    this.renewalForm.reset();
+  }
+
+  protected requestRenewal(): void {
+    const permit = this.permit();
+    if (!permit || this.renewalForm.invalid) {
+      this.renewalForm.markAllAsTouched();
+      return;
+    }
+
+    const value = this.renewalForm.getRawValue();
+    this.saving.set(true);
+    this.success.set('');
+    this.renewalError.set('');
+    this.renewalConflict.set(false);
+    this.api
+      .requestRenewal(permit.id, permit.eTag, {
+        validFrom: new Date(value.validFrom).toISOString(),
+        validUntil: new Date(value.validUntil).toISOString(),
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          this.permit.update((current) =>
+            current
+              ? {
+                  ...current,
+                  version: result.sourcePermitVersion,
+                  eTag: result.sourceETag,
+                  renewalPermitId: result.renewal.id,
+                }
+              : current,
+          );
+          this.renewalCreatedId.set(result.renewal.id);
+          this.showingRenewalForm.set(false);
+          this.saving.set(false);
+          this.renewalError.set('');
+          this.renewalConflict.set(false);
+          this.success.set('Draft renewal berhasil dibuat dengan nomor PTW baru saat diajukan.');
+        },
+        error: (response) => {
+          this.saving.set(false);
+          this.renewalConflict.set(response.status === 409);
+          this.renewalError.set(response?.error?.detail ?? 'Pengajuan renewal gagal diproses.');
+        },
+      });
   }
 
   protected submitForValidation(): void {

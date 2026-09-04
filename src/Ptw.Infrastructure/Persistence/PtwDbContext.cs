@@ -10,6 +10,9 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
     public DbSet<OutboxMessageRecord> OutboxMessages => Set<OutboxMessageRecord>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<PermitTaskRecord> PermitTasks => Set<PermitTaskRecord>();
+    public DbSet<PermitAttachmentRecord> PermitAttachments => Set<PermitAttachmentRecord>();
+    public DbSet<PermitAttachmentCommandReceiptRecord> PermitAttachmentCommandReceipts =>
+        Set<PermitAttachmentCommandReceiptRecord>();
     public DbSet<LocationMasterRecord> LocationMasters => Set<LocationMasterRecord>();
     public DbSet<LocationMasterVersionRecord> LocationMasterVersions => Set<LocationMasterVersionRecord>();
     public DbSet<ConfigurationAuditEventRecord> ConfigurationAuditEvents => Set<ConfigurationAuditEventRecord>();
@@ -36,6 +39,13 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         permit.Property(x => x.RowVersion).IsRowVersion();
         permit.HasIndex(x => new { x.Status, x.LocationId });
         permit.HasIndex(x => new { x.SponsorId, x.UpdatedAt });
+        permit.HasIndex(x => x.RenewedFromPermitId)
+            .IsUnique()
+            .HasFilter("[RenewedFromPermitId] IS NOT NULL");
+        permit.HasOne<PermitRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.RenewedFromPermitId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         var version = modelBuilder.Entity<PermitVersionRecord>();
         version.ToTable("PermitVersion", "ptw");
@@ -87,6 +97,53 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         permitTask.HasOne<PermitRecord>()
             .WithMany()
             .HasForeignKey(x => x.PermitId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var permitAttachment = modelBuilder.Entity<PermitAttachmentRecord>();
+        permitAttachment.ToTable(
+            "PermitAttachment",
+            "ptw",
+            table =>
+            {
+                table.HasCheckConstraint("CK_PermitAttachment_Size", "[SizeBytes] > 0");
+                table.HasCheckConstraint(
+                    "CK_PermitAttachment_Versions",
+                    "[RemovedInVersion] IS NULL OR [RemovedInVersion] > [AddedInVersion]");
+                table.HasCheckConstraint(
+                    "CK_PermitAttachment_ScanStatus",
+                    "[ScanStatus] IN ('NOT_SCANNED', 'CLEAN', 'REJECTED')");
+            });
+        permitAttachment.HasKey(x => x.Id);
+        permitAttachment.Property(x => x.FileName).HasMaxLength(255);
+        permitAttachment.Property(x => x.MediaType).HasMaxLength(100);
+        permitAttachment.Property(x => x.Sha256).HasMaxLength(64).IsFixedLength();
+        permitAttachment.Property(x => x.StorageKey).HasMaxLength(500);
+        permitAttachment.Property(x => x.ScanStatus).HasMaxLength(20);
+        permitAttachment.Property(x => x.UploadedBy).HasMaxLength(200);
+        permitAttachment.Property(x => x.RemovedBy).HasMaxLength(200);
+        permitAttachment.Property(x => x.RowVersion).IsRowVersion();
+        permitAttachment.HasIndex(x => new { x.PermitId, x.RemovedInVersion, x.UploadedAt });
+        permitAttachment.HasIndex(x => x.StorageKey).IsUnique();
+        permitAttachment.HasOne<PermitRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.PermitId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var attachmentReceipt = modelBuilder.Entity<PermitAttachmentCommandReceiptRecord>();
+        attachmentReceipt.ToTable("PermitAttachmentCommandReceipt", "intg");
+        attachmentReceipt.HasKey(x => x.Id);
+        attachmentReceipt.Property(x => x.ActorId).HasMaxLength(200);
+        attachmentReceipt.Property(x => x.Operation).HasMaxLength(100);
+        attachmentReceipt.Property(x => x.Key).HasMaxLength(200);
+        attachmentReceipt.Property(x => x.RequestHash).HasMaxLength(64).IsFixedLength();
+        attachmentReceipt.HasIndex(x => new { x.ActorId, x.Operation, x.Key }).IsUnique();
+        attachmentReceipt.HasOne<PermitRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.PermitId)
+            .OnDelete(DeleteBehavior.Restrict);
+        attachmentReceipt.HasOne<PermitAttachmentRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.AttachmentId)
             .OnDelete(DeleteBehavior.Restrict);
 
         var location = modelBuilder.Entity<LocationMasterRecord>();

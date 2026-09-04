@@ -26,8 +26,12 @@ Sudah tersedia:
   daftar, detail, create/edit draft ber-ETag, progres validasi HSSE, approval/penerbitan,
   penangguhan dan penyelesaian sesuai role, audit timeline, version history, responsive navigation,
   dan Bahasa Indonesia;
-- menu **Tugas Saya** membaca task workflow persisten dari `/api/v1/tasks`; task disaring server-side
-  menurut role dan cakupan lokasi akun;
+- menu **Tugas Saya** dan lonceng menampilkan badge serta pratinjau task workflow persisten dari
+  `/api/v1/tasks`; task disaring server-side menurut role dan cakupan lokasi akun;
+- lampiran PDF dinamis untuk Sponsor pada draft PTW, dengan multiple selection, private Development
+  storage, checksum SHA-256, version/ETag, logical removal, audit, outbox, dan download scoped;
+- renewal PTW oleh Sponsor ketika pekerjaan sedang Diterbitkan; renewal membentuk draft dan nomor
+  PTW baru, terhubung ke PTW asal, serta tidak dapat diterbitkan selama PTW asal masih aktif;
 - framework master lokasi effective-dated dengan maker-checker, immutable version snapshot, audit/outbox, dan halaman Administrasi fail-safe;
 - lookup lokasi approved/effective dan scope-filtered; katalog MVP yang dikonfirmasi mencakup HO,
   ORF, Site Office, FSRU, dan Water-Based Activity, dan form PTW memakai dropdown lookup;
@@ -220,6 +224,11 @@ aksi terkait dan server tetap menjadi authority untuk waktu serta transition.
 | `GET`   | `/api/v1/permits/{id}`          | Membaca detail scoped                          |
 | `GET`   | `/api/v1/permits/{id}/activity` | Audit timeline scoped dan paginated            |
 | `GET`   | `/api/v1/permits/{id}/versions` | Snapshot versi immutable, scoped dan paginated |
+| `GET`   | `/api/v1/permits/{id}/attachments` | Daftar lampiran PDF aktif                    |
+| `POST`  | `/api/v1/permits/{id}/attachments` | Upload satu PDF dengan `If-Match` dan `Idempotency-Key` |
+| `GET`   | `/api/v1/permits/{id}/attachments/{attachmentId}/content` | Download PDF scoped       |
+| `POST`  | `/api/v1/permits/{id}/attachments/{attachmentId}/remove` | Logical removal lampiran  |
+| `POST`  | `/api/v1/permits/{id}/renewals` | Membuat draft renewal dengan `If-Match` dan `Idempotency-Key` |
 | `PATCH` | `/api/v1/permits/{id}/draft`    | Update draft dengan `If-Match`                 |
 | `POST`  | `/api/v1/permits/{id}/submit`   | Submit dengan `If-Match` dan `Idempotency-Key` |
 | `POST`  | `/api/v1/permits/{id}/validations/hsse/endorse` | Validasi HSSE |
@@ -411,7 +420,12 @@ Gunakan pola expand/contract dan forward-fix. Jangan memakai `EnsureCreated`, de
 - development headers tidak boleh diterima di luar `Development`;
 - production database harus memakai migration/application user least-privilege, bukan `sa`;
 - production image harus dipin ke patch/CU/digest yang disetujui;
-- attachment quarantine, malware scanning, live E-SIMI, complete authorization matrix, dan production observability masih harus dibangun;
+- attachment Development hanya menerima file berekstensi `.pdf` dengan signature `%PDF-`, memakai
+  nama storage berbasis UUID, dan tidak berada di web root;
+- malware scanning dan object storage production belum tersedia. Konfigurasi production default
+  menonaktifkan attachment dan mewajibkan scanner; jangan mengaktifkannya dengan filesystem adapter
+  Development;
+- live E-SIMI, complete authorization matrix, retention attachment, dan production observability masih harus dibangun;
 - Compose single-host tidak memberikan high availability.
 
 Sampai item tersebut selesai dan OPN-001–009 disahkan, aplikasi adalah development baseline, bukan sistem PTW operasional.

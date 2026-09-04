@@ -74,6 +74,8 @@ export class PermitHistory {
       permit_rejected: 'PTW ditolak',
       permit_cancelled: 'PTW dibatalkan',
       permit_expired: 'Masa berlaku PTW berakhir',
+      permit_renewal_requested: 'Sponsor mengajukan renewal PTW',
+      permit_renewal_draft_created: 'Draft renewal PTW dibuat',
     };
     return labels[eventType] ?? eventType.replaceAll('_', ' ');
   }

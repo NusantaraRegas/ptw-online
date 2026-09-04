@@ -424,6 +424,7 @@ public sealed class OperationalPolicyApiTests(PtwApiFactory factory)
             {
                 [PermitPolicyOperations.CreateDraft] = actionCode,
                 [PermitPolicyOperations.UpdateDraft] = $"{actionCode}.update",
+                [PermitPolicyOperations.RequestRenewal] = $"{actionCode}.request-renewal",
                 [PermitPolicyOperations.Submit] = $"{actionCode}.submit",
                 [PermitPolicyOperations.ValidateHsse] = $"{actionCode}.validate-hsse",
                 [PermitPolicyOperations.Approve] = $"{actionCode}.approve",
