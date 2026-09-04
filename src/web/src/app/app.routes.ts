@@ -19,7 +19,7 @@ export const routes: Routes = [
   },
   {
     path: 'tasks',
-    loadComponent: () => import('./features/placeholder/placeholder').then((m) => m.TasksPage),
+    loadComponent: () => import('./features/tasks/task-list').then((m) => m.TaskList),
   },
   {
     path: 'operations',

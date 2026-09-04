@@ -29,6 +29,8 @@ public sealed record EndorsePermitValidationRequest(string Statement);
 
 public sealed record ApprovePermitRequest(string Statement);
 
+public sealed record PermitReasonRequest(string Reason);
+
 public sealed record IssuePermitRequest(
     bool ESimiEligible,
     bool LocationVerified,
@@ -53,7 +55,26 @@ public sealed record PermitWorkflowResponse(
     PermitValidationResponse GasDistribution,
     string? ApprovedBy,
     string? ApprovalStatement,
+    DateTimeOffset? ApprovedAt,
+    PermitSuspensionResponse Suspension,
+    PermitCompletionResponse Completion);
+
+public sealed record PermitSuspensionResponse(
+    bool Requested,
+    string? RequestedBy,
+    string? Reason,
+    DateTimeOffset? RequestedAt,
+    bool Approved,
+    string? ApprovedBy,
+    string? ApprovalStatement,
     DateTimeOffset? ApprovedAt);
+
+public sealed record PermitCompletionResponse(
+    PermitValidationResponse Sponsor,
+    PermitValidationResponse Hsse,
+    PermitValidationResponse AreaOwner);
+
+public sealed record ConfirmPermitActionRequest(string Statement);
 
 public sealed record PermitResponse(
     Guid Id,
@@ -84,6 +105,20 @@ public sealed record PermitVersionResponse(
     string ContentHash,
     DateTimeOffset CreatedAt,
     string CreatedBy);
+
+public sealed record PermitTaskResponse(
+    Guid Id,
+    Guid PermitId,
+    int PermitVersion,
+    string Type,
+    string Label,
+    string RequiredRole,
+    string Status,
+    string? PermitNumber,
+    string PermitTitle,
+    string LocationId,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? CompletedAt);
 
 public sealed record MeResponse(
     string UserId,

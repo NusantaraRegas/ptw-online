@@ -50,6 +50,25 @@ export interface PermitWorkflow {
   approvedBy: string | null;
   approvalStatement: string | null;
   approvedAt: string | null;
+  suspension: PermitSuspension;
+  completion: PermitCompletion;
+}
+
+export interface PermitSuspension {
+  requested: boolean;
+  requestedBy: string | null;
+  reason: string | null;
+  requestedAt: string | null;
+  approved: boolean;
+  approvedBy: string | null;
+  approvalStatement: string | null;
+  approvedAt: string | null;
+}
+
+export interface PermitCompletion {
+  sponsor: PermitValidation;
+  hsse: PermitValidation;
+  areaOwner: PermitValidation;
 }
 
 export interface IssuePermitRequest {
@@ -73,6 +92,26 @@ export interface SubmitPermitRequest {
 
 export interface PagedPermits {
   items: Permit[];
+  count: number;
+}
+
+export interface PermitTask {
+  id: string;
+  permitId: string;
+  permitVersion: number;
+  type: string;
+  label: string;
+  requiredRole: string;
+  status: string;
+  permitNumber: string | null;
+  permitTitle: string;
+  locationId: string;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface PagedPermitTasks {
+  items: PermitTask[];
   count: number;
 }
 
@@ -104,6 +143,10 @@ export class PermitApi {
   list(): Observable<PagedPermits> {
     return this.http.get<PagedPermits>('/api/v1/permits');
   }
+
+  listTasks(): Observable<PagedPermitTasks> {
+    return this.http.get<PagedPermitTasks>('/api/v1/tasks');
+  }
   create(draft: PermitDraft): Observable<Permit> {
     return this.http.post<Permit>('/api/v1/permits', draft);
   }
@@ -126,12 +169,40 @@ export class PermitApi {
     return this.command(id, 'validations/hsse/endorse', eTag, { statement });
   }
 
-  endorseGasDistribution(id: string, eTag: string, statement: string): Observable<Permit> {
-    return this.command(id, 'validations/gas-distribution/endorse', eTag, { statement });
-  }
-
   approve(id: string, eTag: string, statement: string): Observable<Permit> {
     return this.command(id, 'approve', eTag, { statement });
+  }
+
+  requestRevision(id: string, eTag: string, reason: string): Observable<Permit> {
+    return this.command(id, 'request-revision', eTag, { reason });
+  }
+
+  reject(id: string, eTag: string, reason: string): Observable<Permit> {
+    return this.command(id, 'reject', eTag, { reason });
+  }
+
+  requestSuspension(id: string, eTag: string, reason: string): Observable<Permit> {
+    return this.command(id, 'suspensions/request', eTag, { reason });
+  }
+
+  approveSuspension(id: string, eTag: string, statement: string): Observable<Permit> {
+    return this.command(id, 'suspensions/approve', eTag, { statement });
+  }
+
+  declareCompletion(id: string, eTag: string, statement: string): Observable<Permit> {
+    return this.command(id, 'completion/declare', eTag, { statement });
+  }
+
+  confirmHsseCompletion(id: string, eTag: string, statement: string): Observable<Permit> {
+    return this.command(id, 'completion/confirm/hsse', eTag, { statement });
+  }
+
+  confirmAreaOwnerCompletion(id: string, eTag: string, statement: string): Observable<Permit> {
+    return this.command(id, 'completion/confirm/area-owner', eTag, { statement });
+  }
+
+  close(id: string, eTag: string, statement: string): Observable<Permit> {
+    return this.command(id, 'close', eTag, { statement });
   }
 
   issue(id: string, eTag: string, readiness: IssuePermitRequest): Observable<Permit> {

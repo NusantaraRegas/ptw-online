@@ -67,6 +67,22 @@ public sealed class IdempotencyRecord
     public DateTimeOffset ExpiresAt { get; set; }
 }
 
+public sealed class PermitTaskRecord
+{
+    public Guid Id { get; set; }
+    public Guid PermitId { get; set; }
+    public int PermitVersion { get; set; }
+    public string Type { get; set; } = null!;
+    public string Label { get; set; } = null!;
+    public string RequiredRole { get; set; } = null!;
+    public string? AssignedActorId { get; set; }
+    public string Status { get; set; } = null!;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
+    public string? CompletedBy { get; set; }
+    public DateTimeOffset? CancelledAt { get; set; }
+}
+
 public sealed class LocationMasterRecord
 {
     public Guid Id { get; set; }

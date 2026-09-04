@@ -1,0 +1,38 @@
+<div class="page-title">
+  <div>
+    <p class="eyebrow">Workflow PTW</p>
+    <h1>Tugas Saya</h1>
+    <p class="subtitle">Tugas aktif sesuai role dan cakupan lokasi akun Anda.</p>
+  </div>
+  <span class="task-count">{{ tasks().length }} tugas aktif</span>
+</div>
+
+<section class="card task-list" aria-live="polite">
+  @if (loading()) {
+    <div class="state"><span class="spinner" aria-hidden="true"></span>Memuat tugas...</div>
+  } @else if (error()) {
+    <div class="state error" role="alert">{{ error() }}</div>
+  } @else {
+    @for (task of tasks(); track task.id) {
+      <a class="task" [routerLink]="['/permits', task.permitId]">
+        <span class="task-code">{{ taskCode(task.type) }}</span>
+        <span class="task-main">
+          <strong>{{ task.label }}</strong>
+          <small>{{ task.permitTitle }}</small>
+        </span>
+        <span class="permit-meta">
+          <strong>{{ task.permitNumber || 'Draft PTW' }}</strong>
+          <small>{{ task.locationId }} &middot; versi {{ task.permitVersion }}</small>
+        </span>
+        <time>{{ task.createdAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</time>
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg>
+      </a>
+    } @empty {
+      <div class="empty">
+        <span aria-hidden="true">&#10003;</span>
+        <strong>Tidak ada tugas aktif</strong>
+        <p>Semua tugas yang sesuai role dan cakupan lokasi Anda telah selesai.</p>
+      </div>
+    }
+  }
+</section>

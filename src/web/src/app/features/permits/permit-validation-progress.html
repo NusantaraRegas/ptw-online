@@ -2,14 +2,14 @@
   <header class="workflow-header">
     <div>
       <span class="workflow-kicker">Workflow PTW</span>
-      <h2 id="validation-progress-title">Validasi paralel</h2>
+      <h2 id="validation-progress-title">Validasi HSSE</h2>
     </div>
-    <span class="progress-summary" [class.completed]="completedCount() === 2">
-      {{ completedCount() }}/2 selesai
+    <span class="progress-summary" [class.completed]="completedCount() === 1">
+      {{ completedCount() }}/1 selesai
     </span>
   </header>
 
-  <p class="workflow-note">Kedua fungsi wajib menyelesaikan validasi sebelum approval tersedia.</p>
+  <p class="workflow-note">Validasi HSSE wajib selesai sebelum approval pemilik area tersedia.</p>
 
   <ol class="validation-list">
     <li class="validation-item" [class.completed]="workflow().hsse.completed">
@@ -32,36 +32,6 @@
         @if (workflow().hsse.completedAt) {
           <time [attr.datetime]="workflow().hsse.completedAt">
             {{ workflow().hsse.completedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
-          </time>
-        }
-      </div>
-    </li>
-
-    <li class="validation-item" [class.completed]="workflow().gasDistribution.completed">
-      <span class="validation-marker" aria-hidden="true">
-        @if (workflow().gasDistribution.completed) {
-          <svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-9" /></svg>
-        } @else {
-          2
-        }
-      </span>
-      <div class="validation-content">
-        <div class="validation-heading">
-          <strong>Distribusi Gas &amp; Pengelolaan ORF</strong>
-          <span class="status-pill">
-            {{ workflow().gasDistribution.completed ? 'Selesai' : 'Menunggu' }}
-          </span>
-        </div>
-        <span class="actor-label">Validator</span>
-        <span class="actor-id">
-          {{ workflow().gasDistribution.actorId || 'Belum ditentukan' }}
-        </span>
-        @if (workflow().gasDistribution.completedAt) {
-          <time [attr.datetime]="workflow().gasDistribution.completedAt">
-            {{
-              workflow().gasDistribution.completedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta'
-            }}
-            WIB
           </time>
         }
       </div>

@@ -12,6 +12,11 @@ public sealed class PermitsController(PermitService service) : ControllerBase
     [ProducesResponseType<PagedResponse<PermitResponse>>(StatusCodes.Status200OK)]
     public Task<PagedResponse<PermitResponse>> List(CancellationToken cancellationToken) => service.ListAsync(cancellationToken);
 
+    [HttpGet("/api/v1/tasks")]
+    [ProducesResponseType<PagedResponse<PermitTaskResponse>>(StatusCodes.Status200OK)]
+    public Task<PagedResponse<PermitTaskResponse>> ListTasks(CancellationToken cancellationToken) =>
+        service.ListTasksAsync(cancellationToken);
+
     [HttpGet("{id:guid}")]
     [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
     public async Task<ActionResult<PermitResponse>> Get(Guid id, CancellationToken cancellationToken)
@@ -92,20 +97,6 @@ public sealed class PermitsController(PermitService service) : ControllerBase
             CorrelationId,
             cancellationToken));
 
-    [HttpPost("{id:guid}/validations/gas-distribution/endorse")]
-    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
-    public Task<ActionResult<PermitResponse>> EndorseGasDistributionValidation(
-        Guid id,
-        EndorsePermitValidationRequest request,
-        CancellationToken cancellationToken) =>
-        CommandAsync((etag, key) => service.EndorseGasDistributionValidationAsync(
-            id,
-            request,
-            etag,
-            key,
-            CorrelationId,
-            cancellationToken));
-
     [HttpPost("{id:guid}/approve")]
     [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
     public Task<ActionResult<PermitResponse>> Approve(
@@ -113,6 +104,118 @@ public sealed class PermitsController(PermitService service) : ControllerBase
         ApprovePermitRequest request,
         CancellationToken cancellationToken) =>
         CommandAsync((etag, key) => service.ApproveAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
+    [HttpPost("{id:guid}/request-revision")]
+    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<PermitResponse>> RequestRevision(
+        Guid id,
+        PermitReasonRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.RequestRevisionAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
+    [HttpPost("{id:guid}/reject")]
+    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<PermitResponse>> Reject(
+        Guid id,
+        PermitReasonRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.RejectAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
+    [HttpPost("{id:guid}/suspensions/request")]
+    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<PermitResponse>> RequestSuspension(
+        Guid id,
+        PermitReasonRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.RequestSuspensionAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
+    [HttpPost("{id:guid}/suspensions/approve")]
+    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<PermitResponse>> ApproveSuspension(
+        Guid id,
+        ConfirmPermitActionRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.ApproveSuspensionAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
+    [HttpPost("{id:guid}/completion/declare")]
+    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<PermitResponse>> DeclareCompletion(
+        Guid id,
+        ConfirmPermitActionRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.DeclareCompletionAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
+    [HttpPost("{id:guid}/completion/confirm/hsse")]
+    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<PermitResponse>> ConfirmHsseCompletion(
+        Guid id,
+        ConfirmPermitActionRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.ConfirmHsseCompletionAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
+    [HttpPost("{id:guid}/completion/confirm/area-owner")]
+    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<PermitResponse>> ConfirmAreaOwnerCompletion(
+        Guid id,
+        ConfirmPermitActionRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.ConfirmAreaOwnerCompletionAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
+    [HttpPost("{id:guid}/close")]
+    [ProducesResponseType<PermitResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<PermitResponse>> Close(
+        Guid id,
+        ConfirmPermitActionRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.CloseAsync(
             id,
             request,
             etag,

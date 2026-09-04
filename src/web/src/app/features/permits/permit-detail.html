@@ -143,10 +143,50 @@
         </section>
         <app-permit-validation-progress [workflow]="permit()!.workflow" />
 
+        @if (permit()!.workflow.suspension.requested) {
+          <section class="card evidence-card suspension-evidence">
+            <h2>Penangguhan pekerjaan</h2>
+            <strong>{{ permit()!.workflow.suspension.reason }}</strong>
+            <span>Diajukan oleh {{ permit()!.workflow.suspension.requestedBy }}</span>
+            <span>
+              {{
+                permit()!.workflow.suspension.approved
+                  ? 'Disetujui oleh ' + permit()!.workflow.suspension.approvedBy
+                  : 'Menunggu persetujuan PIC pemilik area'
+              }}
+            </span>
+          </section>
+        }
+
+        @if (permit()!.workflow.completion.sponsor.completed) {
+          <section class="card evidence-card completion-evidence">
+            <h2>Konfirmasi penyelesaian</h2>
+            <span class="evidence-row completed">Sponsor <strong>Selesai</strong></span>
+            <span
+              class="evidence-row"
+              [class.completed]="permit()!.workflow.completion.hsse.completed"
+            >
+              HSSE
+              <strong>{{
+                permit()!.workflow.completion.hsse.completed ? 'Selesai' : 'Menunggu'
+              }}</strong>
+            </span>
+            <span
+              class="evidence-row"
+              [class.completed]="permit()!.workflow.completion.areaOwner.completed"
+            >
+              PIC pemilik area
+              <strong>{{
+                permit()!.workflow.completion.areaOwner.completed ? 'Selesai' : 'Menunggu'
+              }}</strong>
+            </span>
+          </section>
+        }
+
         @if (canSubmit()) {
           <form class="card workflow-action" [formGroup]="submissionForm">
             <h2>Ajukan validasi</h2>
-            <p>Konfirmasi seluruh prasyarat submit sebelum mengirim PTW ke dua validator.</p>
+            <p>Konfirmasi seluruh prasyarat submit sebelum mengirim PTW ke validator HSSE.</p>
             <label class="check"
               ><input type="checkbox" formControlName="eSimiEligible" /> E-SIMI layak</label
             >
@@ -194,16 +234,6 @@
                   Sahkan validasi HSSE
                 </button>
               }
-              @if (canValidateGas()) {
-                <button
-                  class="primary-button"
-                  type="button"
-                  [disabled]="saving() || decisionStatement.invalid"
-                  (click)="endorseGas()"
-                >
-                  Sahkan validasi operasional
-                </button>
-              }
               @if (canApprove()) {
                 <button
                   class="primary-button"
@@ -212,6 +242,86 @@
                   (click)="approve()"
                 >
                   Setujui sebagai pemilik area
+                </button>
+              }
+              @if (canDisposition()) {
+                <div class="disposition-actions">
+                  <button
+                    class="secondary-button"
+                    type="button"
+                    [disabled]="saving() || decisionStatement.invalid"
+                    (click)="requestRevision()"
+                  >
+                    Minta revisi
+                  </button>
+                  <button
+                    class="danger-button"
+                    type="button"
+                    [disabled]="saving() || decisionStatement.invalid"
+                    (click)="reject()"
+                  >
+                    Tolak PTW
+                  </button>
+                </div>
+              }
+              @if (canRequestSuspension()) {
+                <button
+                  class="danger-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid"
+                  (click)="requestSuspension()"
+                >
+                  Ajukan penangguhan
+                </button>
+              }
+              @if (canApproveSuspension()) {
+                <button
+                  class="primary-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid"
+                  (click)="approveSuspension()"
+                >
+                  Setujui penangguhan
+                </button>
+              }
+              @if (canDeclareCompletion()) {
+                <button
+                  class="secondary-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid"
+                  (click)="declareCompletion()"
+                >
+                  Nyatakan pekerjaan selesai
+                </button>
+              }
+              @if (canConfirmHsseCompletion()) {
+                <button
+                  class="primary-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid"
+                  (click)="confirmHsseCompletion()"
+                >
+                  Konfirmasi selesai sebagai HSSE
+                </button>
+              }
+              @if (canConfirmAreaOwnerCompletion()) {
+                <button
+                  class="primary-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid"
+                  (click)="confirmAreaOwnerCompletion()"
+                >
+                  Konfirmasi selesai sebagai PIC area
+                </button>
+              }
+              @if (canClose()) {
+                <button
+                  class="danger-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid"
+                  (click)="closePermit()"
+                >
+                  Tutup PTW
                 </button>
               }
             </div>
@@ -257,6 +367,11 @@
               ><input type="checkbox" formControlName="noUnresolvedSuspension" /> Tidak ada
               suspension yang belum diselesaikan</label
             >
+            @if (error()) {
+              <div class="message error" role="alert">
+                <span>{{ error() }}</span>
+              </div>
+            }
             <button
               class="primary-button"
               type="button"
@@ -272,7 +387,7 @@
           <strong>{{
             canEdit() ? 'Lengkapi dan verifikasi draft' : 'Pantau status workflow'
           }}</strong>
-          <p>Dua validasi berjalan paralel; approval baru tersedia setelah keduanya selesai.</p>
+          <p>Validasi HSSE wajib selesai sebelum approval PIC pemilik area tersedia.</p>
         </section>
       </aside>
     </section>

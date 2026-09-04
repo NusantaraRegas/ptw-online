@@ -58,6 +58,8 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 
 - Terapkan scope filter pada query serta cek parent permit untuk resource turunan dan attachment. Menyembunyikan tombol tidak cukup.
 - Development identity headers hanya boleh aktif pada environment `Development`.
+- Identitas actor dan Sponsor aktif pada frontend harus berasal dari `/api/v1/me`; jangan hard-code
+  profile demo ke payload domain. Tambahkan negative/regression test saat mengubah identity selector.
 - Jangan commit `.env`, password, token, certificate, connection string ber-secret, PII fixture nyata, atau isi attachment.
 - Jangan log token, secret, document content, atau PII yang tidak diperlukan. Pertahankan correlation ID dan identifier aman.
 - High/critical dependency vulnerability harus ditutup atau memblokir delivery; jangan menonaktifkan NuGet/npm audit untuk membuat build hijau.
@@ -71,15 +73,20 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 - Status harus memakai teks dan tidak hanya warna.
 - Pertahankan peringatan bahwa `APPROVED` belum boleh mulai bekerja.
 - Form panjang memakai reactive forms, error association/summary, dan remediation yang jelas.
+- Error command pada halaman panjang harus terlihat di dekat aksi pemicunya; summary global boleh
+  tetap tersedia untuk aksesibilitas dan navigasi konflik.
 - Target minimal WCAG 2.2 AA: keyboard, visible focus, semantic heading, label, contrast, dan associated errors.
 - Gunakan Signals untuk local UI state dan RxJS untuk asynchronous HTTP streams.
 - Jangan menyimpan access token di `localStorage`.
 
 ## Kontrak flow MVP saat ini
 
-- Setelah Sponsor submit, validasi HSSE dan validasi Departemen Distribusi Gas & Pengelolaan ORF
-  berjalan paralel; keduanya wajib selesai sebelum approval.
-- Validasi operasional tersebut tetap berlaku untuk PTW berlokasi HO.
+- Setelah Sponsor submit, hanya validasi HSSE yang wajib selesai sebelum approval PIC pemilik area.
+- Permintaan penangguhan hanya dapat diajukan Sponsor dan harus langsung menghentikan active work
+  period sebelum approval PIC pemilik area diberikan.
+- Penyelesaian dimulai oleh konfirmasi Sponsor, lalu konfirmasi HSSE dan PIC pemilik area dapat
+  berjalan paralel. Status baru boleh menjadi `WORK_COMPLETED` setelah ketiganya lengkap.
+- PTW yang telah `WORK_COMPLETED` hanya dapat ditutup oleh PIC pemilik area.
 - PIC pemilik area yang melakukan approval juga menerbitkan PTW untuk kelompok area yang sama.
   Jangan memisahkan actor approver dan penerbit tanpa keputusan pengguna atau decision record baru.
 - Profile dan nama actor Development adalah dummy. Assignment PIC konkret, kompetensi, serta

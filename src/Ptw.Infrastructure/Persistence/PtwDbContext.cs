@@ -9,6 +9,7 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
     public DbSet<AuditEventRecord> AuditEvents => Set<AuditEventRecord>();
     public DbSet<OutboxMessageRecord> OutboxMessages => Set<OutboxMessageRecord>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
+    public DbSet<PermitTaskRecord> PermitTasks => Set<PermitTaskRecord>();
     public DbSet<LocationMasterRecord> LocationMasters => Set<LocationMasterRecord>();
     public DbSet<LocationMasterVersionRecord> LocationMasterVersions => Set<LocationMasterVersionRecord>();
     public DbSet<ConfigurationAuditEventRecord> ConfigurationAuditEvents => Set<ConfigurationAuditEventRecord>();
@@ -66,6 +67,27 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         idempotency.Property(x => x.Operation).HasMaxLength(100);
         idempotency.Property(x => x.Key).HasMaxLength(200);
         idempotency.Property(x => x.RequestHash).HasMaxLength(64);
+
+        var permitTask = modelBuilder.Entity<PermitTaskRecord>();
+        permitTask.ToTable(
+            "PermitTask",
+            "wf",
+            table => table.HasCheckConstraint(
+                "CK_PermitTask_Status",
+                "[Status] IN ('PENDING', 'COMPLETED', 'CANCELLED')"));
+        permitTask.HasKey(x => x.Id);
+        permitTask.Property(x => x.Type).HasMaxLength(80);
+        permitTask.Property(x => x.Label).HasMaxLength(200);
+        permitTask.Property(x => x.RequiredRole).HasMaxLength(100);
+        permitTask.Property(x => x.AssignedActorId).HasMaxLength(200);
+        permitTask.Property(x => x.Status).HasMaxLength(20);
+        permitTask.Property(x => x.CompletedBy).HasMaxLength(200);
+        permitTask.HasIndex(x => new { x.PermitId, x.PermitVersion, x.Type }).IsUnique();
+        permitTask.HasIndex(x => new { x.Status, x.RequiredRole, x.AssignedActorId, x.CreatedAt });
+        permitTask.HasOne<PermitRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.PermitId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         var location = modelBuilder.Entity<LocationMasterRecord>();
         location.ToTable(

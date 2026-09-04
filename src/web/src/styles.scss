@@ -134,6 +134,33 @@ h3 {
   background: white;
   box-shadow: var(--nr-shadow-sm);
 }
+.evidence-card {
+  padding: 18px;
+  display: grid;
+  gap: 8px;
+  color: var(--nr-muted);
+  font-size: 10px;
+}
+.evidence-card h2 {
+  margin: 0;
+  color: var(--nr-ink);
+  font-size: 14px;
+}
+.suspension-evidence {
+  border-left: 4px solid var(--nr-red);
+}
+.evidence-row {
+  padding: 7px 0;
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--nr-border);
+}
+.evidence-row strong {
+  color: #8a6218;
+}
+.evidence-row.completed strong {
+  color: #176440;
+}
 .safety-callout {
   min-height: 92px;
   padding: 20px 24px;

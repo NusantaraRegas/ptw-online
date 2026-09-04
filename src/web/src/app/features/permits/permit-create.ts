@@ -2,6 +2,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { IdentityApi } from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
 import { PermitApi, PermitDraft } from '../../core/permit-api';
 
@@ -233,6 +234,7 @@ function localDate(hoursFromNow: number): string {
 export class PermitCreate {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(PermitApi);
+  private readonly identityApi = inject(IdentityApi);
   private readonly locationApi = inject(LocationApi);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -245,7 +247,7 @@ export class PermitCreate {
     title: ['', Validators.required],
     description: ['', Validators.required],
     locationId: ['', Validators.required],
-    sponsorId: ['sponsor.demo', Validators.required],
+    sponsorId: ['', Validators.required],
     performingAuthority: ['', Validators.required],
     company: ['', Validators.required],
     permitClass: ['HotWork', Validators.required],
@@ -258,6 +260,19 @@ export class PermitCreate {
   });
 
   constructor() {
+    this.identityApi
+      .me()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (identity) => this.form.controls.sponsorId.setValue(identity.userId),
+        error: (response) => {
+          this.error.set(
+            response?.error?.detail ??
+              'Identitas pengguna gagal dimuat. Muat ulang halaman sebelum menyimpan draft.',
+          );
+        },
+      });
+
     this.locationApi
       .list()
       .pipe(takeUntilDestroyed(this.destroyRef))

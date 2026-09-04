@@ -42,6 +42,7 @@ export class PermitDetail {
   protected readonly loadingLocations = signal(true);
   protected readonly locationError = signal('');
   protected readonly roles = this.identityStore.selected().roles;
+  protected readonly actorId = this.identityStore.selected().userId;
   protected readonly canEdit = computed(() => {
     const status = this.permit()?.status;
     return status === 'DRAFT' || status === 'REVISION_REQUIRED';
@@ -56,7 +57,9 @@ export class PermitDetail {
       APPROVED: 'Disetujui — belum boleh bekerja',
       READY_FOR_ISSUE: 'Siap diterbitkan',
       OPEN: 'Diterbitkan — pekerjaan aktif',
+      SUSPENSION_REQUESTED: 'Permintaan penangguhan — pekerjaan dihentikan',
       SUSPENDED: 'Ditangguhkan',
+      COMPLETION_CONFIRMATION_PENDING: 'Menunggu konfirmasi penyelesaian',
       WORK_COMPLETED: 'Pekerjaan selesai',
       CLOSED: 'Ditutup',
       REJECTED: 'Ditolak',
@@ -78,22 +81,64 @@ export class PermitDetail {
       this.roles.includes('HSSEValidator') &&
       !this.permit()?.workflow.hsse.completed,
   );
-  protected readonly canValidateGas = computed(
-    () =>
-      this.permit()?.status === 'UNDER_REVIEW' &&
-      this.roles.includes('GasDistributionValidator') &&
-      !this.permit()?.workflow.gasDistribution.completed,
-  );
   protected readonly canApprove = computed(
     () => this.permit()?.status === 'AWAITING_APPROVAL' && this.roles.includes('AreaOwnerApprover'),
   );
   protected readonly canIssue = computed(
     () =>
       ['APPROVED', 'READY_FOR_ISSUE'].includes(this.permit()?.status ?? '') &&
-      this.roles.includes('IssuingAuthority'),
+      this.roles.includes('AreaOwnerApprover') &&
+      this.permit()?.workflow.approvedBy === this.actorId,
+  );
+  protected readonly canDisposition = computed(() => {
+    const status = this.permit()?.status;
+    return (
+      (status === 'UNDER_REVIEW' && this.roles.includes('HSSEValidator')) ||
+      (status === 'AWAITING_APPROVAL' && this.roles.includes('AreaOwnerApprover'))
+    );
+  });
+  protected readonly canRequestSuspension = computed(
+    () =>
+      this.permit()?.status === 'OPEN' &&
+      this.roles.includes('Sponsor') &&
+      this.permit()?.draft.sponsorId === this.actorId,
+  );
+  protected readonly canApproveSuspension = computed(
+    () =>
+      this.permit()?.status === 'SUSPENSION_REQUESTED' && this.roles.includes('AreaOwnerApprover'),
+  );
+  protected readonly canDeclareCompletion = computed(
+    () =>
+      this.permit()?.status === 'OPEN' &&
+      this.roles.includes('Sponsor') &&
+      this.permit()?.draft.sponsorId === this.actorId,
+  );
+  protected readonly canConfirmHsseCompletion = computed(
+    () =>
+      this.permit()?.status === 'COMPLETION_CONFIRMATION_PENDING' &&
+      this.roles.includes('HSSEValidator') &&
+      !this.permit()?.workflow.completion.hsse.completed,
+  );
+  protected readonly canConfirmAreaOwnerCompletion = computed(
+    () =>
+      this.permit()?.status === 'COMPLETION_CONFIRMATION_PENDING' &&
+      this.roles.includes('AreaOwnerApprover') &&
+      !this.permit()?.workflow.completion.areaOwner.completed,
+  );
+  protected readonly canClose = computed(
+    () => this.permit()?.status === 'WORK_COMPLETED' && this.roles.includes('AreaOwnerApprover'),
   );
   protected readonly hasDecisionAction = computed(
-    () => this.canValidateHsse() || this.canValidateGas() || this.canApprove(),
+    () =>
+      this.canValidateHsse() ||
+      this.canApprove() ||
+      this.canDisposition() ||
+      this.canRequestSuspension() ||
+      this.canApproveSuspension() ||
+      this.canDeclareCompletion() ||
+      this.canConfirmHsseCompletion() ||
+      this.canConfirmAreaOwnerCompletion() ||
+      this.canClose(),
   );
 
   protected readonly form = this.fb.nonNullable.group({
@@ -230,7 +275,7 @@ export class PermitDetail {
         requiredDocumentsSafe: value.requiredDocumentsSafe,
         missingRequirements: value.noMissingRequirements ? [] : ['Persyaratan belum lengkap'],
       }),
-      'PTW diajukan untuk validasi paralel HSSE dan Distribusi Gas & Pengelolaan ORF.',
+      'PTW diajukan untuk validasi HSSE.',
     );
   }
 
@@ -240,14 +285,70 @@ export class PermitDetail {
     );
   }
 
-  protected endorseGas(): void {
-    this.runDecision((permit, statement) =>
-      this.api.endorseGasDistribution(permit.id, permit.eTag, statement),
+  protected approve(): void {
+    this.runDecision((permit, statement) => this.api.approve(permit.id, permit.eTag, statement));
+  }
+
+  protected requestRevision(): void {
+    this.runDecision(
+      (permit, reason) => this.api.requestRevision(permit.id, permit.eTag, reason),
+      'PTW dikembalikan kepada Sponsor untuk revisi. Seluruh validasi aktif harus diulang.',
     );
   }
 
-  protected approve(): void {
-    this.runDecision((permit, statement) => this.api.approve(permit.id, permit.eTag, statement));
+  protected reject(): void {
+    if (!globalThis.confirm('Tolak PTW ini secara permanen? Aksi ini tidak dapat dibatalkan.')) {
+      return;
+    }
+    this.runDecision(
+      (permit, reason) => this.api.reject(permit.id, permit.eTag, reason),
+      'PTW ditolak dan seluruh task aktif telah ditutup.',
+    );
+  }
+
+  protected requestSuspension(): void {
+    if (!globalThis.confirm('Ajukan penangguhan? Hak kerja akan dihentikan seketika.')) return;
+    this.runDecision(
+      (permit, reason) => this.api.requestSuspension(permit.id, permit.eTag, reason),
+      'Pekerjaan langsung dihentikan. Persetujuan penangguhan menunggu PIC pemilik area.',
+    );
+  }
+
+  protected approveSuspension(): void {
+    this.runDecision(
+      (permit, statement) => this.api.approveSuspension(permit.id, permit.eTag, statement),
+      'Penangguhan disetujui oleh PIC pemilik area.',
+    );
+  }
+
+  protected declareCompletion(): void {
+    if (!globalThis.confirm('Nyatakan pekerjaan selesai dan hentikan active work period?')) return;
+    this.runDecision(
+      (permit, statement) => this.api.declareCompletion(permit.id, permit.eTag, statement),
+      'Pekerjaan dinyatakan selesai. Konfirmasi HSSE dan PIC pemilik area telah diminta.',
+    );
+  }
+
+  protected confirmHsseCompletion(): void {
+    this.runDecision(
+      (permit, statement) => this.api.confirmHsseCompletion(permit.id, permit.eTag, statement),
+      'Konfirmasi penyelesaian HSSE tersimpan.',
+    );
+  }
+
+  protected confirmAreaOwnerCompletion(): void {
+    this.runDecision(
+      (permit, statement) => this.api.confirmAreaOwnerCompletion(permit.id, permit.eTag, statement),
+      'Konfirmasi penyelesaian PIC pemilik area tersimpan.',
+    );
+  }
+
+  protected closePermit(): void {
+    if (!globalThis.confirm('Tutup PTW ini secara permanen?')) return;
+    this.runDecision(
+      (permit, statement) => this.api.close(permit.id, permit.eTag, statement),
+      'PTW berhasil ditutup.',
+    );
   }
 
   protected issue(): void {
@@ -274,13 +375,16 @@ export class PermitDetail {
     );
   }
 
-  private runDecision(command: (permit: Permit, statement: string) => Observable<Permit>): void {
+  private runDecision(
+    command: (permit: Permit, statement: string) => Observable<Permit>,
+    successMessage = 'Keputusan tersimpan.',
+  ): void {
     const permit = this.permit();
     if (!permit || this.decisionStatement.invalid) {
       this.decisionStatement.markAsTouched();
       return;
     }
-    this.runCommand(command(permit, this.decisionStatement.getRawValue()), 'Keputusan tersimpan.');
+    this.runCommand(command(permit, this.decisionStatement.getRawValue()), successMessage);
   }
 
   private runCommand(command: Observable<Permit>, message: string): void {

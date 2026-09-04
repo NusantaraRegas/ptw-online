@@ -56,11 +56,33 @@ internal static class PermitMapper
                     permit.HsseValidation),
                 ToValidationResponse(
                     "GAS_DISTRIBUTION",
-                    "Validasi Distribusi Gas & Pengelolaan ORF",
+                    "Validasi operasional legacy (tidak berlaku untuk route baru)",
                     permit.GasDistributionValidation),
                 permit.Approval?.ActorId,
                 permit.Approval?.Statement,
-                permit.Approval?.ApprovedAt),
+                permit.Approval?.ApprovedAt,
+                new PermitSuspensionResponse(
+                    permit.Suspension is not null,
+                    permit.Suspension?.RequestedBy,
+                    permit.Suspension?.Reason,
+                    permit.Suspension?.RequestedAt,
+                    permit.Suspension?.ApprovedAt is not null,
+                    permit.Suspension?.ApprovedBy,
+                    permit.Suspension?.ApprovalStatement,
+                    permit.Suspension?.ApprovedAt),
+                new PermitCompletionResponse(
+                    ToCompletionResponse(
+                        "SPONSOR",
+                        "Konfirmasi Sponsor",
+                        permit.SponsorCompletion),
+                    ToCompletionResponse(
+                        "HSSE",
+                        "Konfirmasi HSSE",
+                        permit.HsseCompletion),
+                    ToCompletionResponse(
+                        "AREA_OWNER",
+                        "Konfirmasi PIC pemilik area",
+                        permit.AreaOwnerCompletion))),
             stored.ETag);
     }
 
@@ -74,6 +96,17 @@ internal static class PermitMapper
         evidence?.ActorId,
         evidence?.Statement,
         evidence?.ValidatedAt);
+
+    private static PermitValidationResponse ToCompletionResponse(
+        string code,
+        string label,
+        PermitCompletionEvidence? evidence) => new(
+        code,
+        label,
+        evidence is not null,
+        evidence?.ActorId,
+        evidence?.Statement,
+        evidence?.ConfirmedAt);
 
     private static string ToUpperSnakeCase(string value) => string.Concat(
         value.Select((character, index) =>

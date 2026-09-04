@@ -14,7 +14,8 @@ export class TasksPage {
 @Component({ selector: 'app-operations', template, styles })
 export class OperationsPage {
   title = 'Papan Operasi';
-  description = 'Visibilitas DITERBITKAN, DITANGGUHKAN, segera kedaluwarsa, dan menunggu handback.';
+  description =
+    'Visibilitas Diterbitkan, permintaan penangguhan, segera kedaluwarsa, dan konfirmasi penyelesaian.';
   icon = '◉';
 }
 @Component({ selector: 'app-reports', template, styles })

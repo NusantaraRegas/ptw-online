@@ -15,19 +15,27 @@ Sudah tersedia:
 
 - modular monolith ASP.NET Core 10 dengan batas Domain, Application, Contracts, Infrastructure, API, dan Worker;
 - explicit state machine PTW dari `DRAFT` sampai terminal state;
-- guard validity maksimum tujuh hari, submit fail-closed, field readiness, single active work period, suspend/resolution, dan handback;
+- guard validity maksimum tujuh hari, submit fail-closed, field readiness, single active work period,
+  penangguhan fail-safe, konfirmasi penyelesaian tiga pihak, dan penutupan;
 - API `/api/v1` untuk identitas development, lookup lokasi, create/list/get/update/submit PTW,
-  dua validasi paralel, approval pemilik area, penerbitan, audit timeline, dan immutable version history;
+  validasi HSSE, request revision/reject, approval pemilik area, penerbitan, penangguhan,
+  penyelesaian, audit timeline, dan immutable version history;
 - optimistic concurrency memakai `ETag`/`If-Match` dan idempotency untuk transition command;
-- SQL Server persistence, immutable permit-version snapshot, audit event, transactional outbox, dan initial EF migration;
+- SQL Server persistence, immutable permit-version snapshot, audit event, transactional outbox, dan additive EF migrations;
 - Angular 22 SPA bertema logo resmi Pertamina Nusantara Regas dengan dashboard keselamatan,
-  daftar, detail, create/edit draft ber-ETag, progres validasi paralel, approval/penerbitan sesuai
-  role, audit timeline, version history, responsive navigation, dan Bahasa Indonesia;
+  daftar, detail, create/edit draft ber-ETag, progres validasi HSSE, approval/penerbitan,
+  penangguhan dan penyelesaian sesuai role, audit timeline, version history, responsive navigation,
+  dan Bahasa Indonesia;
+- menu **Tugas Saya** membaca task workflow persisten dari `/api/v1/tasks`; task disaring server-side
+  menurut role dan cakupan lokasi akun;
 - framework master lokasi effective-dated dengan maker-checker, immutable version snapshot, audit/outbox, dan halaman Administrasi fail-safe;
 - lookup lokasi approved/effective dan scope-filtered; katalog MVP yang dikonfirmasi mencakup HO,
   ORF, Site Office, FSRU, dan Water-Based Activity, dan form PTW memakai dropdown lookup;
-- flow MVP `submit → validasi HSSE + Distribusi Gas & Pengelolaan ORF secara paralel → approval →
-  penerbitan`; PIC pemilik area yang sama menjalankan approval dan penerbitan untuk kelompok areanya;
+- flow MVP `submit → validasi HSSE → approval → penerbitan`; PIC pemilik area yang sama menjalankan
+  approval dan penerbitan untuk kelompok areanya;
+- permintaan penangguhan Sponsor langsung menghentikan active work period sebelum persetujuan PIC
+  pemilik area; penyelesaian memerlukan konfirmasi Sponsor, HSSE, dan PIC pemilik area sebelum PIC
+  pemilik area dapat menutup PTW;
 - framework assignment otorisasi multi-role dengan periode efektif, maker-checker, delegasi
   non-broadening, resolver fail-safe, dan halaman Administrasi;
 - activation gate OPN-001/002 yang memeriksa policy version, referensi keputusan, master efektif,
@@ -147,6 +155,14 @@ npm start
 
 Frontend tersedia di `http://localhost:4200` dan meneruskan `/api` serta `/health` ke `http://localhost:5080` melalui [proxy.conf.json](src/web/proxy.conf.json).
 
+Jika frontend dijalankan melalui Docker Compose di `http://localhost:8080`, refresh browser tidak
+membangun ulang image. Setelah source frontend berubah, rebuild hanya service web tanpa menyentuh
+database:
+
+```powershell
+docker compose --env-file .env -f deploy/compose/compose.dev.yaml up -d --build --no-deps web
+```
+
 ## Development identity
 
 Pada environment `Development`, API menyediakan identitas default:
@@ -172,7 +188,6 @@ Frontend Development menyediakan pemilih **Akun demo** pada topbar:
 | Admin Checker Demo | `admin.checker.demo` | `Administrator` |
 | Sponsor Only Demo | `sponsor.only.demo` | `Sponsor` |
 | Validator HSSE Demo | `hsse.validator.demo` | `HSSEValidator` |
-| Validator Distribusi Gas Demo | `gas.validator.demo` | `GasDistributionValidator` |
 | PIC Pemilik Area HO Demo | `area.owner.ho.demo` | `AreaOwnerApprover`, `IssuingAuthority` |
 | PIC Pemilik Area ORF & Site Office Demo | `area.owner.orf.demo` | `AreaOwnerApprover`, `IssuingAuthority` |
 | PIC Pemilik Area FSRU & Water-Based Demo | `area.owner.fsru.demo` | `AreaOwnerApprover`, `IssuingAuthority` |
@@ -182,9 +197,17 @@ Gunakan Admin Maker untuk mengajukan konfigurasi, lalu Admin Checker untuk menye
 tidak ditampilkan bila `/api/v1/me` tidak mengembalikan development identity, dan header tersebut
 tetap diabaikan backend di luar environment `Development`.
 
-Untuk UAT flow PTW, gunakan Sponsor untuk submit, dua validator dalam urutan apa pun, lalu PIC
-pemilik area yang sesuai untuk approval dan penerbitan. Profile PIC dibatasi menurut kelompok lokasi:
-HO; ORF/Site Office; serta FSRU/Water-Based Activity.
+Form pembuatan PTW mengambil Sponsor aktif dari `/api/v1/me`; jangan mengirim `sponsor.demo`
+sebagai nilai tetap. **Sponsor Only Demo** karena itu membuat draft atas nama
+`sponsor.only.demo`, sedangkan **Sponsor Demo** membuat draft atas nama `sponsor.demo` dan juga
+memiliki role Administrator.
+
+Untuk UAT flow PTW, gunakan Sponsor untuk submit, Validator HSSE untuk validasi, lalu PIC pemilik
+area yang sesuai untuk approval dan penerbitan. Sponsor juga memulai penangguhan atau penyelesaian;
+konfirmasi selesai dilakukan Validator HSSE dan PIC pemilik area sebelum PIC pemilik area menutup.
+Profile PIC dibatasi menurut kelompok lokasi: HO; ORF/Site Office; serta FSRU/Water-Based Activity.
+Penerbitan hanya berhasil di dalam masa berlaku PTW; kegagalan guard ditampilkan di dekat panel
+aksi terkait dan server tetap menjadi authority untuk waktu serta transition.
 
 ## API yang tersedia
 
@@ -200,9 +223,14 @@ HO; ORF/Site Office; serta FSRU/Water-Based Activity.
 | `PATCH` | `/api/v1/permits/{id}/draft`    | Update draft dengan `If-Match`                 |
 | `POST`  | `/api/v1/permits/{id}/submit`   | Submit dengan `If-Match` dan `Idempotency-Key` |
 | `POST`  | `/api/v1/permits/{id}/validations/hsse/endorse` | Validasi HSSE |
-| `POST`  | `/api/v1/permits/{id}/validations/gas-distribution/endorse` | Validasi Distribusi Gas & Pengelolaan ORF |
 | `POST`  | `/api/v1/permits/{id}/approve`  | Approval oleh PIC pemilik area                 |
 | `POST`  | `/api/v1/permits/{id}/issue`    | Menerbitkan PTW setelah field guards lulus     |
+| `POST`  | `/api/v1/permits/{id}/suspensions/request` | Sponsor meminta penangguhan; hak kerja langsung berhenti |
+| `POST`  | `/api/v1/permits/{id}/suspensions/approve` | PIC pemilik area menyetujui penangguhan |
+| `POST`  | `/api/v1/permits/{id}/completion/declare` | Sponsor menyatakan pekerjaan selesai |
+| `POST`  | `/api/v1/permits/{id}/completion/confirm/hsse` | HSSE mengonfirmasi penyelesaian |
+| `POST`  | `/api/v1/permits/{id}/completion/confirm/area-owner` | PIC pemilik area mengonfirmasi penyelesaian |
+| `POST`  | `/api/v1/permits/{id}/close` | PIC pemilik area menutup PTW setelah seluruh konfirmasi |
 | `GET`   | `/api/v1/admin/locations`        | Daftar seluruh konfigurasi lokasi (Admin)      |
 | `POST`  | `/api/v1/admin/locations`        | Membuat draft lokasi (Admin)                   |
 | `PATCH` | `/api/v1/admin/locations/{id}/draft`      | Memperbarui draft dengan `If-Match`            |
@@ -256,9 +284,16 @@ konfigurasi—nilai di bawah wajib diganti dengan keputusan resmi:
       "UpdateDraft": "<action-code-resmi>",
       "Submit": "<action-code-resmi>",
       "ValidateHsse": "<action-code-resmi>",
-      "ValidateGasDistribution": "<action-code-resmi>",
       "Approve": "<action-code-resmi>",
-      "Issue": "<action-code-resmi>"
+      "Issue": "<action-code-resmi>",
+      "RequestRevision": "<action-code-resmi>",
+      "Reject": "<action-code-resmi>",
+      "RequestSuspension": "<action-code-resmi>",
+      "ApproveSuspension": "<action-code-resmi>",
+      "DeclareCompletion": "<action-code-resmi>",
+      "ConfirmCompletionHsse": "<action-code-resmi>",
+      "ConfirmCompletionAreaOwner": "<action-code-resmi>",
+      "Close": "<action-code-resmi>"
     }
   }
 }
@@ -288,9 +323,11 @@ untuk `PolicyVersion` yang sama persis. Passing report tetap bukan pengesahan de
 DRAFT ─submit→ UNDER_REVIEW → AWAITING_APPROVAL → APPROVED
    ↘ CANCELLED        ↘ REVISION_REQUIRED / REJECTED
 
-APPROVED → READY_FOR_ISSUE → DITERBITKAN (internal: OPEN) → APPROVED (pekerjaan berlanjut)
-                                              ↘ SUSPENDED → READY_FOR_ISSUE
-                                              ↘ WORK_COMPLETED → CLOSED
+APPROVED → READY_FOR_ISSUE → DITERBITKAN (internal: OPEN)
+                                      ↘ Sponsor meminta penangguhan → SUSPENSION_REQUESTED → SUSPENDED
+                                      ↘ Sponsor menyatakan selesai → COMPLETION_CONFIRMATION_PENDING
+                                                                      ↓ HSSE + pemilik area konfirmasi
+                                                               WORK_COMPLETED → CLOSED (pemilik area)
 ```
 
 Invariant utama:
@@ -299,7 +336,9 @@ Invariant utama:
 - validity lebih dari tujuh hari ditolak;
 - terminal state tidak dapat dibuka kembali;
 - maksimum satu active work period per permit;
-- suspend menghentikan active work period;
+- permintaan penangguhan Sponsor langsung menghentikan active work period sebelum approval;
+- deklarasi selesai Sponsor langsung menghentikan active work period;
+- HSSE dan PIC pemilik area wajib mengonfirmasi selesai sebelum PIC pemilik area menutup;
 - resolve suspension kembali ke `READY_FOR_ISSUE`, bukan langsung `OPEN`;
 - perubahan aggregate, audit event, outbox, dan idempotency record disimpan atomik;
 - waktu domain disimpan UTC dan UI menampilkan WIB/Asia Jakarta.

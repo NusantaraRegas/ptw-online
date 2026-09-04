@@ -8,9 +8,16 @@ public static class PermitPolicyOperations
     public const string UpdateDraft = "UpdateDraft";
     public const string Submit = "Submit";
     public const string ValidateHsse = "ValidateHsse";
-    public const string ValidateGasDistribution = "ValidateGasDistribution";
     public const string Approve = "Approve";
     public const string Issue = "Issue";
+    public const string RequestRevision = "RequestRevision";
+    public const string Reject = "Reject";
+    public const string RequestSuspension = "RequestSuspension";
+    public const string ApproveSuspension = "ApproveSuspension";
+    public const string DeclareCompletion = "DeclareCompletion";
+    public const string ConfirmCompletionHsse = "ConfirmCompletionHsse";
+    public const string ConfirmCompletionAreaOwner = "ConfirmCompletionAreaOwner";
+    public const string Close = "Close";
 
     public static readonly IReadOnlyList<string> Required =
     [
@@ -18,9 +25,16 @@ public static class PermitPolicyOperations
         UpdateDraft,
         Submit,
         ValidateHsse,
-        ValidateGasDistribution,
         Approve,
-        Issue
+        Issue,
+        RequestRevision,
+        Reject,
+        RequestSuspension,
+        ApproveSuspension,
+        DeclareCompletion,
+        ConfirmCompletionHsse,
+        ConfirmCompletionAreaOwner,
+        Close
     ];
 }
 

@@ -426,9 +426,16 @@ public sealed class OperationalPolicyApiTests(PtwApiFactory factory)
                 [PermitPolicyOperations.UpdateDraft] = $"{actionCode}.update",
                 [PermitPolicyOperations.Submit] = $"{actionCode}.submit",
                 [PermitPolicyOperations.ValidateHsse] = $"{actionCode}.validate-hsse",
-                [PermitPolicyOperations.ValidateGasDistribution] = $"{actionCode}.validate-gas",
                 [PermitPolicyOperations.Approve] = $"{actionCode}.approve",
-                [PermitPolicyOperations.Issue] = $"{actionCode}.issue"
+                [PermitPolicyOperations.Issue] = $"{actionCode}.issue",
+                [PermitPolicyOperations.RequestRevision] = $"{actionCode}.request-revision",
+                [PermitPolicyOperations.Reject] = $"{actionCode}.reject",
+                [PermitPolicyOperations.RequestSuspension] = $"{actionCode}.request-suspension",
+                [PermitPolicyOperations.ApproveSuspension] = $"{actionCode}.approve-suspension",
+                [PermitPolicyOperations.DeclareCompletion] = $"{actionCode}.declare-completion",
+                [PermitPolicyOperations.ConfirmCompletionHsse] = $"{actionCode}.confirm-completion-hsse",
+                [PermitPolicyOperations.ConfirmCompletionAreaOwner] = $"{actionCode}.confirm-completion-area-owner",
+                [PermitPolicyOperations.Close] = $"{actionCode}.close"
             }
         };
 

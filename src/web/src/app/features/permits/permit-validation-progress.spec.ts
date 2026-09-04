@@ -12,7 +12,7 @@ describe('PermitValidationProgress', () => {
     fixture = TestBed.createComponent(PermitValidationProgress);
   });
 
-  it('presents completed parallel validations and the area owner without overlapping text', () => {
+  it('presents completed HSSE validation and the area owner', () => {
     const workflow: PermitWorkflow = {
       hsse: {
         code: 'HSSE',
@@ -33,14 +33,50 @@ describe('PermitValidationProgress', () => {
       approvedBy: 'area.owner.fsru.demo',
       approvalStatement: 'Disetujui.',
       approvedAt: '2026-09-02T00:02:00Z',
+      suspension: {
+        requested: false,
+        requestedBy: null,
+        reason: null,
+        requestedAt: null,
+        approved: false,
+        approvedBy: null,
+        approvalStatement: null,
+        approvedAt: null,
+      },
+      completion: {
+        sponsor: {
+          code: 'SPONSOR',
+          label: '',
+          completed: false,
+          actorId: null,
+          statement: null,
+          completedAt: null,
+        },
+        hsse: {
+          code: 'HSSE',
+          label: '',
+          completed: false,
+          actorId: null,
+          statement: null,
+          completedAt: null,
+        },
+        areaOwner: {
+          code: 'AREA_OWNER',
+          label: '',
+          completed: false,
+          actorId: null,
+          statement: null,
+          completedAt: null,
+        },
+      },
     };
 
     fixture.componentRef.setInput('workflow', workflow);
     fixture.detectChanges();
 
     const text = fixture.nativeElement.textContent.replace(/\s+/g, ' ').trim();
-    expect(text).toContain('2/2 selesai');
-    expect(text).toContain('Distribusi Gas & Pengelolaan ORF');
+    expect(text).toContain('1/1 selesai');
+    expect(text).not.toContain('Distribusi Gas & Pengelolaan ORF');
     expect(text).toContain('area.owner.fsru.demo');
     expect(text).toContain('Disetujui');
   });

@@ -30,6 +30,8 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         }
     }
 
+    public string ConnectionString => _connectionString;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");

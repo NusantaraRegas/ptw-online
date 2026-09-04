@@ -9,7 +9,7 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 | Struktur modular .NET 10 | Selesai | `PtwOnline.sln`, batas Domain/Application/Infrastructure/API/Worker |
 | Domain state machine | Fondasi selesai | `Ptw.Domain/Permit.cs`, unit tests |
 | Draft PTW | Vertical slice diperkuat | create/list/get/update/submit, Angular create/list/detail/edit dengan optimistic concurrency |
-| Workflow utama PTW | Fondasi MVP | submit ke review, validasi HSSE dan Distribusi Gas paralel, approval pemilik area, penerbitan terpisah dengan field guards |
+| Workflow utama PTW | Fondasi MVP | submit, validasi HSSE, approval/penerbitan pemilik area, penangguhan fail-safe, dan penyelesaian tiga pihak |
 | Concurrency dan idempotency | Fondasi selesai | ETag/If-Match, request hash, unique idempotency record |
 | Data SQL Server | Fondasi selesai | schemas `ptw`, `cfg`, `audit`, `intg`, additive migrations |
 | Master lokasi | Framework + activation gate | effective dating, hierarchy, maker-checker, version, audit/outbox; enforcement default nonaktif |
@@ -114,10 +114,12 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 
 ## Increment 6A
 
-- Submit PTW langsung membentuk tahap `UNDER_REVIEW`; dua evidence validasi yang berbeda disimpan
-  untuk HSSE serta Departemen Distribusi Gas & Pengelolaan ORF dan dapat diselesaikan dalam urutan apa
-  pun.
-- Approval pemilik area hanya dapat dijalankan setelah dua validasi selesai. Penerbitan merupakan
+- Submit PTW langsung membentuk tahap `UNDER_REVIEW` dan satu evidence/task validasi HSSE untuk
+  exact permit version.
+- Task validasi persisten dibuat atomik saat submit. Task berikutnya untuk approval dan
+  penerbitan dibuat setelah prerequisite sebelumnya selesai; `/api/v1/tasks` dan halaman **Tugas
+  Saya** hanya mengembalikan task aktif sesuai role dan location scope actor.
+- Approval pemilik area hanya dapat dijalankan setelah validasi HSSE selesai. Penerbitan merupakan
   command eksplisit terpisah yang mengevaluasi seluruh field guards dan baru kemudian membuat satu
   active work period.
 - Semua transition baru memakai role dan location scope server-side, `If-Match`, `Idempotency-Key`,
@@ -126,10 +128,43 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
   Office, serta FSRU/Water-Based Activity. Istilah pengguna adalah **Diterbitkan**; `OPEN` hanya tetap
   sebagai status domain internal yang menandai hak kerja aktif.
 - Satu identity PIC pemilik area Development menjalankan approval dan penerbitan untuk kelompok
-  areanya. Assignment PIC konkret dan kompetensi production tetap menunggu pengesahan policy.
+  areanya. Server menolak penerbitan oleh actor lain meskipun actor tersebut memiliki role pemilik
+  area. Assignment PIC konkret dan kompetensi production tetap menunggu pengesahan policy.
 - Role/action konkret, kompetensi, SoD, assignment PIC, SLA, serta checklist/ambang lapangan final
   masih bergantung pada pengesahan OPN-002 sampai OPN-005. Activation gate tetap fail-closed dan
   nonaktif secara default.
+
+## Increment 6B
+
+- Endpoint eksplisit `request-revision` dan `reject` memakai alasan wajib, `If-Match`,
+  `Idempotency-Key`, authorization server-side, audit, outbox, dan transaksi permit yang sama.
+- PIC HSSE dapat mengambil keputusan tersebut saat `UNDER_REVIEW`; setelah validasi selesai,
+  authority beralih ke PIC pemilik area pada `AWAITING_APPROVAL`.
+- Request revision membatalkan task aktif dan menghapus evidence aktif. Sponsor harus memperbarui
+  draft, menghasilkan version baru, lalu submit ulang untuk membentuk task validasi HSSE baru.
+- Reject membatalkan seluruh task aktif dan menghasilkan terminal state `REJECTED`. UI meminta
+  konfirmasi tambahan sebelum aksi irreversible tersebut dikirim.
+- Activation readiness kini juga mensyaratkan mapping action untuk kedua command baru sebelum
+  master authorization dapat diaktifkan.
+
+## Increment 6C
+
+- Route validasi operasional Distribusi Gas dipensiunkan. PTW in-flight `UNDER_REVIEW` yang sudah
+  memiliki evidence HSSE dimajukan ke `AWAITING_APPROVAL`; task gas pending dibatalkan dan task HSSE
+  atau approval yang hilang direkonsiliasi melalui additive data migration. Rekonsiliasi tersebut
+  juga menulis audit event dan outbox message dalam migration transaction yang sama.
+- Sponsor pemilik PTW dapat mengirim command permintaan penangguhan. Server langsung menghapus
+  active work period dan memindahkan permit ke `SUSPENSION_REQUESTED`; approval PIC pemilik area
+  hanya mengesahkan kondisi yang sudah fail-safe tersebut.
+- Sponsor menyatakan pekerjaan selesai dan langsung menghentikan active work period. Konfirmasi
+  HSSE dan PIC pemilik area dibuat sebagai dua task paralel; `WORK_COMPLETED` baru tercapai setelah
+  keduanya lengkap.
+- Hanya PIC pemilik area yang dapat menutup PTW dari `WORK_COMPLETED` ke terminal `CLOSED`.
+- Seluruh command memakai role/ownership/location scope server-side, `If-Match`, `Idempotency-Key`,
+  audit, outbox, dan task persistence dalam transaksi permit yang sama.
+- Panel tindakan dashboard dan halaman Tugas Saya memakai task `PENDING` aktual yang telah difilter
+  server berdasarkan role, actor assignment, dan cakupan lokasi; setiap task membuka detail PTW
+  terkait tanpa menjalankan transition secara langsung.
 
 ## Belum diimplementasikan karena membutuhkan keputusan bisnis
 
@@ -138,7 +173,8 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
   aktivasi framework assignment (OPN-002);
 - checklist per permit class dan mapping final formulir (OPN-003);
 - gas thresholds, units, test lifetime, retest, dan continuous monitoring (OPN-004);
-- SLA, eskalasi, detail rework/reject, dan dampak perubahan setelah validasi paralel (OPN-005);
+- SLA, eskalasi, klasifikasi perubahan non-material, dan detail remediasi setelah revisi/reject
+  (OPN-005);
 - contractor acknowledgement mechanism (OPN-006);
 - production IdP/SSO dan kontrak API/webhook E-SIMI (OPN-007);
 - retention, electronic signature, data classification, RPO/RTO final (OPN-008);
@@ -152,7 +188,8 @@ Dokumen BRD/PRD/FSD adalah spesifikasi dan sumber kebutuhan, bukan instruksi unt
 3. Tambahkan E-SIMI adapter dan contract tests memakai hasil OPN-007.
 4. Perluas paket UAT dengan declarative permit ruleset setelah OPN-003/004 disahkan, tanpa free-form
    scripting atau threshold/checklist default yang belum disetujui.
-5. Sahkan assignment/SoD flow validasi paralel, lalu lengkapi field operations berdasarkan OPN-002–006.
+5. Sahkan assignment/SoD flow validasi HSSE, penangguhan, penyelesaian, dan penutupan; lalu lengkapi
+   field operations berdasarkan OPN-002–006.
 6. Tambahkan attachment quarantine/malware integration, reports, print, notifications, integration/E2E/security tests.
 
 Tidak ada default gas threshold, approval matrix, atau safety checklist yang ditanam diam-diam di source code.

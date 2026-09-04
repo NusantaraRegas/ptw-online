@@ -62,14 +62,6 @@ export const DEVELOPMENT_IDENTITIES: DevelopmentIdentityProfile[] = [
     competencyCodes: [],
   },
   {
-    key: 'gas-validator',
-    userId: 'gas.validator.demo',
-    displayName: 'Validator Distribusi Gas Demo',
-    roles: ['GasDistributionValidator'],
-    locationScopes: ['*'],
-    competencyCodes: [],
-  },
-  {
     key: 'area-owner-ho',
     userId: 'area.owner.ho.demo',
     displayName: 'PIC Pemilik Area HO Demo',

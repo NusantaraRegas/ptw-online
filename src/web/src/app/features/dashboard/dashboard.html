@@ -76,49 +76,53 @@
     <header>
       <div>
         <h2>Tindakan diperlukan</h2>
-        <p>Prioritas berdasarkan SLA dan risiko</p>
+        <p>Tugas aktif sesuai peran dan cakupan lokasi Anda</p>
       </div>
       <a routerLink="/tasks">Lihat semua</a>
     </header>
-    <div class="task-row urgent">
-      <span class="task-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24">
-          <path d="M12 7v6M12 17h.01" />
-          <circle cx="12" cy="12" r="9" />
-        </svg>
-      </span>
-      <div>
-        <strong>Review Hot Work · Compressor Deck</strong>
-        <p><b>RISIKO TINGGI</b> · PTW-20260826-1042 · Jatuh tempo 45 menit</p>
+    @if (tasksLoading()) {
+      <div class="empty" aria-live="polite">Memuat tugas aktif...</div>
+    } @else if (tasksError()) {
+      <div class="offline" role="alert">
+        <span>{{ tasksError() }}</span>
+        <a routerLink="/tasks">Buka Tugas Saya</a>
       </div>
-      <button type="button">Tinjau</button>
-    </div>
-    <div class="task-row">
-      <span class="task-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24">
-          <path d="m7 12 3 3 7-7" />
-          <circle cx="12" cy="12" r="9" />
-        </svg>
-      </span>
-      <div>
-        <strong>Validasi lapangan · Jetty Area</strong>
-        <p>Cold Work · PTW-20260825-0988 · Hari ini 14:00 WIB</p>
-      </div>
-      <button type="button">Buka</button>
-    </div>
-    <div class="task-row">
-      <span class="task-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24">
-          <path d="M20 7v5h-5" />
-          <path d="M19 12a7 7 0 1 0-2 5" />
-        </svg>
-      </span>
-      <div>
-        <strong>Perbaiki dokumen JSA</strong>
-        <p>CSE · PTW-20260824-0911 · Dikembalikan oleh HSE</p>
-      </div>
-      <button type="button">Perbaiki</button>
-    </div>
+    } @else {
+      @for (task of tasks().slice(0, 3); track task.id) {
+        <a
+          class="task-row"
+          [class.urgent]="task.type === 'SUSPENSION_APPROVAL'"
+          [routerLink]="['/permits', task.permitId]"
+          [attr.aria-label]="task.label + ' untuk ' + task.permitTitle"
+        >
+          <span class="task-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="m7 12 3 3 7-7" />
+              <circle cx="12" cy="12" r="9" />
+            </svg>
+          </span>
+          <div>
+            <strong>{{ task.label }} · {{ task.permitTitle }}</strong>
+            <p>
+              {{ task.permitNumber || 'Draft PTW' }} · {{ task.locationId }} · Masuk
+              {{ task.createdAt | date: 'dd MMM, HH:mm' : 'Asia/Jakarta' }} WIB
+            </p>
+          </div>
+          <span class="task-action">{{ taskAction(task.type) }}</span>
+        </a>
+      } @empty {
+        <div class="empty">
+          <span class="empty-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="m7 12 3 3 7-7" />
+              <circle cx="12" cy="12" r="9" />
+            </svg>
+          </span>
+          <strong>Tidak ada tugas aktif</strong>
+          <p>Semua tugas sesuai peran dan cakupan lokasi Anda telah selesai.</p>
+        </div>
+      }
+    }
   </section>
 
   <section class="card panel operation">
@@ -130,18 +134,28 @@
       <span class="live"><i></i> LIVE</span>
     </header>
     <div class="operation-metrics">
-      <div><strong>7</strong><span>DITERBITKAN</span></div>
-      <div><strong>1</strong><span>SUSPENDED</span></div>
-      <div><strong>3</strong><span>AKAN BERAKHIR</span></div>
-    </div>
-    <div class="incident">
-      <span>!</span>
       <div>
-        <strong>PTW di-suspend</strong>
-        <p>Gas reading di luar batas · Process Area A</p>
-        <small>12 menit lalu</small>
+        <strong>{{ operations().issued }}</strong
+        ><span>DITERBITKAN</span>
+      </div>
+      <div>
+        <strong>{{ operations().suspended }}</strong
+        ><span>DITANGGUHKAN</span>
+      </div>
+      <div>
+        <strong>{{ operations().expiring }}</strong
+        ><span>AKAN BERAKHIR</span>
       </div>
     </div>
+    @if (operations().suspended > 0) {
+      <div class="incident">
+        <span>!</span>
+        <div>
+          <strong>Ada PTW yang dihentikan</strong>
+          <p>Buka Papan Operasi untuk melihat permintaan atau penangguhan aktif.</p>
+        </div>
+      </div>
+    }
     <a class="board-link" routerLink="/operations">Buka Papan Operasi <span>→</span></a>
   </section>
 </div>

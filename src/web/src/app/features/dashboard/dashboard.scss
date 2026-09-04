@@ -119,6 +119,12 @@
   gap: 13px;
   align-items: center;
   border-bottom: 1px solid #edf0f1;
+  color: inherit;
+  text-decoration: none;
+  transition: background 160ms ease;
+}
+.task-row:hover {
+  background: #f4f9fc;
 }
 .task-icon {
   width: 34px;
@@ -150,22 +156,23 @@
 .task-row p b {
   color: #b55241;
 }
-.task-row button {
+.task-action {
   min-height: 34px;
   padding: 7px 12px;
+  display: grid;
+  place-items: center;
   border: 1px solid #d7e0e2;
   border-radius: 6px;
   color: #40636e;
   background: white;
   font-size: 10px;
   font-weight: 700;
-  cursor: pointer;
   transition:
     border-color 160ms ease,
     color 160ms ease,
     background 160ms ease;
 }
-.task-row button:hover {
+.task-row:hover .task-action {
   border-color: #86badd;
   color: var(--nr-blue-dark);
   background: var(--nr-blue-soft);
@@ -367,7 +374,7 @@
     grid-template-columns: auto 1fr;
     padding: 12px 0;
   }
-  .task-row button {
+  .task-action {
     grid-column: 2;
     width: max-content;
   }

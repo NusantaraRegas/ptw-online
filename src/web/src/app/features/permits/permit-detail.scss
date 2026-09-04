@@ -261,6 +261,27 @@ dd {
   display: grid;
   gap: 8px;
 }
+.disposition-actions {
+  padding-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  border-top: 1px solid var(--nr-border);
+}
+.disposition-actions .secondary-button {
+  justify-content: center;
+}
+.danger-button {
+  min-height: 39px;
+  padding: 0 13px;
+  border: 1px solid rgb(226 56 63 / 32%);
+  border-radius: 9px;
+  color: var(--nr-red-dark);
+  background: var(--nr-red-soft);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
 .message {
   padding: 12px 15px;
   margin-bottom: 16px;

@@ -17,6 +17,19 @@ public sealed record PermitVersionEntry(
     string ContentHash,
     DateTimeOffset CreatedAt,
     string CreatedBy);
+public sealed record PermitTaskEntry(
+    Guid Id,
+    Guid PermitId,
+    int PermitVersion,
+    string Type,
+    string Label,
+    string RequiredRole,
+    string Status,
+    string? PermitNumber,
+    string PermitTitle,
+    string LocationId,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? CompletedAt);
 
 public interface IPermitStore
 {
@@ -51,6 +64,11 @@ public interface IPermitStore
         Guid permitId,
         int offset,
         int limit,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyList<PermitTaskEntry>> ListPendingTasksAsync(
+        string actorId,
+        IReadOnlySet<string> roles,
+        IReadOnlySet<string> locationScopes,
         CancellationToken cancellationToken);
 }
 

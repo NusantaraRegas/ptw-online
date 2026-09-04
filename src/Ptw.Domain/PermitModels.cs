@@ -32,6 +32,25 @@ public sealed record PermitApprovalEvidence(
     string Statement,
     DateTimeOffset ApprovedAt);
 
+public sealed record PermitSuspensionEvidence(
+    string RequestedBy,
+    string Reason,
+    DateTimeOffset RequestedAt,
+    string? ApprovedBy = null,
+    string? ApprovalStatement = null,
+    DateTimeOffset? ApprovedAt = null);
+
+public sealed record PermitCompletionEvidence(
+    string ActorId,
+    string Statement,
+    DateTimeOffset ConfirmedAt);
+
+public enum PermitCompletionKind
+{
+    Hsse,
+    AreaOwner
+}
+
 public sealed record PermitDraft(
     string Title,
     string Description,
@@ -72,15 +91,4 @@ public sealed record FieldIssueReadiness(
     public bool IsReady => ESimiEligible && LocationVerified && ToolboxTalkComplete
         && PersonnelAcknowledged && PpeAndControlsVerified && IsolationVerified
         && SimopsVerified && GasTestSatisfied && !HasUnresolvedSuspension;
-}
-
-public sealed record HandbackReadiness(
-    bool AreaInspected,
-    bool HousekeepingComplete,
-    bool PersonnelAndEquipmentClear,
-    bool IsolationRestored,
-    bool OperationsAccepted)
-{
-    public bool IsReady => AreaInspected && HousekeepingComplete && PersonnelAndEquipmentClear
-        && IsolationRestored && OperationsAccepted;
 }
