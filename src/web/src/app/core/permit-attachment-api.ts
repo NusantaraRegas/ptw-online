@@ -12,6 +12,15 @@ export interface PermitAttachment {
   mediaType: string;
   sha256: string;
   scanStatus: string;
+  scanEvidenceReference: string | null;
+  scannedAt: string | null;
+  category: 'SUPPORTING' | 'JSA' | 'SIGNED_FIELD_COPY';
+  documentNumber: string | null;
+  documentRevision: string | null;
+  documentDate: string | null;
+  targetPermitVersion: number;
+  printPackageId: string | null;
+  supersedesAttachmentId: string | null;
   uploadedBy: string;
   uploadedAt: string;
 }
@@ -33,6 +42,7 @@ export class PermitAttachmentApi {
   upload(permitId: string, eTag: string, file: File): Observable<PermitAttachmentMutation> {
     const body = new FormData();
     body.append('file', file, file.name);
+    body.append('category', 'SUPPORTING');
     return this.http.post<PermitAttachmentMutation>(
       `/api/v1/permits/${permitId}/attachments`,
       body,

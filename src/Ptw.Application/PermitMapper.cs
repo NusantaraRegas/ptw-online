@@ -32,7 +32,18 @@ internal static class PermitMapper
             request.ESimiNumber,
             request.Hazards,
             request.Controls,
-            request.RequiredDocumentCodes);
+            request.RequiredDocumentCodes,
+            request.SubmitterType,
+            request.WorkTypeCode,
+            request.EquipmentTag,
+            request.PlantArea,
+            request.ClsrApplicable,
+            request.SimopsDeclaration,
+            request.SafetyEquipmentCodes,
+            request.IsolationPrecautionCodes,
+            request.JsaDocumentNumber,
+            request.JsaRevision,
+            request.JsaDate);
     }
 
     public static PermitResponse ToResponse(this StoredPermit stored)
@@ -47,44 +58,46 @@ internal static class PermitMapper
             draft.ToRequest(),
             permit.CreatedAt,
             permit.UpdatedAt,
-            permit.ActiveWorkPeriodId,
             permit.SuspensionReason,
             permit.RenewedFromPermitId,
             permit.RenewalPermitId,
             new PermitWorkflowResponse(
                 ToValidationResponse(
-                    "HSSE",
-                    "Validasi HSSE",
-                    permit.HsseValidation),
-                ToValidationResponse(
-                    "GAS_DISTRIBUTION",
-                    "Validasi operasional legacy (tidak berlaku untuk route baru)",
-                    permit.GasDistributionValidation),
-                permit.Approval?.ActorId,
-                permit.Approval?.Statement,
-                permit.Approval?.ApprovedAt,
+                    "HSE",
+                    "Validasi PIC HSE",
+                    permit.HseValidation),
+                new PermitApprovalResponse(
+                    permit.Approval is not null,
+                    permit.Approval?.ActorId,
+                    permit.Approval?.ActorPosition,
+                    permit.Approval is null ? null : ToUpperSnakeCase(permit.Approval.Capacity.ToString()),
+                    permit.Approval?.PrincipalManagerUserId,
+                    permit.Approval?.PrincipalPosition,
+                    permit.Approval?.AuthorizationId,
+                    permit.Approval?.ActingAssignmentId,
+                    permit.Approval?.Statement,
+                    permit.Approval?.ApprovedAt),
                 new PermitSuspensionResponse(
                     permit.Suspension is not null,
-                    permit.Suspension?.RequestedBy,
+                    permit.Suspension?.SuspendedBy,
                     permit.Suspension?.Reason,
-                    permit.Suspension?.RequestedAt,
-                    permit.Suspension?.ApprovedAt is not null,
-                    permit.Suspension?.ApprovedBy,
-                    permit.Suspension?.ApprovalStatement,
-                    permit.Suspension?.ApprovedAt),
-                new PermitCompletionResponse(
-                    ToCompletionResponse(
-                        "SPONSOR",
-                        "Konfirmasi Sponsor",
-                        permit.SponsorCompletion),
-                    ToCompletionResponse(
-                        "HSSE",
-                        "Konfirmasi HSSE",
-                        permit.HsseCompletion),
-                    ToCompletionResponse(
-                        "AREA_OWNER",
-                        "Konfirmasi PIC pemilik area",
-                        permit.AreaOwnerCompletion))),
+                    permit.Suspension?.SuspendedAt,
+                    permit.Suspension?.ResolvedBy,
+                    permit.Suspension?.Resolution,
+                    permit.Suspension?.ResolvedAt),
+                new PermitClosureResponse(
+                    permit.ClosureRequest is not null,
+                    permit.ClosureRequest?.PrintPackageId,
+                    permit.ClosureRequest?.AttachmentIds ?? [],
+                    permit.ClosureRequest?.RequestedBy,
+                    permit.ClosureRequest?.CompletionStatement,
+                    permit.ClosureRequest?.RequestedAt,
+                    permit.ClosureRequest?.Revision ?? 0,
+                    permit.ClosureRequest?.ReplacementReason,
+                    permit.ClosureDecision is not null,
+                    permit.ClosureDecision?.ActorId,
+                    permit.ClosureDecision?.Statement,
+                    permit.ClosureDecision?.ClosedAt)),
             stored.ETag);
     }
 
@@ -98,17 +111,6 @@ internal static class PermitMapper
         evidence?.ActorId,
         evidence?.Statement,
         evidence?.ValidatedAt);
-
-    private static PermitValidationResponse ToCompletionResponse(
-        string code,
-        string label,
-        PermitCompletionEvidence? evidence) => new(
-        code,
-        label,
-        evidence is not null,
-        evidence?.ActorId,
-        evidence?.Statement,
-        evidence?.ConfirmedAt);
 
     private static string ToUpperSnakeCase(string value) => string.Concat(
         value.Select((character, index) =>
@@ -130,5 +132,16 @@ internal static class PermitMapper
         draft.ESimiNumber,
         draft.Hazards,
         draft.Controls,
-        draft.RequiredDocumentCodes);
+        draft.RequiredDocumentCodes,
+        draft.SubmitterType,
+        draft.WorkTypeCode,
+        draft.EquipmentTag,
+        draft.PlantArea,
+        draft.ClsrApplicable,
+        draft.SimopsDeclaration,
+        draft.SafetyEquipmentCodes,
+        draft.IsolationPrecautionCodes,
+        draft.JsaDocumentNumber,
+        draft.JsaRevision,
+        draft.JsaDate);
 }

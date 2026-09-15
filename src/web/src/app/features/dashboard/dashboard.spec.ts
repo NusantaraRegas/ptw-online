@@ -23,9 +23,9 @@ describe('Dashboard', () => {
           id: '10000000-0000-0000-0000-000000000001',
           permitId: '20000000-0000-0000-0000-000000000002',
           permitVersion: 3,
-          type: 'HSSE_VALIDATION',
-          label: 'Validasi HSSE',
-          requiredRole: 'HSSEValidator',
+          type: 'HSE_VALIDATION',
+          label: 'Validasi PIC HSE',
+          requiredRole: 'HSEValidator',
           status: 'PENDING',
           permitNumber: 'PTW-20260904-0001',
           permitTitle: 'Perawatan compressor',
@@ -39,7 +39,7 @@ describe('Dashboard', () => {
     fixture.detectChanges();
 
     const task = fixture.nativeElement.querySelector('.task-row') as HTMLAnchorElement;
-    expect(task.textContent).toContain('Validasi HSSE');
+    expect(task.textContent).toContain('Validasi PIC HSE');
     expect(task.textContent).toContain('PTW-20260904-0001');
     expect(task.getAttribute('href')).toBe('/permits/20000000-0000-0000-0000-000000000002');
     expect(fixture.nativeElement.textContent).not.toContain('Review Hot Work');

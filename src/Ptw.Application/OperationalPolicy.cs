@@ -8,17 +8,18 @@ public static class PermitPolicyOperations
     public const string UpdateDraft = "UpdateDraft";
     public const string RequestRenewal = "RequestRenewal";
     public const string Submit = "Submit";
-    public const string ValidateHsse = "ValidateHsse";
-    public const string Approve = "Approve";
-    public const string Issue = "Issue";
+    public const string ValidateSubmission = "ValidateSubmission";
+    public const string EscalateValidation = "EscalateValidation";
+    public const string ApproveAndIssue = "ApproveAndIssuePermit";
     public const string RequestRevision = "RequestRevision";
     public const string Reject = "Reject";
-    public const string RequestSuspension = "RequestSuspension";
-    public const string ApproveSuspension = "ApproveSuspension";
-    public const string DeclareCompletion = "DeclareCompletion";
-    public const string ConfirmCompletionHsse = "ConfirmCompletionHsse";
-    public const string ConfirmCompletionAreaOwner = "ConfirmCompletionAreaOwner";
-    public const string Close = "Close";
+    public const string Suspend = "SuspendPermit";
+    public const string ResolveSuspension = "ResolveSuspension";
+    public const string RequestClosure = "RequestClosure";
+    public const string RequestClosureEvidenceReplacement = "RequestClosureEvidenceReplacement";
+    public const string Close = "ClosePermit";
+    public const string Cancel = "CancelPermit";
+    public const string Expire = "ExpirePermit";
 
     public static readonly IReadOnlyList<string> Required =
     [
@@ -26,17 +27,18 @@ public static class PermitPolicyOperations
         UpdateDraft,
         RequestRenewal,
         Submit,
-        ValidateHsse,
-        Approve,
-        Issue,
+        ValidateSubmission,
+        EscalateValidation,
+        ApproveAndIssue,
         RequestRevision,
         Reject,
-        RequestSuspension,
-        ApproveSuspension,
-        DeclareCompletion,
-        ConfirmCompletionHsse,
-        ConfirmCompletionAreaOwner,
-        Close
+        Suspend,
+        ResolveSuspension,
+        RequestClosure,
+        RequestClosureEvidenceReplacement,
+        Close,
+        Cancel,
+        Expire
     ];
 }
 
@@ -48,6 +50,19 @@ public sealed class OperationalPolicySettings
         new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> PermitActionCodes { get; init; } =
         new(StringComparer.OrdinalIgnoreCase);
+}
+
+public sealed class IssuancePolicySettings
+{
+    public bool Approved { get; init; }
+    public string RuleVersion { get; init; } = string.Empty;
+    public string PrintTemplateVersion { get; init; } = string.Empty;
+    public string CampaignAssetVersion { get; init; } = string.Empty;
+
+    public bool IsReady => Approved
+        && !string.IsNullOrWhiteSpace(RuleVersion)
+        && !string.IsNullOrWhiteSpace(PrintTemplateVersion)
+        && !string.IsNullOrWhiteSpace(CampaignAssetVersion);
 }
 
 public sealed record PolicyAuthorizationEvidence(

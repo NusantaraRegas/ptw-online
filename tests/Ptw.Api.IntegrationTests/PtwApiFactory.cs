@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Ptw.Application;
 using Ptw.Infrastructure.Persistence;
 using Testcontainers.MsSql;
 
@@ -47,12 +48,24 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
                 ["Attachments:MaxFileBytes"] = "1048576",
                 ["Attachments:MaxFilesPerPermit"] = "20",
                 ["Attachments:RequireMalwareScan"] = "false",
-                ["Attachments:StoragePath"] = _attachmentPath
+                ["Attachments:StoragePath"] = _attachmentPath,
+                ["IssuancePolicy:Approved"] = "true",
+                ["IssuancePolicy:RuleVersion"] = "integration-rules-v1",
+                ["IssuancePolicy:PrintTemplateVersion"] = "integration-print-v1",
+                ["IssuancePolicy:CampaignAssetVersion"] = "integration-campaign-v1"
             }));
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<PtwDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<PtwDbContext>>();
+            services.RemoveAll<IssuancePolicySettings>();
+            services.AddSingleton(new IssuancePolicySettings
+            {
+                Approved = true,
+                RuleVersion = "integration-rules-v1",
+                PrintTemplateVersion = "integration-print-v1",
+                CampaignAssetVersion = "integration-campaign-v1"
+            });
             services.AddDbContext<PtwDbContext>(options => options.UseSqlServer(_connectionString));
         });
     }

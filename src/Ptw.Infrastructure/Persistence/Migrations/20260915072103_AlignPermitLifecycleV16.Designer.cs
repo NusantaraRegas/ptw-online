@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Ptw.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using Ptw.Infrastructure.Persistence;
 namespace Ptw.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PtwDbContext))]
-    partial class PtwDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260915072103_AlignPermitLifecycleV16")]
+    partial class AlignPermitLifecycleV16
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -528,22 +531,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                     b.Property<int>("AddedInVersion")
                         .HasColumnType("int");
 
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("nvarchar(40)");
-
-                    b.Property<DateTimeOffset?>("DocumentDate")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("DocumentNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("DocumentRevision")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -555,9 +542,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<Guid>("PermitId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("PrintPackageId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset?>("RemovedAt")
@@ -576,17 +560,10 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
 
-                    b.Property<string>("ScanEvidenceReference")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
                     b.Property<string>("ScanStatus")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
-
-                    b.Property<DateTimeOffset?>("ScannedAt")
-                        .HasColumnType("datetimeoffset");
 
                     b.Property<string>("Sha256")
                         .IsRequired()
@@ -602,12 +579,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<Guid?>("SupersedesAttachmentId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("TargetPermitVersion")
-                        .HasColumnType("int");
-
                     b.Property<DateTimeOffset>("UploadedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -618,24 +589,14 @@ namespace Ptw.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PrintPackageId");
-
                     b.HasIndex("StorageKey")
                         .IsUnique();
-
-                    b.HasIndex("SupersedesAttachmentId");
-
-                    b.HasIndex("PermitId", "Category", "TargetPermitVersion");
 
                     b.HasIndex("PermitId", "RemovedInVersion", "UploadedAt");
 
                     b.ToTable("PermitAttachment", "ptw", t =>
                         {
-                            t.HasCheckConstraint("CK_PermitAttachment_Category", "[Category] IN ('SUPPORTING', 'JSA', 'SIGNED_FIELD_COPY')");
-
-                            t.HasCheckConstraint("CK_PermitAttachment_CleanEvidence", "[ScanStatus] <> 'CLEAN' OR ([ScanEvidenceReference] IS NOT NULL AND [ScannedAt] IS NOT NULL)");
-
-                            t.HasCheckConstraint("CK_PermitAttachment_ScanStatus", "[ScanStatus] IN ('PENDING', 'CLEAN', 'REJECTED')");
+                            t.HasCheckConstraint("CK_PermitAttachment_ScanStatus", "[ScanStatus] IN ('NOT_SCANNED', 'CLEAN', 'REJECTED')");
 
                             t.HasCheckConstraint("CK_PermitAttachment_Size", "[SizeBytes] > 0");
 
@@ -1315,16 +1276,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .HasForeignKey("PermitId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.HasOne("Ptw.Infrastructure.Persistence.PrintPackageSnapshotRecord", null)
-                        .WithMany()
-                        .HasForeignKey("PrintPackageId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Ptw.Infrastructure.Persistence.PermitAttachmentRecord", null)
-                        .WithMany()
-                        .HasForeignKey("SupersedesAttachmentId")
-                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Ptw.Infrastructure.Persistence.PermitDecisionRecord", b =>

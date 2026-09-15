@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -13,1034 +14,449 @@ namespace Ptw.Api.IntegrationTests;
 public sealed class PermitApiTests(PtwApiFactory factory)
 {
     [Fact]
-    public async Task SponsorCanUploadMultiplePdfFilesAndAllRolesCanDownload()
+    public async Task PilotRejectsSubmissionOutsideOrf()
     {
-        using var sponsor = WorkflowClient("sponsor.only.demo", "Sponsor", "*");
-        using var createResponse = await sponsor.PostAsJsonAsync(
-            "/api/v1/permits",
-            Draft("FSRU", "Lampiran dinamis") with { SponsorId = "sponsor.only.demo" });
-        createResponse.EnsureSuccessStatusCode();
-        var created = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "*");
+        var draft = await CreateAsync(sponsor, sponsorId, "FSRU");
 
-        using var otherSponsor = WorkflowClient("sponsor.other", "Sponsor", "*");
-        using var unauthorizedUpload = AttachmentUpload(
-            created.Id,
-            created.ETag,
-            "bukan-miliknya.pdf",
-            "%PDF-1.7\n%%EOF");
-        using var unauthorizedResponse = await otherSponsor.SendAsync(unauthorizedUpload);
-        Assert.Equal(HttpStatusCode.Forbidden, unauthorizedResponse.StatusCode);
+        using var response = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{draft.Id}/submit",
+            draft.ETag,
+            new SubmitPermitRequest(true, true, true, [])));
 
-        var firstKey = Guid.NewGuid().ToString("N");
-        using var firstUpload = AttachmentUpload(
-            created.Id,
-            created.ETag,
-            "jsa.pdf",
-            "%PDF-1.7\nJSA\n%%EOF",
-            idempotencyKey: firstKey);
-        using var firstResponse = await sponsor.SendAsync(firstUpload);
-        Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
-        var first = Required(await firstResponse.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
-        Assert.Equal(2, first.PermitVersion);
-        Assert.Equal("NOT_SCANNED", first.Attachment.ScanStatus);
-
-        using var replayUpload = AttachmentUpload(
-            created.Id,
-            created.ETag,
-            "jsa.pdf",
-            "%PDF-1.7\nJSA\n%%EOF",
-            idempotencyKey: firstKey);
-        using var replayResponse = await sponsor.SendAsync(replayUpload);
-        replayResponse.EnsureSuccessStatusCode();
-        var replay = Required(
-            await replayResponse.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
-        Assert.Equal(first.Attachment.Id, replay.Attachment.Id);
-
-        var secondKey = Guid.NewGuid().ToString("N");
-        using var secondUpload = AttachmentUpload(
-            created.Id,
-            first.ETag,
-            "metode-kerja.pdf",
-            "%PDF-1.7\nMetode kerja\n%%EOF",
-            idempotencyKey: secondKey);
-        using var secondResponse = await sponsor.SendAsync(secondUpload);
-        Assert.Equal(HttpStatusCode.Created, secondResponse.StatusCode);
-        var second = Required(await secondResponse.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
-        Assert.Equal(3, second.PermitVersion);
-
-        using var listResponse = await sponsor.GetAsync($"/api/v1/permits/{created.Id}/attachments");
-        listResponse.EnsureSuccessStatusCode();
-        var attachments = Required(
-            await listResponse.Content.ReadFromJsonAsync<IReadOnlyList<PermitAttachmentResponse>>());
-        Assert.Equal(2, attachments.Count);
-
-        using var hsse = WorkflowClient("hsse.validator.demo", "HSSEValidator", "*");
-        using var downloadResponse = await hsse.GetAsync(
-            $"/api/v1/permits/{created.Id}/attachments/{first.Attachment.Id}/content");
-        downloadResponse.EnsureSuccessStatusCode();
-        Assert.Equal("application/pdf", downloadResponse.Content.Headers.ContentType?.MediaType);
-        Assert.Equal("%PDF-1.7\nJSA\n%%EOF", await downloadResponse.Content.ReadAsStringAsync());
-
-        using var remove = AttachmentRemove(created.Id, first.Attachment.Id, second.ETag);
-        using var removeResponse = await sponsor.SendAsync(remove);
-        removeResponse.EnsureSuccessStatusCode();
-        var removed = Required(
-            await removeResponse.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
-        Assert.Equal(4, removed.PermitVersion);
-        Assert.Equal(4, removed.Attachment.RemovedInVersion);
-
-        using var submit = Submit(
-            created.Id,
-            removed.ETag,
-            Guid.NewGuid().ToString("N"),
-            new SubmitPermitRequest(true, true, true, []));
-        using var submitResponse = await sponsor.SendAsync(submit);
-        submitResponse.EnsureSuccessStatusCode();
-
-        using var replayAfterSubmit = AttachmentUpload(
-            created.Id,
-            first.ETag,
-            "metode-kerja.pdf",
-            "%PDF-1.7\nMetode kerja\n%%EOF",
-            idempotencyKey: secondKey);
-        using var replayAfterSubmitResponse = await sponsor.SendAsync(replayAfterSubmit);
-        replayAfterSubmitResponse.EnsureSuccessStatusCode();
-        var replayAfterSubmitResult = Required(
-            await replayAfterSubmitResponse.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
-        Assert.Equal(second.Attachment.Id, replayAfterSubmitResult.Attachment.Id);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal("permit.location.not_released", await ProblemCodeAsync(response));
     }
 
     [Fact]
-    public async Task AttachmentUploadRejectsNonPdfAndPostSubmitMutation()
+    public async Task SubmitCreatesExactlyOneHseTaskAndNoGasValidatorTask()
     {
-        using var sponsor = factory.CreateClient();
-        var created = await CreatePermitAsync(sponsor, "AREA-ATTACHMENT-GUARD");
-        using var invalidUpload = AttachmentUpload(
-            created.Id,
-            created.ETag,
-            "catatan.txt",
-            "bukan PDF",
-            "text/plain");
-        using var invalidResponse = await sponsor.SendAsync(invalidUpload);
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, invalidResponse.StatusCode);
-        Assert.Equal("attachment.file_name_invalid", await ProblemCodeAsync(invalidResponse));
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        var submitted = await CreateAndSubmitAsync(sponsor, sponsorId);
 
-        using var submit = Submit(
-            created.Id,
-            created.ETag,
-            Guid.NewGuid().ToString("N"),
-            new SubmitPermitRequest(true, true, true, []));
-        using var submitResponse = await sponsor.SendAsync(submit);
-        submitResponse.EnsureSuccessStatusCode();
-        var submitted = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("UNDER_VALIDATION", submitted.Status);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+        var tasks = await db.PermitTasks.AsNoTracking()
+            .Where(x => x.PermitId == submitted.Id && x.Status == "PENDING")
+            .ToListAsync();
+        var task = Assert.Single(tasks);
+        Assert.Equal("HSE_VALIDATION", task.Type);
+        Assert.Equal("HSEValidator", task.RequiredRole);
+        Assert.DoesNotContain(tasks, x => x.Type.Contains("GAS", StringComparison.OrdinalIgnoreCase));
+    }
 
-        using var lateUpload = AttachmentUpload(
-            submitted.Id,
+    [Fact]
+    public async Task SponsorCannotSelfValidateButAnotherHseValidatorCan()
+    {
+        var sponsorId = Unique("hse-sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor,HSEValidator", "ORF");
+        var submitted = await CreateAndSubmitAsync(sponsor, sponsorId);
+        var validationTask = await PendingTaskAsync(submitted.Id, "HSE_VALIDATION");
+
+        using var selfResponse = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{validationTask.Id}/validate",
             submitted.ETag,
-            "terlambat.pdf",
-            "%PDF-1.7\n%%EOF");
-        using var lateResponse = await sponsor.SendAsync(lateUpload);
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, lateResponse.StatusCode);
-        Assert.Equal("attachment.permit_not_editable", await ProblemCodeAsync(lateResponse));
+            new ValidateSubmissionRequest("Saya memvalidasi sendiri.")));
+        Assert.Equal(HttpStatusCode.Conflict, selfResponse.StatusCode);
+        Assert.Equal("permit.validation.self_validation_forbidden", await ProblemCodeAsync(selfResponse));
+
+        using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
+        using var validateResponse = await validator.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{validationTask.Id}/validate",
+            submitted.ETag,
+            new ValidateSubmissionRequest("JSA dan requirement telah diverifikasi.")));
+        validateResponse.EnsureSuccessStatusCode();
+        var validated = Required(await validateResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("AWAITING_AREA_APPROVAL", validated.Status);
+        Assert.Equal("HSE", validated.Workflow.Hse.Code);
+        Assert.True(validated.Workflow.Hse.Completed);
+
+        var approvalTask = await PendingTaskAsync(submitted.Id, "AREA_APPROVE_AND_ISSUE");
+        Assert.Equal(submitted.Version, approvalTask.PermitVersion);
     }
 
     [Fact]
-    public async Task SponsorCreatesLinkedRenewalButCannotIssueItWhileSourceIsActive()
+    public async Task ApproveAndIssueCommitsDecisionStateAuditOutboxAndPrintSnapshotAtomically()
     {
-        var location = $"AREA-RENEWAL-{Guid.NewGuid():N}";
-        using var sponsor = WorkflowClient("sponsor.demo", "Sponsor", "*");
-        using var hsse = WorkflowClient("hsse.validator.demo", "HSSEValidator", "*");
-        using var areaOwner = WorkflowClient("area.owner.demo", "AreaOwnerApprover", "*");
-        var source = await CreateOpenPermitAsync(sponsor, hsse, areaOwner, location);
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
+        var managerId = Unique("manager");
+        using var manager = Client(managerId, "AreaOwnerManager", "ORF");
+        var validated = await CreateAndValidateAsync(sponsor, validator, sponsorId);
+        var approvalTask = await PendingTaskAsync(validated.Id, "AREA_APPROVE_AND_ISSUE");
+        var request = new ApproveAndIssuePermitRequest(
+            "Saya menyetujui dan menerbitkan PTW ini.",
+            null);
         var key = Guid.NewGuid().ToString("N");
-        var renewalPeriod = new RequestPermitRenewalRequest(
-            source.Draft.ValidUntil,
-            source.Draft.ValidUntil.AddHours(8));
 
-        using var request = RenewalRequest(source.Id, source.ETag, key, renewalPeriod);
+        using var issueResponse = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{approvalTask.Id}/approve-and-issue",
+            validated.ETag,
+            request,
+            key));
+        Assert.True(issueResponse.IsSuccessStatusCode, await issueResponse.Content.ReadAsStringAsync());
+        var issued = Required(await issueResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("ISSUED", issued.Status);
+        Assert.Equal("MANAGER", issued.Workflow.Approval.Capacity);
+        Assert.NotEqual(Guid.Empty, issued.Workflow.Approval.AuthorizationId);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+        var decision = await db.PermitDecisions.AsNoTracking().SingleAsync(x => x.PermitId == issued.Id);
+        var snapshot = await db.PrintPackageSnapshots.AsNoTracking().SingleAsync(x => x.PermitId == issued.Id);
+        var document = await db.GeneratedDocuments.AsNoTracking()
+            .SingleAsync(x => x.PrintPackageSnapshotId == snapshot.Id);
+        Assert.Equal(decision.Id, snapshot.DecisionId);
+        Assert.Equal("PENDING", snapshot.RenderStatus);
+        Assert.Equal("PENDING", document.RenderStatus);
+        Assert.True(await db.AuditEvents.AsNoTracking().AnyAsync(
+            x => x.PermitId == issued.Id && x.EventType == "permit_issued"));
+        Assert.True(await db.OutboxMessages.AsNoTracking().AnyAsync(
+            x => x.AggregateId == issued.Id && x.EventType == "permit_issued"));
+
+        using var replay = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{approvalTask.Id}/approve-and-issue",
+            validated.ETag,
+            request,
+            key));
+        replay.EnsureSuccessStatusCode();
+        Assert.Equal(1, await db.PermitDecisions.AsNoTracking().CountAsync(x => x.PermitId == issued.Id));
+
+        using var mismatch = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{approvalTask.Id}/approve-and-issue",
+            validated.ETag,
+            request with { Statement = "Payload berbeda." },
+            key));
+        Assert.Equal(HttpStatusCode.Conflict, mismatch.StatusCode);
+        Assert.Equal("idempotency.payload_mismatch", await ProblemCodeAsync(mismatch));
+    }
+
+    [Fact]
+    public async Task RevisionCancelsAreaTaskAndResubmitCreatesFreshHseTaskForNewVersion()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
+        using var manager = Client(Unique("manager"), "AreaOwnerManager", "ORF");
+        var validated = await CreateAndValidateAsync(sponsor, validator, sponsorId);
+        var areaTask = await PendingTaskAsync(validated.Id, "AREA_APPROVE_AND_ISSUE");
+
+        using var revisionResponse = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{areaTask.Id}/revision",
+            validated.ETag,
+            new PermitReasonRequest("JSA harus diperbarui.")));
+        revisionResponse.EnsureSuccessStatusCode();
+        var revision = Required(await revisionResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("REVISION_REQUIRED", revision.Status);
+        Assert.False(revision.Workflow.Hse.Completed);
+
+        using var patchResponse = await sponsor.SendAsync(Command(
+            HttpMethod.Patch,
+            $"/api/v1/permits/{revision.Id}/draft",
+            revision.ETag,
+            revision.Draft with { Title = "Versi material baru" },
+            idempotencyKey: null));
+        patchResponse.EnsureSuccessStatusCode();
+        var updated = Required(await patchResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        using var submitResponse = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{updated.Id}/submit",
+            updated.ETag,
+            ReadyToSubmit()));
+        submitResponse.EnsureSuccessStatusCode();
+        var resubmitted = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal(2, resubmitted.Version);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+        Assert.Equal("CANCELLED", (await db.PermitTasks.SingleAsync(x => x.Id == areaTask.Id)).Status);
+        Assert.Single(await db.PermitTasks.Where(x => x.PermitId == updated.Id
+            && x.PermitVersion == 2
+            && x.Type == "HSE_VALIDATION"
+            && x.Status == "PENDING").ToListAsync());
+    }
+
+    [Fact]
+    public async Task StaleIfMatchReturnsConflictAndIdempotencyPayloadMismatchIsRejected()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        var draft = await CreateAsync(sponsor, sponsorId, "ORF");
+        using var updateResponse = await sponsor.SendAsync(Command(
+            HttpMethod.Patch,
+            $"/api/v1/permits/{draft.Id}/draft",
+            draft.ETag,
+            draft.Draft with { Title = "Versi kedua" },
+            null));
+        updateResponse.EnsureSuccessStatusCode();
+
+        using var stale = await sponsor.SendAsync(Command(
+            HttpMethod.Patch,
+            $"/api/v1/permits/{draft.Id}/draft",
+            draft.ETag,
+            draft.Draft with { Title = "Versi stale" },
+            null));
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal("concurrency.conflict", await ProblemCodeAsync(stale));
+    }
+
+    [Fact]
+    public async Task AttachmentUploadAcceptsVerifiedPdfJpegAndPngSignaturesAsPendingEvidence()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        var permit = await CreateAsync(sponsor, sponsorId, "ORF");
+        var files = new[]
+        {
+            ("jsa.pdf", "application/pdf", Encoding.ASCII.GetBytes("%PDF-1.7\n")),
+            ("photo.jpg", "image/jpeg", new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 }),
+            ("scan.png", "image/png", new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A })
+        };
+        PermitAttachmentResponse? firstAttachment = null;
+
+        foreach (var (fileName, mediaType, bytes) in files)
+        {
+            using var content = new MultipartFormDataContent();
+            var file = new ByteArrayContent(bytes);
+            file.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
+            content.Add(file, "file", fileName);
+            content.Add(new StringContent("SUPPORTING"), "category");
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"/api/v1/permits/{permit.Id}/attachments")
+            {
+                Content = content
+            };
+            request.Headers.TryAddWithoutValidation("If-Match", permit.ETag);
+            request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+            using var response = await sponsor.SendAsync(request);
+            Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+            var mutation = Required(await response.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
+            Assert.Equal("PENDING", mutation.Attachment.ScanStatus);
+            Assert.Equal("SUPPORTING", mutation.Attachment.Category);
+            Assert.Equal(mediaType, mutation.Attachment.MediaType);
+            Assert.Equal(64, mutation.Attachment.Sha256.Length);
+            firstAttachment ??= mutation.Attachment;
+            permit = permit with { ETag = mutation.ETag, Version = mutation.PermitVersion };
+        }
+
+        using var pendingDownload = await sponsor.GetAsync(
+            $"/api/v1/permits/{permit.Id}/attachments/{Required(firstAttachment).Id}/content");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, pendingDownload.StatusCode);
+        Assert.Equal("attachment.not_clean", await ProblemCodeAsync(pendingDownload));
+
+        using var otherSponsor = Client(Unique("other-sponsor"), "Sponsor", "ORF");
+        using var crossSponsorList = await otherSponsor.GetAsync($"/api/v1/permits/{permit.Id}/attachments");
+        Assert.Equal(HttpStatusCode.Forbidden, crossSponsorList.StatusCode);
+        Assert.Equal("authorization.denied", await ProblemCodeAsync(crossSponsorList));
+    }
+
+    [Fact]
+    public async Task AttachmentUploadRejectsExtensionAndSignatureMismatch()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        var permit = await CreateAsync(sponsor, sponsorId, "ORF");
+        using var content = new MultipartFormDataContent();
+        var file = new ByteArrayContent([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        content.Add(file, "file", "forged.pdf");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1/permits/{permit.Id}/attachments")
+        {
+            Content = content
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", permit.ETag);
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+
         using var response = await sponsor.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var result = Required(await response.Content.ReadFromJsonAsync<PermitRenewalResponse>());
-        Assert.Equal(source.Version + 1, result.SourcePermitVersion);
-        Assert.Equal("DRAFT", result.Renewal.Status);
-        Assert.Null(result.Renewal.PermitNumber);
-        Assert.Equal(source.Id, result.Renewal.RenewedFromPermitId);
 
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal("attachment.media_type_invalid", await ProblemCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task ClosureRequestRejectsSignedFieldCopyThatIsNotClean()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
+        using var manager = Client(Unique("manager"), "AreaOwnerManager", "ORF");
+        var validated = await CreateAndValidateAsync(sponsor, validator, sponsorId);
+        var approvalTask = await PendingTaskAsync(validated.Id, "AREA_APPROVE_AND_ISSUE");
+        using var issueResponse = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{approvalTask.Id}/approve-and-issue",
+            validated.ETag,
+            new ApproveAndIssuePermitRequest("Disetujui dan diterbitkan.", null)));
+        issueResponse.EnsureSuccessStatusCode();
+        var issued = Required(await issueResponse.Content.ReadFromJsonAsync<PermitResponse>());
+
+        Guid printPackageId;
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
-            var renewalAudits = await db.AuditEvents.AsNoTracking()
-                .Where(x => (x.PermitId == source.Id || x.PermitId == result.Renewal.Id)
-                    && (x.EventType == "permit_renewal_requested"
-                        || x.EventType == "permit_renewal_draft_created"))
-                .ToListAsync();
-            var eventIds = renewalAudits.Select(x => x.Id).ToArray();
-            Assert.Equal(2, renewalAudits.Count);
-            Assert.Equal(2, await db.OutboxMessages.AsNoTracking()
-                .CountAsync(x => eventIds.Contains(x.Id)));
-            Assert.True(await db.PermitVersions.AsNoTracking().AnyAsync(
-                x => x.PermitId == source.Id && x.Version == result.SourcePermitVersion));
-            Assert.True(await db.PermitVersions.AsNoTracking().AnyAsync(
-                x => x.PermitId == result.Renewal.Id && x.Version == 1));
-            Assert.True(await db.IdempotencyRecords.AsNoTracking().AnyAsync(
-                x => x.Operation == "RequestRenewal"
-                    && x.Key == key
-                    && x.PermitId == result.Renewal.Id));
+            var package = await db.PrintPackageSnapshots.SingleAsync(x => x.PermitId == issued.Id);
+            package.RenderStatus = "READY";
+            printPackageId = package.Id;
+            await db.SaveChangesAsync();
         }
 
-        using var sourceResponse = await sponsor.GetAsync($"/api/v1/permits/{source.Id}");
-        sourceResponse.EnsureSuccessStatusCode();
-        var updatedSource = Required(await sourceResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal(result.Renewal.Id, updatedSource.RenewalPermitId);
+        using var uploadContent = new MultipartFormDataContent();
+        var file = new ByteArrayContent(Encoding.ASCII.GetBytes("%PDF-1.7\n"));
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        uploadContent.Add(file, "file", "signed-field-copy.pdf");
+        uploadContent.Add(new StringContent("SIGNED_FIELD_COPY"), "category");
+        uploadContent.Add(new StringContent("SFC-001"), "documentNumber");
+        uploadContent.Add(new StringContent("1"), "documentRevision");
+        uploadContent.Add(new StringContent(DateTimeOffset.UtcNow.ToString("O")), "documentDate");
+        uploadContent.Add(new StringContent(printPackageId.ToString()), "printPackageId");
+        using var uploadRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1/permits/{issued.Id}/attachments")
+        {
+            Content = uploadContent
+        };
+        uploadRequest.Headers.TryAddWithoutValidation("If-Match", issued.ETag);
+        uploadRequest.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+        using var uploadResponse = await sponsor.SendAsync(uploadRequest);
+        Assert.True(uploadResponse.IsSuccessStatusCode, await uploadResponse.Content.ReadAsStringAsync());
+        var upload = Required(await uploadResponse.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
+        Assert.Equal("PENDING", upload.Attachment.ScanStatus);
 
-        using var replayRequest = RenewalRequest(source.Id, source.ETag, key, renewalPeriod);
-        using var replayResponse = await sponsor.SendAsync(replayRequest);
-        replayResponse.EnsureSuccessStatusCode();
-        var replay = Required(await replayResponse.Content.ReadFromJsonAsync<PermitRenewalResponse>());
-        Assert.Equal(result.Renewal.Id, replay.Renewal.Id);
+        using var closureResponse = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{issued.Id}/closure-requests",
+            upload.ETag,
+            new RequestClosureRequest(
+                printPackageId,
+                [upload.Attachment.Id],
+                "Pekerjaan dan handback pada hardcopy telah selesai.",
+                true,
+                true)));
 
-        using var otherSponsor = WorkflowClient("sponsor.other", "Sponsor", "*");
-        using var unauthorizedRequest = RenewalRequest(
-            source.Id,
-            updatedSource.ETag,
-            Guid.NewGuid().ToString("N"),
-            renewalPeriod);
-        using var unauthorizedResponse = await otherSponsor.SendAsync(unauthorizedRequest);
-        Assert.Equal(HttpStatusCode.Forbidden, unauthorizedResponse.StatusCode);
-
-        using var submit = Submit(
-            result.Renewal.Id,
-            result.Renewal.ETag,
-            Guid.NewGuid().ToString("N"),
-            new SubmitPermitRequest(true, true, true, []));
-        using var submitResponse = await sponsor.SendAsync(submit);
-        submitResponse.EnsureSuccessStatusCode();
-        var underReview = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
-
-        using var validation = WorkflowCommand(
-            underReview.Id,
-            "validations/hsse/endorse",
-            underReview.ETag,
-            new EndorsePermitValidationRequest("Renewal memenuhi persyaratan HSSE."));
-        using var validationResponse = await hsse.SendAsync(validation);
-        validationResponse.EnsureSuccessStatusCode();
-        var awaitingApproval = Required(
-            await validationResponse.Content.ReadFromJsonAsync<PermitResponse>());
-
-        using var approval = WorkflowCommand(
-            awaitingApproval.Id,
-            "approve",
-            awaitingApproval.ETag,
-            new ApprovePermitRequest("Renewal disetujui PIC pemilik area."));
-        using var approvalResponse = await areaOwner.SendAsync(approval);
-        approvalResponse.EnsureSuccessStatusCode();
-        var approved = Required(await approvalResponse.Content.ReadFromJsonAsync<PermitResponse>());
-
-        using var issue = WorkflowCommand(
-            approved.Id,
-            "issue",
-            approved.ETag,
-            new IssuePermitRequest(true, true, true, true, true, true, true, true, false));
-        using var issueResponse = await areaOwner.SendAsync(issue);
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, issueResponse.StatusCode);
-        Assert.Equal("permit.renewal.source_still_active", await ProblemCodeAsync(issueResponse));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, closureResponse.StatusCode);
+        Assert.Equal("permit.closure.evidence_invalid", await ProblemCodeAsync(closureResponse));
+        await using var verificationScope = factory.Services.CreateAsyncScope();
+        var verificationDb = verificationScope.ServiceProvider.GetRequiredService<PtwDbContext>();
+        Assert.Empty(await verificationDb.PermitTasks.Where(x =>
+            x.PermitId == issued.Id && x.Type == "AREA_CLOSE_VERIFICATION").ToListAsync());
     }
 
-    [Fact]
-    public async Task UpdateDraftWithStaleETagReturnsConflict()
-    {
-        using var client = factory.CreateClient();
-        var created = await CreatePermitAsync(client, "AREA-CONCURRENCY");
-
-        using var update = PatchDraft(created.Id, created.ETag, Draft("AREA-CONCURRENCY", "Versi terbaru"));
-        using var updatedResponse = await client.SendAsync(update);
-        Assert.Equal(HttpStatusCode.OK, updatedResponse.StatusCode);
-        var updated = await updatedResponse.Content.ReadFromJsonAsync<PermitResponse>();
-        Assert.NotNull(updated);
-        Assert.Equal(2, updated.Version);
-
-        using var staleUpdate = PatchDraft(created.Id, created.ETag, Draft("AREA-CONCURRENCY", "Versi stale"));
-        using var conflict = await client.SendAsync(staleUpdate);
-        Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
-        Assert.Equal("concurrency.conflict", await ProblemCodeAsync(conflict));
-    }
-
-    [Fact]
-    public async Task GetPermitOutsideLocationScopeReturnsForbidden()
-    {
-        using var ownerClient = factory.CreateClient();
-        var created = await CreatePermitAsync(ownerClient, "AREA-OWNER");
-
-        using var scopedClient = factory.CreateClient();
-        scopedClient.DefaultRequestHeaders.Add("X-Dev-Locations", "AREA-OTHER");
-        using var detailResponse = await scopedClient.GetAsync($"/api/v1/permits/{created.Id}");
-        using var activityResponse = await scopedClient.GetAsync($"/api/v1/permits/{created.Id}/activity");
-        using var versionsResponse = await scopedClient.GetAsync($"/api/v1/permits/{created.Id}/versions");
-
-        Assert.Equal(HttpStatusCode.Forbidden, detailResponse.StatusCode);
-        Assert.Equal("authorization.denied", await ProblemCodeAsync(detailResponse));
-        Assert.Equal(HttpStatusCode.Forbidden, activityResponse.StatusCode);
-        Assert.Equal("authorization.denied", await ProblemCodeAsync(activityResponse));
-        Assert.Equal(HttpStatusCode.Forbidden, versionsResponse.StatusCode);
-        Assert.Equal("authorization.denied", await ProblemCodeAsync(versionsResponse));
-    }
-
-    [Fact]
-    public async Task HistoryIsAppendOnlyOrderedAndPaginated()
-    {
-        using var client = factory.CreateClient();
-        var created = await CreatePermitAsync(client, "AREA-HISTORY");
-
-        using var initialActivityResponse = await client.GetAsync(
-            $"/api/v1/permits/{created.Id}/activity?offset=0&limit=1");
-        initialActivityResponse.EnsureSuccessStatusCode();
-        var initialActivity = await initialActivityResponse.Content.ReadFromJsonAsync<PagedResponse<PermitActivityResponse>>();
-        var initialEvent = Assert.Single(Assert.IsType<PagedResponse<PermitActivityResponse>>(initialActivity).Items);
-        Assert.Equal(1, initialActivity.Count);
-
-        var versionTwo = await UpdatePermitAsync(client, created, "Draft versi dua");
-        var versionThree = await UpdatePermitAsync(client, versionTwo, "Draft versi tiga");
-
-        using var latestActivityResponse = await client.GetAsync(
-            $"/api/v1/permits/{created.Id}/activity?offset=0&limit=2");
-        latestActivityResponse.EnsureSuccessStatusCode();
-        var latestActivity = Assert.IsType<PagedResponse<PermitActivityResponse>>(
-            await latestActivityResponse.Content.ReadFromJsonAsync<PagedResponse<PermitActivityResponse>>());
-        Assert.Equal(3, latestActivity.Count);
-        Assert.Equal(2, latestActivity.Items.Count);
-        Assert.True(latestActivity.Items[0].Sequence > latestActivity.Items[1].Sequence);
-
-        using var oldestActivityResponse = await client.GetAsync(
-            $"/api/v1/permits/{created.Id}/activity?offset=2&limit=2");
-        oldestActivityResponse.EnsureSuccessStatusCode();
-        var oldestActivity = Assert.IsType<PagedResponse<PermitActivityResponse>>(
-            await oldestActivityResponse.Content.ReadFromJsonAsync<PagedResponse<PermitActivityResponse>>());
-        var persistedInitialEvent = Assert.Single(oldestActivity.Items);
-        Assert.Equal(3, oldestActivity.Count);
-        Assert.Equal(initialEvent.Sequence, persistedInitialEvent.Sequence);
-        Assert.Equal(initialEvent.EventType, persistedInitialEvent.EventType);
-        Assert.Equal(initialEvent.ActorId, persistedInitialEvent.ActorId);
-        Assert.Equal(initialEvent.Payload.GetRawText(), persistedInitialEvent.Payload.GetRawText());
-
-        using var latestVersionsResponse = await client.GetAsync(
-            $"/api/v1/permits/{created.Id}/versions?offset=0&limit=2");
-        latestVersionsResponse.EnsureSuccessStatusCode();
-        var latestVersions = Assert.IsType<PagedResponse<PermitVersionResponse>>(
-            await latestVersionsResponse.Content.ReadFromJsonAsync<PagedResponse<PermitVersionResponse>>());
-        Assert.Equal(3, latestVersions.Count);
-        Assert.Collection(
-            latestVersions.Items,
-            item =>
-            {
-                Assert.Equal(3, item.Version);
-                Assert.Equal("Draft versi tiga", item.Snapshot.Title);
-            },
-            item =>
-            {
-                Assert.Equal(2, item.Version);
-                Assert.Equal("Draft versi dua", item.Snapshot.Title);
-            });
-
-        using var oldestVersionResponse = await client.GetAsync(
-            $"/api/v1/permits/{created.Id}/versions?offset=2&limit=2");
-        oldestVersionResponse.EnsureSuccessStatusCode();
-        var oldestVersions = Assert.IsType<PagedResponse<PermitVersionResponse>>(
-            await oldestVersionResponse.Content.ReadFromJsonAsync<PagedResponse<PermitVersionResponse>>());
-        var originalVersion = Assert.Single(oldestVersions.Items);
-        Assert.Equal(1, originalVersion.Version);
-        Assert.Equal("Draft awal", originalVersion.Snapshot.Title);
-        Assert.False(string.IsNullOrWhiteSpace(originalVersion.ContentHash));
-        Assert.Equal(versionThree.Version, latestVersions.Items[0].Version);
-    }
-
-    [Fact]
-    public async Task HistoryRejectsInvalidPagination()
-    {
-        using var client = factory.CreateClient();
-        var created = await CreatePermitAsync(client, "AREA-PAGINATION");
-
-        using var invalidOffset = await client.GetAsync($"/api/v1/permits/{created.Id}/activity?offset=-1");
-        using var invalidLimit = await client.GetAsync($"/api/v1/permits/{created.Id}/versions?limit=101");
-
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, invalidOffset.StatusCode);
-        Assert.Equal("pagination.invalid_offset", await ProblemCodeAsync(invalidOffset));
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, invalidLimit.StatusCode);
-        Assert.Equal("pagination.invalid_limit", await ProblemCodeAsync(invalidLimit));
-    }
-
-    [Fact]
-    public async Task SubmitReplaysSameIdempotencyKeyAndRejectsDifferentPayload()
-    {
-        using var client = factory.CreateClient();
-        var created = await CreatePermitAsync(client, "AREA-IDEMPOTENCY");
-        var request = new SubmitPermitRequest(true, true, true, []);
-        var key = Guid.NewGuid().ToString("N");
-
-        using var first = Submit(created.Id, created.ETag, key, request);
-        using var firstResponse = await client.SendAsync(first);
-        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
-        var submitted = await firstResponse.Content.ReadFromJsonAsync<PermitResponse>();
-        Assert.NotNull(submitted);
-        Assert.Equal("UNDER_REVIEW", submitted.Status);
-        Assert.False(submitted.Workflow.Hsse.Completed);
-        Assert.False(submitted.Workflow.GasDistribution.Completed);
-
-        using var replay = Submit(created.Id, created.ETag, key, request);
-        using var replayResponse = await client.SendAsync(replay);
-        Assert.Equal(HttpStatusCode.OK, replayResponse.StatusCode);
-        var replayed = await replayResponse.Content.ReadFromJsonAsync<PermitResponse>();
-        Assert.Equal(submitted.Id, replayed?.Id);
-        Assert.Equal(submitted.Version, replayed?.Version);
-
-        using var mismatch = Submit(
-            created.Id,
-            created.ETag,
-            key,
-            request with { RequiredDocumentsSafe = false });
-        using var mismatchResponse = await client.SendAsync(mismatch);
-        Assert.Equal(HttpStatusCode.Conflict, mismatchResponse.StatusCode);
-        Assert.Equal("idempotency.payload_mismatch", await ProblemCodeAsync(mismatchResponse));
-    }
-
-    [Fact]
-    public async Task HsseValidationGatesAreaApprovalAndIssuance()
-    {
-        const string location = "ORF";
-        using var sponsor = factory.CreateClient();
-        using var createResponse = await sponsor.PostAsJsonAsync(
-            "/api/v1/permits",
-            Draft(location, "Flow validasi HSSE") with
-            {
-                ValidFrom = DateTimeOffset.UtcNow.AddMinutes(-5),
-                ValidUntil = DateTimeOffset.UtcNow.AddHours(8)
-            });
-        createResponse.EnsureSuccessStatusCode();
-        var created = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
-
-        using var submit = Submit(
-            created.Id,
-            created.ETag,
-            Guid.NewGuid().ToString("N"),
-            new SubmitPermitRequest(true, true, true, []));
-        using var submitResponse = await sponsor.SendAsync(submit);
-        submitResponse.EnsureSuccessStatusCode();
-        var underReview = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("UNDER_REVIEW", underReview.Status);
-
-        using var hsse = WorkflowClient("hsse.validator", "HSSEValidator", "*");
-        using var hsseValidation = WorkflowCommand(
-            underReview.Id,
-            "validations/hsse/endorse",
-            underReview.ETag,
-            new EndorsePermitValidationRequest("Persyaratan HSSE sesuai."));
-        using var hsseResponse = await hsse.SendAsync(hsseValidation);
-        hsseResponse.EnsureSuccessStatusCode();
-        var awaitingApproval = Required(await hsseResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("AWAITING_APPROVAL", awaitingApproval.Status);
-        Assert.True(awaitingApproval.Workflow.Hsse.Completed);
-        Assert.False(awaitingApproval.Workflow.GasDistribution.Completed);
-
-        using var outsideAreaOwner = WorkflowClient(
-            "area.owner.other",
-            "AreaOwnerApprover",
-            "HO");
-        using var outsideApproval = WorkflowCommand(
-            awaitingApproval.Id,
-            "approve",
-            awaitingApproval.ETag,
-            new ApprovePermitRequest("Approval di luar area."));
-        using var outsideApprovalResponse = await outsideAreaOwner.SendAsync(outsideApproval);
-        Assert.Equal(HttpStatusCode.Forbidden, outsideApprovalResponse.StatusCode);
-
-        using var areaOwner = WorkflowClient(
-            "area.owner.orf",
-            "AreaOwnerApprover,IssuingAuthority",
-            location);
-        using var approval = WorkflowCommand(
-            awaitingApproval.Id,
-            "approve",
-            awaitingApproval.ETag,
-            new ApprovePermitRequest("Disetujui pemilik area ORF."));
-        using var approvalResponse = await areaOwner.SendAsync(approval);
-        approvalResponse.EnsureSuccessStatusCode();
-        var approved = Required(await approvalResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("APPROVED", approved.Status);
-        Assert.Null(approved.ActiveWorkPeriodId);
-
-        var ready = new IssuePermitRequest(true, true, true, true, true, true, true, true, false);
-        using var failedIssue = WorkflowCommand(
-            approved.Id,
-            "issue",
-            approved.ETag,
-            ready with { GasTestSatisfied = false });
-        using var failedIssueResponse = await areaOwner.SendAsync(failedIssue);
-        Assert.Equal(HttpStatusCode.Conflict, failedIssueResponse.StatusCode);
-        Assert.Equal("permit.issue.guards_failed", await ProblemCodeAsync(failedIssueResponse));
-
-        using var issue = WorkflowCommand(
-            approved.Id,
-            "issue",
-            approved.ETag,
-            ready);
-        using var issueResponse = await areaOwner.SendAsync(issue);
-        issueResponse.EnsureSuccessStatusCode();
-        var issued = Required(await issueResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("OPEN", issued.Status);
-        Assert.NotNull(issued.ActiveWorkPeriodId);
-    }
-
-    [Fact]
-    public async Task WorkflowTasksRouteHsseValidationAndBindIssueToApprover()
-    {
-        var location = $"AREA-TASK-{Guid.NewGuid():N}";
-        using var sponsor = factory.CreateClient();
-        using var createResponse = await sponsor.PostAsJsonAsync(
-            "/api/v1/permits",
-            Draft(location, "Task workflow") with
-            {
-                ValidFrom = DateTimeOffset.UtcNow.AddMinutes(-5),
-                ValidUntil = DateTimeOffset.UtcNow.AddHours(8)
-            });
-        createResponse.EnsureSuccessStatusCode();
-        var created = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
-
-        using var submit = Submit(
-            created.Id,
-            created.ETag,
-            Guid.NewGuid().ToString("N"),
-            new SubmitPermitRequest(true, true, true, []));
-        using var submitResponse = await sponsor.SendAsync(submit);
-        submitResponse.EnsureSuccessStatusCode();
-        var underReview = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
-
-        using var validator = WorkflowClient(
-            "hsse.validator.task",
-            "HSSEValidator",
-            location);
-        var validationTasks = await GetTasksAsync(validator);
-        Assert.Equal("HSSE_VALIDATION", Assert.Single(validationTasks.Items).Type);
-
-        using var hsse = WorkflowCommand(
-            underReview.Id,
-            "validations/hsse/endorse",
-            underReview.ETag,
-            new EndorsePermitValidationRequest("Validasi HSSE oleh pemegang multi-role."));
-        using var hsseResponse = await validator.SendAsync(hsse);
-        hsseResponse.EnsureSuccessStatusCode();
-        var awaitingApproval = Required(await hsseResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("AWAITING_APPROVAL", awaitingApproval.Status);
-        Assert.Empty((await GetTasksAsync(validator)).Items);
-
-        using var approver = WorkflowClient("area.owner.primary", "AreaOwnerApprover", location);
-        Assert.Equal("AREA_OWNER_APPROVAL", Assert.Single((await GetTasksAsync(approver)).Items).Type);
-        using var approval = WorkflowCommand(
-            awaitingApproval.Id,
-            "approve",
-            awaitingApproval.ETag,
-            new ApprovePermitRequest("Disetujui PIC pemilik area."));
-        using var approvalResponse = await approver.SendAsync(approval);
-        approvalResponse.EnsureSuccessStatusCode();
-        var approved = Required(await approvalResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("AREA_OWNER_ISSUE", Assert.Single((await GetTasksAsync(approver)).Items).Type);
-
-        var ready = new IssuePermitRequest(true, true, true, true, true, true, true, true, false);
-        using var otherAreaOwner = WorkflowClient("area.owner.other", "AreaOwnerApprover", location);
-        Assert.Empty((await GetTasksAsync(otherAreaOwner)).Items);
-        using var deniedIssue = WorkflowCommand(approved.Id, "issue", approved.ETag, ready);
-        using var deniedResponse = await otherAreaOwner.SendAsync(deniedIssue);
-        Assert.Equal(HttpStatusCode.Forbidden, deniedResponse.StatusCode);
-
-        using var issue = WorkflowCommand(approved.Id, "issue", approved.ETag, ready);
-        using var issueResponse = await approver.SendAsync(issue);
-        issueResponse.EnsureSuccessStatusCode();
-        Assert.Empty((await GetTasksAsync(approver)).Items);
-    }
-
-    [Fact]
-    public async Task SponsorSuspensionRequestImmediatelyStopsWorkAndRequiresAreaOwnerApproval()
-    {
-        var location = $"AREA-SUSPEND-{Guid.NewGuid():N}";
-        using var sponsor = factory.CreateClient();
-        using var hsse = WorkflowClient("hsse.suspension", "HSSEValidator", location);
-        using var areaOwner = WorkflowClient("area.owner.suspension", "AreaOwnerApprover", location);
-        var open = await CreateOpenPermitAsync(sponsor, hsse, areaOwner, location);
-
-        using var unauthorizedRequest = WorkflowCommand(
-            open.Id,
-            "suspensions/request",
-            open.ETag,
-            new PermitReasonRequest("Permintaan oleh pihak yang bukan Sponsor."));
-        using var unauthorizedResponse = await hsse.SendAsync(unauthorizedRequest);
-        Assert.Equal(HttpStatusCode.Forbidden, unauthorizedResponse.StatusCode);
-
-        var key = Guid.NewGuid().ToString("N");
-        var reason = new PermitReasonRequest("Kondisi lapangan berubah dan pekerjaan harus dihentikan.");
-        using var request = WorkflowCommand(open.Id, "suspensions/request", open.ETag, reason, key);
-        using var requestResponse = await sponsor.SendAsync(request);
-        requestResponse.EnsureSuccessStatusCode();
-        var requested = Required(await requestResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("SUSPENSION_REQUESTED", requested.Status);
-        Assert.Null(requested.ActiveWorkPeriodId);
-        Assert.True(requested.Workflow.Suspension.Requested);
-        Assert.False(requested.Workflow.Suspension.Approved);
-        Assert.Equal("SUSPENSION_APPROVAL", Assert.Single((await GetTasksAsync(areaOwner)).Items).Type);
-
-        using var replay = WorkflowCommand(open.Id, "suspensions/request", open.ETag, reason, key);
-        using var replayResponse = await sponsor.SendAsync(replay);
-        replayResponse.EnsureSuccessStatusCode();
-        Assert.Equal(
-            requested.Version,
-            (await replayResponse.Content.ReadFromJsonAsync<PermitResponse>())?.Version);
-
-        using var sponsorApproval = WorkflowCommand(
-            requested.Id,
-            "suspensions/approve",
-            requested.ETag,
-            new ConfirmPermitActionRequest("Sponsor tidak boleh menyetujui sendiri."));
-        using var sponsorApprovalResponse = await sponsor.SendAsync(sponsorApproval);
-        Assert.Equal(HttpStatusCode.Forbidden, sponsorApprovalResponse.StatusCode);
-
-        using var approval = WorkflowCommand(
-            requested.Id,
-            "suspensions/approve",
-            requested.ETag,
-            new ConfirmPermitActionRequest("Pemilik area menyetujui penangguhan."));
-        using var approvalResponse = await areaOwner.SendAsync(approval);
-        approvalResponse.EnsureSuccessStatusCode();
-        var suspended = Required(await approvalResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("SUSPENDED", suspended.Status);
-        Assert.Null(suspended.ActiveWorkPeriodId);
-        Assert.True(suspended.Workflow.Suspension.Approved);
-        Assert.Empty((await GetTasksAsync(areaOwner)).Items);
-    }
-
-    [Fact]
-    public async Task CompletionRequiresSponsorHsseAndAreaOwnerBeforeAreaOwnerCanClose()
-    {
-        var location = $"AREA-COMPLETE-{Guid.NewGuid():N}";
-        using var sponsor = factory.CreateClient();
-        using var hsse = WorkflowClient("hsse.completion", "HSSEValidator", location);
-        using var areaOwner = WorkflowClient("area.owner.completion", "AreaOwnerApprover", location);
-        var open = await CreateOpenPermitAsync(sponsor, hsse, areaOwner, location);
-
-        using var earlyClose = WorkflowCommand(
-            open.Id,
-            "close",
-            open.ETag,
-            new ConfirmPermitActionRequest("Belum ada konfirmasi penyelesaian."));
-        using var earlyCloseResponse = await areaOwner.SendAsync(earlyClose);
-        Assert.Equal(HttpStatusCode.Conflict, earlyCloseResponse.StatusCode);
-        Assert.Equal("permit.invalid_transition", await ProblemCodeAsync(earlyCloseResponse));
-
-        using var declaration = WorkflowCommand(
-            open.Id,
-            "completion/declare",
-            open.ETag,
-            new ConfirmPermitActionRequest("Pekerjaan telah selesai dan area siap diperiksa."));
-        using var declarationResponse = await sponsor.SendAsync(declaration);
-        declarationResponse.EnsureSuccessStatusCode();
-        var pending = Required(await declarationResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("COMPLETION_CONFIRMATION_PENDING", pending.Status);
-        Assert.Null(pending.ActiveWorkPeriodId);
-        Assert.True(pending.Workflow.Completion.Sponsor.Completed);
-        Assert.False(pending.Workflow.Completion.Hsse.Completed);
-        Assert.False(pending.Workflow.Completion.AreaOwner.Completed);
-        Assert.Equal("HSSE_COMPLETION_CONFIRMATION", Assert.Single((await GetTasksAsync(hsse)).Items).Type);
-        Assert.Equal("AREA_OWNER_COMPLETION_CONFIRMATION", Assert.Single((await GetTasksAsync(areaOwner)).Items).Type);
-
-        using var areaConfirmation = WorkflowCommand(
-            pending.Id,
-            "completion/confirm/area-owner",
-            pending.ETag,
-            new ConfirmPermitActionRequest("Area telah diperiksa oleh pemilik area."));
-        using var areaConfirmationResponse = await areaOwner.SendAsync(areaConfirmation);
-        areaConfirmationResponse.EnsureSuccessStatusCode();
-        var awaitingHsse = Required(await areaConfirmationResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("COMPLETION_CONFIRMATION_PENDING", awaitingHsse.Status);
-        Assert.True(awaitingHsse.Workflow.Completion.AreaOwner.Completed);
-        Assert.False(awaitingHsse.Workflow.Completion.Hsse.Completed);
-        Assert.Empty((await GetTasksAsync(areaOwner)).Items);
-
-        using var stillEarlyClose = WorkflowCommand(
-            awaitingHsse.Id,
-            "close",
-            awaitingHsse.ETag,
-            new ConfirmPermitActionRequest("HSSE belum mengonfirmasi."));
-        using var stillEarlyCloseResponse = await areaOwner.SendAsync(stillEarlyClose);
-        Assert.Equal(HttpStatusCode.Conflict, stillEarlyCloseResponse.StatusCode);
-
-        using var hsseConfirmation = WorkflowCommand(
-            awaitingHsse.Id,
-            "completion/confirm/hsse",
-            awaitingHsse.ETag,
-            new ConfirmPermitActionRequest("Kondisi akhir pekerjaan aman."));
-        using var hsseConfirmationResponse = await hsse.SendAsync(hsseConfirmation);
-        hsseConfirmationResponse.EnsureSuccessStatusCode();
-        var completed = Required(await hsseConfirmationResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("WORK_COMPLETED", completed.Status);
-        Assert.True(completed.Workflow.Completion.Hsse.Completed);
-        Assert.True(completed.Workflow.Completion.AreaOwner.Completed);
-        Assert.Empty((await GetTasksAsync(hsse)).Items);
-        Assert.Equal("AREA_OWNER_CLOSE", Assert.Single((await GetTasksAsync(areaOwner)).Items).Type);
-
-        using var hsseClose = WorkflowCommand(
-            completed.Id,
-            "close",
-            completed.ETag,
-            new ConfirmPermitActionRequest("HSSE tidak berwenang menutup."));
-        using var hsseCloseResponse = await hsse.SendAsync(hsseClose);
-        Assert.Equal(HttpStatusCode.Forbidden, hsseCloseResponse.StatusCode);
-
-        using var close = WorkflowCommand(
-            completed.Id,
-            "close",
-            completed.ETag,
-            new ConfirmPermitActionRequest("PIC pemilik area menutup PTW."));
-        using var closeResponse = await areaOwner.SendAsync(close);
-        closeResponse.EnsureSuccessStatusCode();
-        var closed = Required(await closeResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("CLOSED", closed.Status);
-        Assert.Empty((await GetTasksAsync(areaOwner)).Items);
-    }
-
-    [Fact]
-    public async Task ValidatorCanRequestRevisionAndResubmissionCreatesFreshVersionTasks()
-    {
-        var location = $"AREA-REVISION-{Guid.NewGuid():N}";
-        using var sponsor = factory.CreateClient();
-        var created = await CreatePermitAsync(sponsor, location);
-        using var submit = Submit(
-            created.Id,
-            created.ETag,
-            Guid.NewGuid().ToString("N"),
-            new SubmitPermitRequest(true, true, true, []));
-        using var submitResponse = await sponsor.SendAsync(submit);
-        submitResponse.EnsureSuccessStatusCode();
-        var underReview = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
-
-        using var areaOwner = WorkflowClient("area.owner.early", "AreaOwnerApprover", location);
-        using var deniedRevision = WorkflowCommand(
-            underReview.Id,
-            "request-revision",
-            underReview.ETag,
-            new PermitReasonRequest("Area owner belum berada pada tahap approval."));
-        using var deniedRevisionResponse = await areaOwner.SendAsync(deniedRevision);
-        Assert.Equal(HttpStatusCode.Forbidden, deniedRevisionResponse.StatusCode);
-
-        using var validator = WorkflowClient("hsse.reviewer", "HSSEValidator", location);
-        var key = Guid.NewGuid().ToString("N");
-        var reason = new PermitReasonRequest("Kontrol isolasi berubah material.");
-        using var revision = WorkflowCommand(
-            underReview.Id,
-            "request-revision",
-            underReview.ETag,
-            reason,
-            key);
-        using var revisionResponse = await validator.SendAsync(revision);
-        revisionResponse.EnsureSuccessStatusCode();
-        var revisionRequired = Required(await revisionResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("REVISION_REQUIRED", revisionRequired.Status);
-        Assert.False(revisionRequired.Workflow.Hsse.Completed);
-        Assert.False(revisionRequired.Workflow.GasDistribution.Completed);
-        Assert.Empty((await GetTasksAsync(validator)).Items);
-
-        using var replay = WorkflowCommand(
-            underReview.Id,
-            "request-revision",
-            underReview.ETag,
-            reason,
-            key);
-        using var replayResponse = await validator.SendAsync(replay);
-        replayResponse.EnsureSuccessStatusCode();
-        Assert.Equal(
-            revisionRequired.Status,
-            (await replayResponse.Content.ReadFromJsonAsync<PermitResponse>())?.Status);
-
-        var revised = await UpdatePermitAsync(sponsor, revisionRequired, "Draft setelah revisi material");
-        Assert.Equal(2, revised.Version);
-        using var resubmit = Submit(
-            revised.Id,
-            revised.ETag,
-            Guid.NewGuid().ToString("N"),
-            new SubmitPermitRequest(true, true, true, []));
-        using var resubmitResponse = await sponsor.SendAsync(resubmit);
-        resubmitResponse.EnsureSuccessStatusCode();
-        using var multiReviewer = WorkflowClient(
-            "multi.reviewer",
-            "HSSEValidator",
-            location);
-        var freshTasks = await GetTasksAsync(multiReviewer);
-        Assert.Single(freshTasks.Items);
-        Assert.All(freshTasks.Items, task => Assert.Equal(2, task.PermitVersion));
-    }
-
-    [Fact]
-    public async Task OnlyAreaOwnerCanRejectAtApprovalAndRejectionIsTerminalAndIdempotent()
-    {
-        var location = $"AREA-REJECT-{Guid.NewGuid():N}";
-        using var sponsor = factory.CreateClient();
-        var created = await CreatePermitAsync(sponsor, location);
-        using var submit = Submit(
-            created.Id,
-            created.ETag,
-            Guid.NewGuid().ToString("N"),
-            new SubmitPermitRequest(true, true, true, []));
-        using var submitResponse = await sponsor.SendAsync(submit);
-        submitResponse.EnsureSuccessStatusCode();
-        var current = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
-
-        using var validator = WorkflowClient(
-            "multi.reject.reviewer",
-            "HSSEValidator",
-            location);
-        using var hsse = WorkflowCommand(
-            current.Id,
-            "validations/hsse/endorse",
-            current.ETag,
-            new EndorsePermitValidationRequest("HSSE sesuai."));
-        using var hsseResponse = await validator.SendAsync(hsse);
-        hsseResponse.EnsureSuccessStatusCode();
-        current = Required(await hsseResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("AWAITING_APPROVAL", current.Status);
-
-        using var validatorReject = WorkflowCommand(
-            current.Id,
-            "reject",
-            current.ETag,
-            new PermitReasonRequest("Validator tidak berwenang pada tahap approval."));
-        using var validatorRejectResponse = await validator.SendAsync(validatorReject);
-        Assert.Equal(HttpStatusCode.Forbidden, validatorRejectResponse.StatusCode);
-
-        using var areaOwner = WorkflowClient("area.owner.reject", "AreaOwnerApprover", location);
-        var key = Guid.NewGuid().ToString("N");
-        var reason = new PermitReasonRequest("Risiko residual tidak dapat diterima.");
-        using var reject = WorkflowCommand(current.Id, "reject", current.ETag, reason, key);
-        using var rejectResponse = await areaOwner.SendAsync(reject);
-        rejectResponse.EnsureSuccessStatusCode();
-        var rejected = Required(await rejectResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal("REJECTED", rejected.Status);
-        Assert.Empty((await GetTasksAsync(areaOwner)).Items);
-
-        using var replay = WorkflowCommand(current.Id, "reject", current.ETag, reason, key);
-        using var replayResponse = await areaOwner.SendAsync(replay);
-        replayResponse.EnsureSuccessStatusCode();
-        using var mismatch = WorkflowCommand(
-            current.Id,
-            "reject",
-            current.ETag,
-            reason with { Reason = "Alasan berbeda." },
-            key);
-        using var mismatchResponse = await areaOwner.SendAsync(mismatch);
-        Assert.Equal(HttpStatusCode.Conflict, mismatchResponse.StatusCode);
-        Assert.Equal("idempotency.payload_mismatch", await ProblemCodeAsync(mismatchResponse));
-
-        using var updateRejected = PatchDraft(rejected.Id, rejected.ETag, Draft(location, "Tidak boleh diubah"));
-        using var updateRejectedResponse = await sponsor.SendAsync(updateRejected);
-        Assert.Equal(HttpStatusCode.Conflict, updateRejectedResponse.StatusCode);
-        Assert.Equal("permit.invalid_transition", await ProblemCodeAsync(updateRejectedResponse));
-    }
-
-    private static async Task<PermitResponse> CreatePermitAsync(HttpClient client, string location)
-    {
-        using var response = await client.PostAsJsonAsync("/api/v1/permits", Draft(location, "Draft awal"));
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<PermitResponse>()
-            ?? throw new InvalidOperationException("API tidak mengembalikan permit.");
-    }
-
-    private static async Task<PermitResponse> CreateOpenPermitAsync(
+    private async Task<PermitResponse> CreateAndValidateAsync(
         HttpClient sponsor,
-        HttpClient hsse,
-        HttpClient areaOwner,
-        string location)
+        HttpClient validator,
+        string sponsorId)
     {
-        using var createResponse = await sponsor.PostAsJsonAsync(
-            "/api/v1/permits",
-            Draft(location, "Flow operasional") with
-            {
-                ValidFrom = DateTimeOffset.UtcNow.AddMinutes(-5),
-                ValidUntil = DateTimeOffset.UtcNow.AddHours(8)
-            });
-        createResponse.EnsureSuccessStatusCode();
-        var created = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
-
-        using var submit = Submit(
-            created.Id,
-            created.ETag,
-            Guid.NewGuid().ToString("N"),
-            new SubmitPermitRequest(true, true, true, []));
-        using var submitResponse = await sponsor.SendAsync(submit);
-        submitResponse.EnsureSuccessStatusCode();
-        var underReview = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
-
-        using var validation = WorkflowCommand(
-            underReview.Id,
-            "validations/hsse/endorse",
-            underReview.ETag,
-            new EndorsePermitValidationRequest("Persyaratan HSSE sesuai."));
-        using var validationResponse = await hsse.SendAsync(validation);
-        validationResponse.EnsureSuccessStatusCode();
-        var awaitingApproval = Required(await validationResponse.Content.ReadFromJsonAsync<PermitResponse>());
-
-        using var approval = WorkflowCommand(
-            awaitingApproval.Id,
-            "approve",
-            awaitingApproval.ETag,
-            new ApprovePermitRequest("Disetujui PIC pemilik area."));
-        using var approvalResponse = await areaOwner.SendAsync(approval);
-        approvalResponse.EnsureSuccessStatusCode();
-        var approved = Required(await approvalResponse.Content.ReadFromJsonAsync<PermitResponse>());
-
-        using var issue = WorkflowCommand(
-            approved.Id,
-            "issue",
-            approved.ETag,
-            new IssuePermitRequest(true, true, true, true, true, true, true, true, false));
-        using var issueResponse = await areaOwner.SendAsync(issue);
-        issueResponse.EnsureSuccessStatusCode();
-        return Required(await issueResponse.Content.ReadFromJsonAsync<PermitResponse>());
-    }
-
-    private static async Task<PermitResponse> UpdatePermitAsync(
-        HttpClient client,
-        PermitResponse permit,
-        string title)
-    {
-        using var request = PatchDraft(permit.Id, permit.ETag, Draft(permit.Draft.LocationId, title));
-        using var response = await client.SendAsync(request);
+        var submitted = await CreateAndSubmitAsync(sponsor, sponsorId);
+        var task = await PendingTaskAsync(submitted.Id, "HSE_VALIDATION");
+        using var response = await validator.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{task.Id}/validate",
+            submitted.ETag,
+            new ValidateSubmissionRequest("JSA dan requirement telah diverifikasi.")));
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<PermitResponse>()
-            ?? throw new InvalidOperationException("API tidak mengembalikan permit yang diperbarui.");
+        return Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
     }
 
-    private static HttpRequestMessage PatchDraft(Guid id, string etag, PermitDraftRequest draft)
+    private static async Task<PermitResponse> CreateAndSubmitAsync(HttpClient sponsor, string sponsorId)
     {
-        var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/v1/permits/{id}/draft")
-        {
-            Content = JsonContent.Create(draft)
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", etag);
-        return request;
-    }
-
-    private static HttpRequestMessage Submit(Guid id, string etag, string key, SubmitPermitRequest command)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/permits/{id}/submit")
-        {
-            Content = JsonContent.Create(command)
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", etag);
-        request.Headers.Add("Idempotency-Key", key);
-        return request;
-    }
-
-    private static HttpRequestMessage RenewalRequest(
-        Guid sourcePermitId,
-        string etag,
-        string key,
-        RequestPermitRenewalRequest command)
-    {
-        var request = new HttpRequestMessage(
+        var draft = await CreateAsync(sponsor, sponsorId, "ORF");
+        using var response = await sponsor.SendAsync(Command(
             HttpMethod.Post,
-            $"/api/v1/permits/{sourcePermitId}/renewals")
-        {
-            Content = JsonContent.Create(command)
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", etag);
-        request.Headers.Add("Idempotency-Key", key);
-        return request;
+            $"/api/v1/permits/{draft.Id}/submit",
+            draft.ETag,
+            ReadyToSubmit()));
+        response.EnsureSuccessStatusCode();
+        return Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
     }
 
-    private static HttpRequestMessage AttachmentUpload(
-        Guid id,
-        string etag,
-        string fileName,
-        string content,
-        string mediaType = "application/pdf",
-        string? idempotencyKey = null)
+    private static async Task<PermitResponse> CreateAsync(HttpClient client, string sponsorId, string location)
     {
-        var file = new ByteArrayContent(Encoding.UTF8.GetBytes(content));
-        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mediaType);
-        var multipart = new MultipartFormDataContent();
-        multipart.Add(file, "file", fileName);
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/permits/{id}/attachments")
-        {
-            Content = multipart
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", etag);
-        request.Headers.Add("Idempotency-Key", idempotencyKey ?? Guid.NewGuid().ToString("N"));
-        return request;
+        using var response = await client.PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, location));
+        response.EnsureSuccessStatusCode();
+        return Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
     }
 
-    private static HttpRequestMessage AttachmentRemove(Guid permitId, Guid attachmentId, string etag)
+    private async Task<PermitTaskRecord> PendingTaskAsync(Guid permitId, string type)
     {
-        var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/api/v1/permits/{permitId}/attachments/{attachmentId}/remove")
-        {
-            Content = JsonContent.Create(new { })
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", etag);
-        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
-        return request;
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+        return await db.PermitTasks.AsNoTracking().SingleAsync(
+            x => x.PermitId == permitId && x.Type == type && x.Status == "PENDING");
     }
 
-    private HttpClient WorkflowClient(string userId, string role, string locations)
+    private HttpClient Client(string userId, string roles, string locations)
     {
         var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Dev-User", userId);
         client.DefaultRequestHeaders.Add("X-Dev-Name", userId);
-        client.DefaultRequestHeaders.Add("X-Dev-Roles", role);
+        client.DefaultRequestHeaders.Add("X-Dev-Roles", roles);
         client.DefaultRequestHeaders.Add("X-Dev-Locations", locations);
         return client;
     }
 
-    private static HttpRequestMessage WorkflowCommand<TRequest>(
-        Guid id,
-        string command,
+    private static HttpRequestMessage Command<T>(
+        HttpMethod method,
+        string path,
         string etag,
-        TRequest body,
-        string? idempotencyKey = null)
+        T body,
+        string? idempotencyKey = "auto")
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/permits/{id}/{command}")
-        {
-            Content = JsonContent.Create(body)
-        };
+        var request = new HttpRequestMessage(method, path) { Content = JsonContent.Create(body) };
         request.Headers.TryAddWithoutValidation("If-Match", etag);
-        request.Headers.Add("Idempotency-Key", idempotencyKey ?? Guid.NewGuid().ToString("N"));
+        if (idempotencyKey is not null)
+        {
+            request.Headers.Add(
+                "Idempotency-Key",
+                idempotencyKey == "auto" ? Guid.NewGuid().ToString("N") : idempotencyKey);
+        }
+
         return request;
     }
 
-    private static PermitDraftRequest Draft(string location, string title) => new(
-        title,
-        "Pekerjaan terencana untuk integration test.",
-        location,
-        "sponsor.demo",
-        "Pelaksana Integration Test",
-        "PT Integration Test",
-        "ColdWork",
-        "Medium",
-        DateTimeOffset.UtcNow.AddHours(1),
-        DateTimeOffset.UtcNow.AddHours(9),
-        null,
-        null,
-        ["Energi tersimpan"],
-        ["Isolasi energi"],
-        []);
+    private static SubmitPermitRequest ReadyToSubmit() => new(true, true, true, []);
+
+    private static PermitDraftRequest Draft(string sponsorId, string location)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new PermitDraftRequest(
+            $"Pekerjaan {Guid.NewGuid():N}",
+            "Pekerjaan sesuai JSA.",
+            location,
+            sponsorId,
+            "Pelaksana Uji",
+            "PT Mitra Uji",
+            "HotWork",
+            "High",
+            now.AddHours(1),
+            now.AddDays(1),
+            "esimi-test",
+            $"ESM-{Guid.NewGuid():N}",
+            [],
+            [],
+            ["JSA"]);
+    }
 
     private static async Task<string?> ProblemCodeAsync(HttpResponseMessage response)
     {
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        return document.RootElement.GetProperty("code").GetString();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return json.TryGetProperty("code", out var code) ? code.GetString() : null;
     }
 
-    private static async Task<PagedResponse<PermitTaskResponse>> GetTasksAsync(HttpClient client)
-    {
-        using var response = await client.GetAsync("/api/v1/tasks");
-        response.EnsureSuccessStatusCode();
-        return Required(await response.Content.ReadFromJsonAsync<PagedResponse<PermitTaskResponse>>());
-    }
+    private static string Unique(string prefix) => $"{prefix}.{Guid.NewGuid():N}";
 
-    private static T Required<T>(T? value) where T : class =>
-        value ?? throw new InvalidOperationException("API tidak mengembalikan response yang diharapkan.");
+    private static T Required<T>(T? value) where T : class => Assert.IsType<T>(value);
 }

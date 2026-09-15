@@ -58,6 +58,7 @@ public static class InfrastructureServices
             attachmentSettings.Enabled
                 ? new LocalAttachmentStorage(provider.GetRequiredService<AttachmentSettings>())
                 : new DisabledAttachmentStorage());
+        services.AddSingleton<IMalwareScanner, UnavailableMalwareScanner>();
         return services;
     }
 }

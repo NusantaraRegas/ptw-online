@@ -216,6 +216,15 @@ public sealed class PermitAttachmentStore(
         Sha256 = entry.Sha256,
         StorageKey = entry.StorageKey,
         ScanStatus = entry.ScanStatus,
+        ScanEvidenceReference = entry.ScanEvidenceReference,
+        ScannedAt = entry.ScannedAt,
+        Category = entry.Category,
+        DocumentNumber = entry.DocumentNumber,
+        DocumentRevision = entry.DocumentRevision,
+        DocumentDate = entry.DocumentDate,
+        TargetPermitVersion = entry.TargetPermitVersion,
+        PrintPackageId = entry.PrintPackageId,
+        SupersedesAttachmentId = entry.SupersedesAttachmentId,
         UploadedBy = entry.UploadedBy,
         UploadedAt = entry.UploadedAt
     };
@@ -231,6 +240,15 @@ public sealed class PermitAttachmentStore(
         record.Sha256,
         record.StorageKey,
         record.ScanStatus,
+        record.ScanEvidenceReference,
+        record.ScannedAt,
+        record.Category,
+        record.DocumentNumber,
+        record.DocumentRevision,
+        record.DocumentDate,
+        record.TargetPermitVersion,
+        record.PrintPackageId,
+        record.SupersedesAttachmentId,
         record.UploadedBy,
         record.UploadedAt);
 

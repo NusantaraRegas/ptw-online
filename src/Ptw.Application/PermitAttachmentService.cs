@@ -16,6 +16,7 @@ public sealed class PermitAttachmentService(
     IPermitStore permitStore,
     IPermitAttachmentStore attachmentStore,
     IAttachmentStorage storage,
+    IMalwareScanner malwareScanner,
     IActorContext actorContext,
     IClock clock,
     AttachmentPolicy policy)
@@ -39,29 +40,58 @@ public sealed class PermitAttachmentService(
         string declaredMediaType,
         long declaredLength,
         Stream content,
+        string category,
+        string? documentNumber,
+        string? documentRevision,
+        DateTimeOffset? documentDate,
+        Guid? printPackageId,
+        Guid? supersedesAttachmentId,
         string expectedETag,
         string idempotencyKey,
         string correlationId,
         CancellationToken cancellationToken)
     {
-        EnsureFeatureAvailable();
+        EnsureUploadAvailable();
         EnsureIdempotencyKey(idempotencyKey);
         if (declaredLength <= 0 || declaredLength > policy.MaxFileBytes)
         {
             throw new InvalidRequestException(
                 "attachment.size_invalid",
-                $"Ukuran PDF harus lebih dari 0 byte dan tidak melebihi {policy.MaxFileBytes} byte.");
+                $"Ukuran file harus lebih dari 0 byte dan tidak melebihi {policy.MaxFileBytes} byte.");
         }
 
-        var normalizedName = NormalizePdfFileName(fileName);
-        if (!string.IsNullOrWhiteSpace(declaredMediaType)
-            && !string.Equals(declaredMediaType, "application/pdf", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(declaredMediaType, "application/octet-stream", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidRequestException("attachment.media_type_invalid", "Hanya file PDF yang dapat diunggah.");
-        }
+        var normalizedName = NormalizeFileName(fileName);
+        var normalizedCategory = NormalizeCategory(category);
+        EnsureMetadata(normalizedCategory, documentNumber, documentRevision, documentDate, printPackageId);
 
         var storedPermit = await GetOwnedPermitAsync(permitId, cancellationToken);
+        EnsurePermitAllowsCategory(storedPermit.Permit, normalizedCategory);
+        var targetPermitVersion = storedPermit.Permit.Version;
+        if (printPackageId is Guid packageId)
+        {
+            var package = await permitStore.FindPrintPackageAsync(packageId, cancellationToken);
+            if (package is null || package.PermitId != permitId)
+            {
+                throw new InvalidRequestException(
+                    "attachment.print_package_mismatch",
+                    "PrintPackage tidak berasal dari PTW dan PermitVersion yang dipilih.");
+            }
+
+
+            targetPermitVersion = package.PermitVersion;
+        }
+
+        if (supersedesAttachmentId is Guid previousId)
+        {
+            var previous = await attachmentStore.FindActiveAsync(permitId, previousId, cancellationToken)
+                ?? throw new ResourceNotFoundException("Lampiran yang digantikan", previousId);
+            if (!string.Equals(previous.Category, normalizedCategory, StringComparison.Ordinal))
+            {
+                throw new InvalidRequestException(
+                    "attachment.replacement_category_mismatch",
+                    "Lampiran pengganti wajib memiliki kategori yang sama dengan file sebelumnya.");
+            }
+        }
 
         var attachmentId = Guid.CreateVersion7();
         StoredAttachmentContent? storedContent = null;
@@ -79,12 +109,27 @@ public sealed class PermitAttachmentService(
                     "Ukuran file yang diterima tidak sesuai dengan metadata upload.");
             }
 
+            EnsureDetectedTypeMatches(normalizedName, declaredMediaType, storedContent.DetectedMediaType);
+            var scan = await ScanAsync(storedContent, cancellationToken);
+
             var requestHash = Hash(new
             {
                 PermitId = permitId,
                 FileName = normalizedName,
                 storedContent.SizeBytes,
                 storedContent.Sha256
+                ,
+                Category = normalizedCategory
+                ,
+                documentNumber
+                ,
+                documentRevision
+                ,
+                documentDate
+                ,
+                printPackageId
+                ,
+                supersedesAttachmentId
             });
             var actor = actorContext.Current;
             var prior = await attachmentStore.FindIdempotentResultAsync(
@@ -99,7 +144,6 @@ public sealed class PermitAttachmentService(
                 return ToMutationResponse(prior);
             }
 
-            EnsurePermitEditable(storedPermit.Permit);
             var activeAttachments = await attachmentStore.ListActiveAsync(permitId, cancellationToken);
             if (activeAttachments.Count >= policy.MaxFilesPerPermit)
             {
@@ -109,7 +153,14 @@ public sealed class PermitAttachmentService(
             }
 
             var now = clock.UtcNow;
-            storedPermit.Permit.AddAttachment(attachmentId, now);
+            if (normalizedCategory == "SIGNED_FIELD_COPY")
+            {
+                storedPermit.Permit.AddSignedFieldCopy(attachmentId, printPackageId!.Value, now);
+            }
+            else
+            {
+                storedPermit.Permit.AddAttachment(attachmentId, now);
+            }
             var attachment = new PermitAttachmentEntry(
                 attachmentId,
                 permitId,
@@ -120,7 +171,16 @@ public sealed class PermitAttachmentService(
                 storedContent.DetectedMediaType,
                 storedContent.Sha256,
                 storedContent.StorageKey,
-                "NOT_SCANNED",
+                scan.Status,
+                scan.EvidenceReference,
+                scan.ScannedAt,
+                normalizedCategory,
+                NormalizeOptional(documentNumber),
+                NormalizeOptional(documentRevision),
+                documentDate?.ToUniversalTime(),
+                targetPermitVersion,
+                printPackageId,
+                supersedesAttachmentId,
                 actor.Id,
                 now);
             var result = await attachmentStore.AddAsync(
@@ -152,7 +212,7 @@ public sealed class PermitAttachmentService(
         string correlationId,
         CancellationToken cancellationToken)
     {
-        EnsureFeatureAvailable();
+        EnsureFeatureEnabled();
         EnsureIdempotencyKey(idempotencyKey);
         var actor = actorContext.Current;
         var storedPermit = await GetOwnedPermitAsync(permitId, cancellationToken);
@@ -192,6 +252,13 @@ public sealed class PermitAttachmentService(
         await EnsureCanReadPermitAsync(permitId, cancellationToken);
         var attachment = await attachmentStore.FindActiveAsync(permitId, attachmentId, cancellationToken)
             ?? throw new ResourceNotFoundException("Lampiran", attachmentId);
+        if (!string.Equals(attachment.ScanStatus, "CLEAN", StringComparison.Ordinal))
+        {
+            throw new InvalidRequestException(
+                "attachment.not_clean",
+                "Lampiran belum dinyatakan aman oleh malware scanner dan tidak dapat diunduh.");
+        }
+
         var content = await storage.OpenReadAsync(attachment.StorageKey, cancellationToken);
         return new PermitAttachmentDownload(
             content,
@@ -234,7 +301,7 @@ public sealed class PermitAttachmentService(
 
     private async Task EnsureCanReadPermitAsync(Guid permitId, CancellationToken cancellationToken)
     {
-        EnsureFeatureAvailable();
+        EnsureFeatureEnabled();
         var stored = await permitStore.FindAsync(permitId, cancellationToken)
             ?? throw new ResourceNotFoundException("Permit", permitId);
         var actor = actorContext.Current;
@@ -244,21 +311,77 @@ public sealed class PermitAttachmentService(
         }
 
         EnsureLocationScope(actor, stored.Permit.Draft.LocationId);
+        if (actor.Roles.Contains("Sponsor")
+            && !actor.Roles.Overlaps(["HSEValidator", "AreaOwnerManager", "Administrator"])
+            && !string.Equals(actor.Id, stored.Permit.Draft.SponsorId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException("Lampiran PTW berada di luar kepemilikan Sponsor.");
+        }
     }
 
-    private void EnsureFeatureAvailable()
+    private void EnsureFeatureEnabled()
     {
         if (!policy.Enabled)
         {
             throw new InvalidRequestException("attachment.disabled", "Fitur lampiran belum diaktifkan.");
         }
+    }
 
+    private void EnsureUploadAvailable()
+    {
+        EnsureFeatureEnabled();
         if (policy.RequireMalwareScan)
         {
-            throw new InvalidRequestException(
-                "attachment.scanner_required",
-                "Upload dinonaktifkan sampai malware scanner production tersedia.");
+            if (!malwareScanner.IsAvailable)
+            {
+                throw new InvalidRequestException(
+                    "attachment.scanner_required",
+                    "Upload dinonaktifkan sampai malware scanner production tersedia.");
+            }
         }
+    }
+
+    private async Task<MalwareScanResult> ScanAsync(
+        StoredAttachmentContent storedContent,
+        CancellationToken cancellationToken)
+    {
+        if (!malwareScanner.IsAvailable)
+        {
+            return new MalwareScanResult("PENDING", null, null);
+        }
+
+        await using var scanContent = await storage.OpenReadAsync(storedContent.StorageKey, cancellationToken);
+        var result = await malwareScanner.ScanAsync(
+            scanContent,
+            storedContent.DetectedMediaType,
+            storedContent.Sha256,
+            cancellationToken);
+        var status = result.Status.Trim().ToUpperInvariant();
+        if (status is not ("CLEAN" or "REJECTED"))
+        {
+            if (policy.RequireMalwareScan)
+            {
+                throw new InvalidRequestException(
+                    "attachment.scan_inconclusive",
+                    "Malware scanner tidak menghasilkan keputusan final yang dapat diverifikasi.");
+            }
+
+            return new MalwareScanResult("PENDING", null, null);
+        }
+
+        if (string.IsNullOrWhiteSpace(result.EvidenceReference) || result.ScannedAt is null)
+        {
+            throw new InvalidRequestException(
+                "attachment.scan_evidence_missing",
+                "Hasil malware scanner wajib menyertakan referensi evidence.");
+        }
+
+        return result with
+        {
+            Status = status,
+            EvidenceReference = result.EvidenceReference.Trim(),
+            ScannedAt = result.ScannedAt.Value.ToUniversalTime()
+        };
     }
 
     private static void EnsureIdempotencyKey(string idempotencyKey)
@@ -279,19 +402,97 @@ public sealed class PermitAttachmentService(
         }
     }
 
-    private static string NormalizePdfFileName(string fileName)
+    private static string NormalizeFileName(string fileName)
     {
         var normalized = Path.GetFileName(fileName).Trim();
+        var extension = Path.GetExtension(normalized);
         if (string.IsNullOrWhiteSpace(normalized) || normalized.Length > 255
-            || !string.Equals(Path.GetExtension(normalized), ".pdf", StringComparison.OrdinalIgnoreCase))
+            || !new[] { ".pdf", ".jpg", ".jpeg", ".png" }.Contains(extension, StringComparer.OrdinalIgnoreCase))
         {
             throw new InvalidRequestException(
                 "attachment.file_name_invalid",
-                "Nama file harus valid, berakhiran .pdf, dan maksimum 255 karakter.");
+                "Nama file harus valid, berakhiran PDF/JPEG/PNG, dan maksimum 255 karakter.");
         }
 
         return normalized;
     }
+
+    private static string NormalizeCategory(string category)
+    {
+        var value = category.Trim().ToUpperInvariant();
+        return value is "SUPPORTING" or "JSA" or "SIGNED_FIELD_COPY"
+            ? value
+            : throw new InvalidRequestException(
+                "attachment.category_invalid",
+                "Kategori lampiran harus SUPPORTING, JSA, atau SIGNED_FIELD_COPY.");
+    }
+
+    private static void EnsureMetadata(
+        string category,
+        string? documentNumber,
+        string? documentRevision,
+        DateTimeOffset? documentDate,
+        Guid? printPackageId)
+    {
+        if (category is "JSA" or "SIGNED_FIELD_COPY"
+            && (string.IsNullOrWhiteSpace(documentNumber)
+                || string.IsNullOrWhiteSpace(documentRevision)
+                || documentDate is null))
+        {
+            throw new InvalidRequestException(
+                "attachment.document_metadata_required",
+                "Nomor, revisi, dan tanggal dokumen wajib untuk JSA dan signed field copy.");
+        }
+
+        if (category == "SIGNED_FIELD_COPY" && printPackageId is null)
+        {
+            throw new InvalidRequestException(
+                "attachment.print_package_required",
+                "SIGNED_FIELD_COPY wajib merujuk PrintPackage yang digunakan di lapangan.");
+        }
+    }
+
+    private static void EnsurePermitAllowsCategory(Permit permit, string category)
+    {
+        if (category == "SIGNED_FIELD_COPY")
+        {
+            if (permit.Status is not (PermitStatus.Issued or PermitStatus.Suspended or PermitStatus.Expired))
+            {
+                throw new InvalidRequestException(
+                    "attachment.signed_copy_state_invalid",
+                    "SIGNED_FIELD_COPY hanya dapat diunggah untuk PTW Diterbitkan, Ditangguhkan, atau Kedaluwarsa.");
+            }
+            return;
+        }
+
+        EnsurePermitEditable(permit);
+    }
+
+    private static void EnsureDetectedTypeMatches(
+        string fileName,
+        string declaredMediaType,
+        string detectedMediaType)
+    {
+        var expectedByExtension = Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".pdf" => "application/pdf",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            _ => string.Empty
+        };
+        if (!string.Equals(expectedByExtension, detectedMediaType, StringComparison.Ordinal)
+            || !string.IsNullOrWhiteSpace(declaredMediaType)
+                && !string.Equals(declaredMediaType, "application/octet-stream", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(declaredMediaType, detectedMediaType, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidRequestException(
+                "attachment.media_type_invalid",
+                "Extension, MIME yang dinyatakan, dan signature file tidak konsisten.");
+        }
+    }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string Hash<T>(T request)
     {
@@ -312,6 +513,15 @@ public sealed class PermitAttachmentService(
         value.MediaType,
         value.Sha256,
         value.ScanStatus,
+        value.ScanEvidenceReference,
+        value.ScannedAt,
+        value.Category,
+        value.DocumentNumber,
+        value.DocumentRevision,
+        value.DocumentDate,
+        value.TargetPermitVersion,
+        value.PrintPackageId,
+        value.SupersedesAttachmentId,
         value.UploadedBy,
         value.UploadedAt);
 }

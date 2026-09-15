@@ -6,7 +6,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Observable } from 'rxjs';
 import { DevelopmentIdentityStore } from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
-import { IssuePermitRequest, Permit, PermitApi, PermitDraft } from '../../core/permit-api';
+import { Permit, PermitApi, PermitDraft, PermitTask } from '../../core/permit-api';
 import { PermitAttachmentPermitChange, PermitAttachments } from './permit-attachments';
 import { PermitHistory } from './permit-history';
 import { PermitValidationProgress } from './permit-validation-progress';
@@ -40,6 +40,7 @@ export class PermitDetail {
   private permitId = '';
 
   protected readonly permit = signal<Permit | null>(null);
+  protected readonly tasks = signal<PermitTask[]>([]);
   protected readonly loading = signal(true);
   protected readonly editing = signal(false);
   protected readonly saving = signal(false);
@@ -69,16 +70,11 @@ export class PermitDetail {
     const labels: Record<string, string> = {
       DRAFT: 'Draft',
       REVISION_REQUIRED: 'Perlu revisi',
-      SUBMITTED: 'Diajukan',
-      UNDER_REVIEW: 'Sedang ditinjau',
-      AWAITING_APPROVAL: 'Menunggu persetujuan',
-      APPROVED: 'Disetujui — belum boleh bekerja',
-      READY_FOR_ISSUE: 'Siap diterbitkan',
-      OPEN: 'Diterbitkan — pekerjaan aktif',
-      SUSPENSION_REQUESTED: 'Permintaan penangguhan — pekerjaan dihentikan',
+      UNDER_VALIDATION: 'Menunggu validasi PIC HSE',
+      AWAITING_AREA_APPROVAL: 'Menunggu approval penerbitan pemilik area',
+      ISSUED: 'Diterbitkan — kontrol hardcopy tetap wajib',
       SUSPENDED: 'Ditangguhkan',
-      COMPLETION_CONFIRMATION_PENDING: 'Menunggu konfirmasi penyelesaian',
-      WORK_COMPLETED: 'Pekerjaan selesai',
+      CLOSURE_REQUESTED: 'Menunggu verifikasi penutupan',
       CLOSED: 'Ditutup',
       REJECTED: 'Ditolak',
       CANCELLED: 'Dibatalkan',
@@ -93,77 +89,54 @@ export class PermitDetail {
       (this.roles.includes('Sponsor') || this.roles.includes('Administrator')) &&
       !this.editing(),
   );
-  protected readonly canValidateHsse = computed(
+  protected readonly currentTask = computed(() =>
+    this.tasks().find((task) => task.permitId === this.permit()?.id),
+  );
+  protected readonly canValidateHse = computed(
     () =>
-      this.permit()?.status === 'UNDER_REVIEW' &&
-      this.roles.includes('HSSEValidator') &&
-      !this.permit()?.workflow.hsse.completed,
+      this.currentTask()?.type === 'HSE_VALIDATION' &&
+      this.roles.includes('HSEValidator') &&
+      this.permit()?.draft.sponsorId !== this.actorId,
   );
   protected readonly canApprove = computed(
-    () => this.permit()?.status === 'AWAITING_APPROVAL' && this.roles.includes('AreaOwnerApprover'),
-  );
-  protected readonly canIssue = computed(
     () =>
-      ['APPROVED', 'READY_FOR_ISSUE'].includes(this.permit()?.status ?? '') &&
-      this.roles.includes('AreaOwnerApprover') &&
-      this.permit()?.workflow.approvedBy === this.actorId,
+      this.currentTask()?.type === 'AREA_APPROVE_AND_ISSUE' &&
+      this.roles.includes('AreaOwnerManager'),
   );
   protected readonly canDisposition = computed(() => {
-    const status = this.permit()?.status;
+    const task = this.currentTask();
     return (
-      (status === 'UNDER_REVIEW' && this.roles.includes('HSSEValidator')) ||
-      (status === 'AWAITING_APPROVAL' && this.roles.includes('AreaOwnerApprover'))
+      !!task &&
+      ((task.type === 'HSE_VALIDATION' && this.roles.includes('HSEValidator')) ||
+        (task.type === 'AREA_APPROVE_AND_ISSUE' && this.roles.includes('AreaOwnerManager')))
     );
   });
-  protected readonly canRequestSuspension = computed(
+  protected readonly canSuspend = computed(
     () =>
-      this.permit()?.status === 'OPEN' &&
-      this.roles.includes('Sponsor') &&
-      this.permit()?.draft.sponsorId === this.actorId,
+      this.permit()?.status === 'ISSUED' &&
+      this.roles.some((role) =>
+        ['HSEValidator', 'AreaOwnerManager', 'Administrator'].includes(role),
+      ),
   );
   protected readonly canRequestRenewal = computed(
     () =>
-      this.permit()?.status === 'OPEN' &&
+      ['ISSUED', 'EXPIRED'].includes(this.permit()?.status ?? '') &&
       !this.permit()?.renewalPermitId &&
       this.roles.includes('Sponsor') &&
       this.permit()?.draft.sponsorId === this.actorId,
   );
-  protected readonly canApproveSuspension = computed(
+  protected readonly canResolveSuspension = computed(
     () =>
-      this.permit()?.status === 'SUSPENSION_REQUESTED' && this.roles.includes('AreaOwnerApprover'),
-  );
-  protected readonly canDeclareCompletion = computed(
-    () =>
-      this.permit()?.status === 'OPEN' &&
-      this.roles.includes('Sponsor') &&
-      this.permit()?.draft.sponsorId === this.actorId,
-  );
-  protected readonly canConfirmHsseCompletion = computed(
-    () =>
-      this.permit()?.status === 'COMPLETION_CONFIRMATION_PENDING' &&
-      this.roles.includes('HSSEValidator') &&
-      !this.permit()?.workflow.completion.hsse.completed,
-  );
-  protected readonly canConfirmAreaOwnerCompletion = computed(
-    () =>
-      this.permit()?.status === 'COMPLETION_CONFIRMATION_PENDING' &&
-      this.roles.includes('AreaOwnerApprover') &&
-      !this.permit()?.workflow.completion.areaOwner.completed,
-  );
-  protected readonly canClose = computed(
-    () => this.permit()?.status === 'WORK_COMPLETED' && this.roles.includes('AreaOwnerApprover'),
+      this.permit()?.status === 'SUSPENDED' &&
+      this.roles.some((role) => ['AreaOwnerManager', 'Administrator'].includes(role)),
   );
   protected readonly hasDecisionAction = computed(
     () =>
-      this.canValidateHsse() ||
+      this.canValidateHse() ||
       this.canApprove() ||
       this.canDisposition() ||
-      this.canRequestSuspension() ||
-      this.canApproveSuspension() ||
-      this.canDeclareCompletion() ||
-      this.canConfirmHsseCompletion() ||
-      this.canConfirmAreaOwnerCompletion() ||
-      this.canClose(),
+      this.canSuspend() ||
+      this.canResolveSuspension(),
   );
 
   protected readonly form = this.fb.nonNullable.group({
@@ -172,13 +145,24 @@ export class PermitDetail {
     locationId: ['', Validators.required],
     performingAuthority: ['', Validators.required],
     company: ['', Validators.required],
+    submitterType: this.fb.nonNullable.control<'CONTRACTOR' | 'USER_SPONSOR'>('USER_SPONSOR', {
+      validators: [Validators.required],
+    }),
     permitClass: ['HotWork', Validators.required],
     riskLevel: ['High', Validators.required],
+    workTypeCode: ['', Validators.required],
+    equipmentTag: [''],
+    plantArea: ['', Validators.required],
+    clsrApplicable: [false],
+    simopsDeclaration: [''],
+    safetyEquipmentCodes: [''],
+    isolationPrecautionCodes: [''],
+    jsaDocumentNumber: ['', Validators.required],
+    jsaRevision: ['', Validators.required],
+    jsaDate: ['', Validators.required],
     validFrom: ['', Validators.required],
     validUntil: ['', Validators.required],
     eSimiNumber: [''],
-    hazards: ['', Validators.required],
-    controls: ['', Validators.required],
   });
   protected readonly submissionForm = this.fb.nonNullable.group({
     eSimiEligible: [false, Validators.requiredTrue],
@@ -190,17 +174,6 @@ export class PermitDetail {
     Validators.required,
     Validators.maxLength(1000),
   ]);
-  protected readonly issueForm = this.fb.nonNullable.group({
-    eSimiEligible: [false, Validators.requiredTrue],
-    locationVerified: [false, Validators.requiredTrue],
-    toolboxTalkComplete: [false, Validators.requiredTrue],
-    personnelAcknowledged: [false, Validators.requiredTrue],
-    ppeAndControlsVerified: [false, Validators.requiredTrue],
-    isolationVerified: [false, Validators.requiredTrue],
-    simopsVerified: [false, Validators.requiredTrue],
-    gasTestSatisfied: [false, Validators.requiredTrue],
-    noUnresolvedSuspension: [false, Validators.requiredTrue],
-  });
   protected readonly renewalForm = this.fb.nonNullable.group({
     validFrom: ['', Validators.required],
     validUntil: ['', Validators.required],
@@ -236,13 +209,22 @@ export class PermitDetail {
       locationId: permit.draft.locationId,
       performingAuthority: permit.draft.performingAuthority,
       company: permit.draft.company,
+      submitterType: permit.draft.submitterType ?? 'USER_SPONSOR',
       permitClass: permit.draft.permitClass,
       riskLevel: permit.draft.riskLevel,
+      workTypeCode: permit.draft.workTypeCode ?? '',
+      equipmentTag: permit.draft.equipmentTag ?? '',
+      plantArea: permit.draft.plantArea ?? '',
+      clsrApplicable: permit.draft.clsrApplicable ?? false,
+      simopsDeclaration: permit.draft.simopsDeclaration ?? '',
+      safetyEquipmentCodes: (permit.draft.safetyEquipmentCodes ?? []).join(', '),
+      isolationPrecautionCodes: (permit.draft.isolationPrecautionCodes ?? []).join(', '),
+      jsaDocumentNumber: permit.draft.jsaDocumentNumber ?? '',
+      jsaRevision: permit.draft.jsaRevision ?? '',
+      jsaDate: permit.draft.jsaDate?.slice(0, 10) ?? '',
       validFrom: toLocalInput(permit.draft.validFrom),
       validUntil: toLocalInput(permit.draft.validUntil),
       eSimiNumber: permit.draft.eSimiNumber ?? '',
-      hazards: permit.draft.hazards.join(', '),
-      controls: permit.draft.controls.join(', '),
     });
     this.error.set('');
     this.success.set('');
@@ -271,9 +253,18 @@ export class PermitDetail {
       validUntil: new Date(value.validUntil).toISOString(),
       eSimiExternalId: value.eSimiNumber || null,
       eSimiNumber: value.eSimiNumber || null,
-      hazards: this.split(value.hazards),
-      controls: this.split(value.controls),
+      hazards: [],
+      controls: [],
       requiredDocumentCodes: permit.draft.requiredDocumentCodes,
+      workTypeCode: value.workTypeCode || null,
+      equipmentTag: value.equipmentTag || null,
+      plantArea: value.plantArea || null,
+      simopsDeclaration: value.simopsDeclaration || null,
+      safetyEquipmentCodes: this.split(value.safetyEquipmentCodes),
+      isolationPrecautionCodes: this.split(value.isolationPrecautionCodes),
+      jsaDocumentNumber: value.jsaDocumentNumber || null,
+      jsaRevision: value.jsaRevision || null,
+      jsaDate: value.jsaDate ? new Date(`${value.jsaDate}T00:00:00`).toISOString() : null,
     };
 
     this.saving.set(true);
@@ -395,23 +386,30 @@ export class PermitDetail {
         requiredDocumentsSafe: value.requiredDocumentsSafe,
         missingRequirements: value.noMissingRequirements ? [] : ['Persyaratan belum lengkap'],
       }),
-      'PTW diajukan untuk validasi HSSE.',
+      'PTW diajukan untuk validasi PIC HSE.',
     );
   }
 
-  protected endorseHsse(): void {
-    this.runDecision((permit, statement) =>
-      this.api.endorseHsse(permit.id, permit.eTag, statement),
+  protected validateHse(): void {
+    this.runTaskDecision((task, permit, statement) =>
+      this.api.validate(task.id, permit.eTag, statement),
     );
   }
 
-  protected approve(): void {
-    this.runDecision((permit, statement) => this.api.approve(permit.id, permit.eTag, statement));
+  protected approveAndIssue(): void {
+    this.runTaskDecision(
+      (task, permit, statement) =>
+        this.api.approveAndIssue(task.id, permit.eTag, {
+          statement,
+          actingAssignmentId: null,
+        }),
+      'PTW berhasil diterbitkan. Gas test, readiness, revalidasi, dan tanda tangan hardcopy tetap wajib sebelum kerja.',
+    );
   }
 
   protected requestRevision(): void {
-    this.runDecision(
-      (permit, reason) => this.api.requestRevision(permit.id, permit.eTag, reason),
+    this.runTaskDecision(
+      (task, permit, reason) => this.api.requestRevision(task.id, permit.eTag, reason),
       'PTW dikembalikan kepada Sponsor untuk revisi. Seluruh validasi aktif harus diulang.',
     );
   }
@@ -420,79 +418,38 @@ export class PermitDetail {
     if (!globalThis.confirm('Tolak PTW ini secara permanen? Aksi ini tidak dapat dibatalkan.')) {
       return;
     }
-    this.runDecision(
-      (permit, reason) => this.api.reject(permit.id, permit.eTag, reason),
+    this.runTaskDecision(
+      (task, permit, reason) => this.api.reject(task.id, permit.eTag, reason),
       'PTW ditolak dan seluruh task aktif telah ditutup.',
     );
   }
 
-  protected requestSuspension(): void {
-    if (!globalThis.confirm('Ajukan penangguhan? Hak kerja akan dihentikan seketika.')) return;
+  protected suspend(): void {
+    if (!globalThis.confirm('Tangguhkan PTW? Pekerjaan harus dihentikan seketika.')) return;
     this.runDecision(
-      (permit, reason) => this.api.requestSuspension(permit.id, permit.eTag, reason),
-      'Pekerjaan langsung dihentikan. Persetujuan penangguhan menunggu PIC pemilik area.',
+      (permit, reason) => this.api.suspend(permit.id, permit.eTag, reason),
+      'PTW ditangguhkan. Pekerjaan harus berhenti dan hardcopy harus ditandai sesuai SOP.',
     );
   }
 
-  protected approveSuspension(): void {
+  protected resolveSuspension(): void {
     this.runDecision(
-      (permit, statement) => this.api.approveSuspension(permit.id, permit.eTag, statement),
-      'Penangguhan disetujui oleh PIC pemilik area.',
+      (permit, statement) => this.api.resolveSuspension(permit.id, permit.eTag, statement),
+      'Penangguhan diselesaikan. Revalidasi hardcopy tetap wajib sebelum pekerjaan dilanjutkan.',
     );
   }
 
-  protected declareCompletion(): void {
-    if (!globalThis.confirm('Nyatakan pekerjaan selesai dan hentikan active work period?')) return;
-    this.runDecision(
-      (permit, statement) => this.api.declareCompletion(permit.id, permit.eTag, statement),
-      'Pekerjaan dinyatakan selesai. Konfirmasi HSSE dan PIC pemilik area telah diminta.',
-    );
-  }
-
-  protected confirmHsseCompletion(): void {
-    this.runDecision(
-      (permit, statement) => this.api.confirmHsseCompletion(permit.id, permit.eTag, statement),
-      'Konfirmasi penyelesaian HSSE tersimpan.',
-    );
-  }
-
-  protected confirmAreaOwnerCompletion(): void {
-    this.runDecision(
-      (permit, statement) => this.api.confirmAreaOwnerCompletion(permit.id, permit.eTag, statement),
-      'Konfirmasi penyelesaian PIC pemilik area tersimpan.',
-    );
-  }
-
-  protected closePermit(): void {
-    if (!globalThis.confirm('Tutup PTW ini secara permanen?')) return;
-    this.runDecision(
-      (permit, statement) => this.api.close(permit.id, permit.eTag, statement),
-      'PTW berhasil ditutup.',
-    );
-  }
-
-  protected issue(): void {
+  private runTaskDecision(
+    command: (task: PermitTask, permit: Permit, statement: string) => Observable<Permit>,
+    successMessage = 'Keputusan tersimpan.',
+  ): void {
+    const task = this.currentTask();
     const permit = this.permit();
-    if (!permit || this.issueForm.invalid) {
-      this.issueForm.markAllAsTouched();
+    if (!task || !permit || this.decisionStatement.invalid) {
+      this.decisionStatement.markAsTouched();
       return;
     }
-    const value = this.issueForm.getRawValue();
-    const request: IssuePermitRequest = {
-      eSimiEligible: value.eSimiEligible,
-      locationVerified: value.locationVerified,
-      toolboxTalkComplete: value.toolboxTalkComplete,
-      personnelAcknowledged: value.personnelAcknowledged,
-      ppeAndControlsVerified: value.ppeAndControlsVerified,
-      isolationVerified: value.isolationVerified,
-      simopsVerified: value.simopsVerified,
-      gasTestSatisfied: value.gasTestSatisfied,
-      hasUnresolvedSuspension: !value.noUnresolvedSuspension,
-    };
-    this.runCommand(
-      this.api.issue(permit.id, permit.eTag, request),
-      'PTW berhasil diterbitkan. Pekerjaan dapat berjalan dalam active work period.',
-    );
+    this.runCommand(command(task, permit, this.decisionStatement.getRawValue()), successMessage);
   }
 
   private runDecision(
@@ -514,6 +471,7 @@ export class PermitDetail {
     command.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (updated) => {
         this.permit.set(updated);
+        this.refreshTasks();
         this.saving.set(false);
         this.success.set(message);
         this.decisionStatement.reset();
@@ -537,6 +495,7 @@ export class PermitDetail {
       .subscribe({
         next: (permit) => {
           this.permit.set(permit);
+          this.refreshTasks();
           this.loading.set(false);
         },
         error: (response) => {
@@ -547,6 +506,16 @@ export class PermitDetail {
               : (response?.error?.detail ?? 'Detail PTW gagal dimuat.'),
           );
         },
+      });
+  }
+
+  private refreshTasks(): void {
+    this.api
+      .listTasks()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (page) => this.tasks.set(page.items),
+        error: () => this.tasks.set([]),
       });
   }
 

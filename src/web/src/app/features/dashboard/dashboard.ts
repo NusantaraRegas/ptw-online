@@ -33,35 +33,26 @@ export class Dashboard {
       {
         label: 'Menunggu tindakan',
         value: permits.filter((x) =>
-          [
-            'UNDER_REVIEW',
-            'AWAITING_APPROVAL',
-            'SUSPENSION_REQUESTED',
-            'COMPLETION_CONFIRMATION_PENDING',
-            'WORK_COMPLETED',
-          ].includes(x.status),
+          ['UNDER_VALIDATION', 'AWAITING_AREA_APPROVAL', 'CLOSURE_REQUESTED'].includes(x.status),
         ).length,
         tone: 'amber',
         icon: 'clock',
       },
       {
-        label: 'Disetujui, belum diterbitkan',
-        value: permits.filter((x) =>
-          ['APPROVED', 'READYFORISSUE', 'READY_FOR_ISSUE'].includes(x.status),
-        ).length,
+        label: 'Menunggu approval penerbitan',
+        value: permits.filter((x) => x.status === 'AWAITING_AREA_APPROVAL').length,
         tone: 'blue',
         icon: 'check',
       },
       {
         label: 'Diterbitkan',
-        value: permits.filter((x) => x.status === 'OPEN').length,
+        value: permits.filter((x) => x.status === 'ISSUED').length,
         tone: 'green',
         icon: 'open',
       },
       {
         label: 'Suspended',
-        value: permits.filter((x) => ['SUSPENSION_REQUESTED', 'SUSPENDED'].includes(x.status))
-          .length,
+        value: permits.filter((x) => x.status === 'SUSPENDED').length,
         tone: 'red',
         icon: 'warning',
       },
@@ -72,9 +63,8 @@ export class Dashboard {
     const now = Date.now();
     const oneDay = 24 * 60 * 60 * 1000;
     return {
-      issued: permits.filter((x) => x.status === 'OPEN').length,
-      suspended: permits.filter((x) => ['SUSPENSION_REQUESTED', 'SUSPENDED'].includes(x.status))
-        .length,
+      issued: permits.filter((x) => x.status === 'ISSUED').length,
+      suspended: permits.filter((x) => x.status === 'SUSPENDED').length,
       expiring: permits.filter((x) => {
         const remaining = new Date(x.draft.validUntil).getTime() - now;
         return (
@@ -113,13 +103,9 @@ export class Dashboard {
   protected taskAction(type: string): string {
     return (
       {
-        HSSE_VALIDATION: 'Validasi',
-        AREA_OWNER_APPROVAL: 'Tinjau',
-        AREA_OWNER_ISSUE: 'Terbitkan',
-        SUSPENSION_APPROVAL: 'Tinjau',
-        HSSE_COMPLETION_CONFIRMATION: 'Konfirmasi',
-        AREA_OWNER_COMPLETION_CONFIRMATION: 'Konfirmasi',
-        AREA_OWNER_CLOSE: 'Tutup',
+        HSE_VALIDATION: 'Validasi',
+        AREA_APPROVE_AND_ISSUE: 'Setujui & terbitkan',
+        AREA_CLOSE_VERIFICATION: 'Verifikasi penutupan',
       }[type] ?? 'Buka'
     );
   }

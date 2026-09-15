@@ -426,17 +426,18 @@ public sealed class OperationalPolicyApiTests(PtwApiFactory factory)
                 [PermitPolicyOperations.UpdateDraft] = $"{actionCode}.update",
                 [PermitPolicyOperations.RequestRenewal] = $"{actionCode}.request-renewal",
                 [PermitPolicyOperations.Submit] = $"{actionCode}.submit",
-                [PermitPolicyOperations.ValidateHsse] = $"{actionCode}.validate-hsse",
-                [PermitPolicyOperations.Approve] = $"{actionCode}.approve",
-                [PermitPolicyOperations.Issue] = $"{actionCode}.issue",
+                [PermitPolicyOperations.ValidateSubmission] = $"{actionCode}.validate-hse",
+                [PermitPolicyOperations.EscalateValidation] = $"{actionCode}.escalate-validation",
+                [PermitPolicyOperations.ApproveAndIssue] = $"{actionCode}.approve-and-issue",
                 [PermitPolicyOperations.RequestRevision] = $"{actionCode}.request-revision",
                 [PermitPolicyOperations.Reject] = $"{actionCode}.reject",
-                [PermitPolicyOperations.RequestSuspension] = $"{actionCode}.request-suspension",
-                [PermitPolicyOperations.ApproveSuspension] = $"{actionCode}.approve-suspension",
-                [PermitPolicyOperations.DeclareCompletion] = $"{actionCode}.declare-completion",
-                [PermitPolicyOperations.ConfirmCompletionHsse] = $"{actionCode}.confirm-completion-hsse",
-                [PermitPolicyOperations.ConfirmCompletionAreaOwner] = $"{actionCode}.confirm-completion-area-owner",
-                [PermitPolicyOperations.Close] = $"{actionCode}.close"
+                [PermitPolicyOperations.Suspend] = $"{actionCode}.suspend",
+                [PermitPolicyOperations.ResolveSuspension] = $"{actionCode}.resolve-suspension",
+                [PermitPolicyOperations.RequestClosure] = $"{actionCode}.request-closure",
+                [PermitPolicyOperations.RequestClosureEvidenceReplacement] = $"{actionCode}.request-evidence",
+                [PermitPolicyOperations.Close] = $"{actionCode}.close",
+                [PermitPolicyOperations.Cancel] = $"{actionCode}.cancel",
+                [PermitPolicyOperations.Expire] = $"{actionCode}.expire"
             }
         };
 

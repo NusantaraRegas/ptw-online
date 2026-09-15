@@ -37,6 +37,8 @@ Thumbs.db
 
 # Runtime data
 attachments/
+quarantine/
+generated-documents/
 sql-data/
 logs/
 *.log

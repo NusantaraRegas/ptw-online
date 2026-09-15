@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Ptw.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using Ptw.Infrastructure.Persistence;
 namespace Ptw.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PtwDbContext))]
-    partial class PtwDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260915074426_AddV16AttachmentEvidenceMetadata")]
+    partial class AddV16AttachmentEvidenceMetadata
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -576,17 +579,10 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
 
-                    b.Property<string>("ScanEvidenceReference")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
                     b.Property<string>("ScanStatus")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
-
-                    b.Property<DateTimeOffset?>("ScannedAt")
-                        .HasColumnType("datetimeoffset");
 
                     b.Property<string>("Sha256")
                         .IsRequired()
@@ -632,8 +628,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                     b.ToTable("PermitAttachment", "ptw", t =>
                         {
                             t.HasCheckConstraint("CK_PermitAttachment_Category", "[Category] IN ('SUPPORTING', 'JSA', 'SIGNED_FIELD_COPY')");
-
-                            t.HasCheckConstraint("CK_PermitAttachment_CleanEvidence", "[ScanStatus] <> 'CLEAN' OR ([ScanEvidenceReference] IS NOT NULL AND [ScannedAt] IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_PermitAttachment_ScanStatus", "[ScanStatus] IN ('PENDING', 'CLEAN', 'REJECTED')");
 

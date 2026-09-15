@@ -10,6 +10,9 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
     public DbSet<OutboxMessageRecord> OutboxMessages => Set<OutboxMessageRecord>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<PermitTaskRecord> PermitTasks => Set<PermitTaskRecord>();
+    public DbSet<PermitDecisionRecord> PermitDecisions => Set<PermitDecisionRecord>();
+    public DbSet<PrintPackageSnapshotRecord> PrintPackageSnapshots => Set<PrintPackageSnapshotRecord>();
+    public DbSet<GeneratedDocumentRecord> GeneratedDocuments => Set<GeneratedDocumentRecord>();
     public DbSet<PermitAttachmentRecord> PermitAttachments => Set<PermitAttachmentRecord>();
     public DbSet<PermitAttachmentCommandReceiptRecord> PermitAttachmentCommandReceipts =>
         Set<PermitAttachmentCommandReceiptRecord>();
@@ -99,6 +102,71 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
             .HasForeignKey(x => x.PermitId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        var permitDecision = modelBuilder.Entity<PermitDecisionRecord>();
+        permitDecision.ToTable("Decision", "wf");
+        permitDecision.HasKey(x => x.Id);
+        permitDecision.Property(x => x.Decision).HasMaxLength(40);
+        permitDecision.Property(x => x.ActorId).HasMaxLength(200);
+        permitDecision.Property(x => x.ActorPosition).HasMaxLength(200);
+        permitDecision.Property(x => x.ApprovalCapacity).HasMaxLength(40);
+        permitDecision.Property(x => x.PrincipalManagerUserId).HasMaxLength(200);
+        permitDecision.Property(x => x.PrincipalPosition).HasMaxLength(200);
+        permitDecision.Property(x => x.Statement).HasMaxLength(2000);
+        permitDecision.Property(x => x.EvidenceHash).HasMaxLength(64).IsFixedLength();
+        permitDecision.HasIndex(x => new { x.PermitId, x.PermitVersion, x.Decision }).IsUnique();
+        permitDecision.HasOne<PermitRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.PermitId)
+            .OnDelete(DeleteBehavior.Restrict);
+        permitDecision.HasOne<PermitTaskRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.TaskId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var printSnapshot = modelBuilder.Entity<PrintPackageSnapshotRecord>();
+        printSnapshot.ToTable(
+            "PrintPackageSnapshot",
+            "doc",
+            table => table.HasCheckConstraint(
+                "CK_PrintPackageSnapshot_RenderStatus",
+                "[RenderStatus] IN ('PENDING', 'RETRYING', 'READY', 'FAILED')"));
+        printSnapshot.HasKey(x => x.Id);
+        printSnapshot.Property(x => x.RuleVersion).HasMaxLength(100);
+        printSnapshot.Property(x => x.PrintTemplateVersion).HasMaxLength(100);
+        printSnapshot.Property(x => x.CampaignAssetVersion).HasMaxLength(100);
+        printSnapshot.Property(x => x.SnapshotHash).HasMaxLength(64).IsFixedLength();
+        printSnapshot.Property(x => x.RenderStatus).HasMaxLength(20);
+        printSnapshot.HasIndex(x => new { x.PermitId, x.PermitVersion }).IsUnique();
+        printSnapshot.HasOne<PermitRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.PermitId)
+            .OnDelete(DeleteBehavior.Restrict);
+        printSnapshot.HasOne<PermitDecisionRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.DecisionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var generatedDocument = modelBuilder.Entity<GeneratedDocumentRecord>();
+        generatedDocument.ToTable(
+            "GeneratedDocument",
+            "doc",
+            table => table.HasCheckConstraint(
+                "CK_GeneratedDocument_RenderStatus",
+                "[RenderStatus] IN ('PENDING', 'RETRYING', 'READY', 'FAILED')"));
+        generatedDocument.HasKey(x => x.Id);
+        generatedDocument.Property(x => x.StorageKey).HasMaxLength(500);
+        generatedDocument.Property(x => x.MediaType).HasMaxLength(100);
+        generatedDocument.Property(x => x.Sha256).HasMaxLength(64).IsFixedLength();
+        generatedDocument.Property(x => x.RenderStatus).HasMaxLength(20);
+        generatedDocument.Property(x => x.LastError).HasMaxLength(2000);
+        generatedDocument.Property(x => x.RowVersion).IsRowVersion();
+        generatedDocument.HasIndex(x => x.PrintPackageSnapshotId).IsUnique();
+        generatedDocument.HasIndex(x => new { x.RenderStatus, x.NextAttemptAt });
+        generatedDocument.HasOne<PrintPackageSnapshotRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.PrintPackageSnapshotId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         var permitAttachment = modelBuilder.Entity<PermitAttachmentRecord>();
         permitAttachment.ToTable(
             "PermitAttachment",
@@ -111,7 +179,13 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
                     "[RemovedInVersion] IS NULL OR [RemovedInVersion] > [AddedInVersion]");
                 table.HasCheckConstraint(
                     "CK_PermitAttachment_ScanStatus",
-                    "[ScanStatus] IN ('NOT_SCANNED', 'CLEAN', 'REJECTED')");
+                    "[ScanStatus] IN ('PENDING', 'CLEAN', 'REJECTED')");
+                table.HasCheckConstraint(
+                    "CK_PermitAttachment_CleanEvidence",
+                    "[ScanStatus] <> 'CLEAN' OR ([ScanEvidenceReference] IS NOT NULL AND [ScannedAt] IS NOT NULL)");
+                table.HasCheckConstraint(
+                    "CK_PermitAttachment_Category",
+                    "[Category] IN ('SUPPORTING', 'JSA', 'SIGNED_FIELD_COPY')");
             });
         permitAttachment.HasKey(x => x.Id);
         permitAttachment.Property(x => x.FileName).HasMaxLength(255);
@@ -119,14 +193,28 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         permitAttachment.Property(x => x.Sha256).HasMaxLength(64).IsFixedLength();
         permitAttachment.Property(x => x.StorageKey).HasMaxLength(500);
         permitAttachment.Property(x => x.ScanStatus).HasMaxLength(20);
+        permitAttachment.Property(x => x.ScanEvidenceReference).HasMaxLength(500);
+        permitAttachment.Property(x => x.Category).HasMaxLength(40);
+        permitAttachment.Property(x => x.DocumentNumber).HasMaxLength(100);
+        permitAttachment.Property(x => x.DocumentRevision).HasMaxLength(50);
         permitAttachment.Property(x => x.UploadedBy).HasMaxLength(200);
         permitAttachment.Property(x => x.RemovedBy).HasMaxLength(200);
         permitAttachment.Property(x => x.RowVersion).IsRowVersion();
         permitAttachment.HasIndex(x => new { x.PermitId, x.RemovedInVersion, x.UploadedAt });
+        permitAttachment.HasIndex(x => new { x.PermitId, x.Category, x.TargetPermitVersion });
+        permitAttachment.HasIndex(x => x.SupersedesAttachmentId);
         permitAttachment.HasIndex(x => x.StorageKey).IsUnique();
         permitAttachment.HasOne<PermitRecord>()
             .WithMany()
             .HasForeignKey(x => x.PermitId)
+            .OnDelete(DeleteBehavior.Restrict);
+        permitAttachment.HasOne<PrintPackageSnapshotRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.PrintPackageId)
+            .OnDelete(DeleteBehavior.Restrict);
+        permitAttachment.HasOne<PermitAttachmentRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.SupersedesAttachmentId)
             .OnDelete(DeleteBehavior.Restrict);
 
         var attachmentReceipt = modelBuilder.Entity<PermitAttachmentCommandReceiptRecord>();

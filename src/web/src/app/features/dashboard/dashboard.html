@@ -18,10 +18,10 @@
     </svg>
   </span>
   <div>
-    <strong>APPROVED bukan izin untuk mulai bekerja</strong>
+    <strong>DITERBITKAN belum otomatis mengizinkan pekerjaan dimulai</strong>
     <p>
-      Pekerjaan hanya boleh dimulai ketika seluruh prasyarat lapangan telah diverifikasi dan PTW
-      berstatus <b>DITERBITKAN</b>.
+      Gas test, toolbox/readiness, revalidasi, serta tanda tangan lapangan tetap wajib pada
+      hardcopy.
     </p>
   </div>
   <a routerLink="/operations">Lihat alur keselamatan →</a>
@@ -91,7 +91,7 @@
       @for (task of tasks().slice(0, 3); track task.id) {
         <a
           class="task-row"
-          [class.urgent]="task.type === 'SUSPENSION_APPROVAL'"
+          [class.urgent]="task.type === 'AREA_CLOSE_VERIFICATION'"
           [routerLink]="['/permits', task.permitId]"
           [attr.aria-label]="task.label + ' untuk ' + task.permitTitle"
         >

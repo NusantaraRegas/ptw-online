@@ -62,7 +62,7 @@ describe('PermitApi', () => {
       validUntil: '2026-08-26T17:00:00.000Z',
     };
     api.requestRenewal('permit-id', '"etag-value"', renewal).subscribe();
-    const request = http.expectOne('/api/v1/permits/permit-id/renewals');
+    const request = http.expectOne('/api/v1/permits/permit-id/renew');
     expect(request.request.method).toBe('POST');
     expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
     expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
@@ -95,93 +95,60 @@ describe('PermitApi', () => {
   });
 
   it('sends explicit validation command with concurrency and idempotency headers', () => {
-    api.endorseHsse('permit-id', '"etag-value"', 'Persyaratan HSSE sesuai.').subscribe();
-    const request = http.expectOne('/api/v1/permits/permit-id/validations/hsse/endorse');
+    api.validate('task-id', '"etag-value"', 'Persyaratan HSE sesuai.').subscribe();
+    const request = http.expectOne('/api/v1/tasks/task-id/validate');
     expect(request.request.method).toBe('POST');
     expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
     expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
-    expect(request.request.body).toEqual({ statement: 'Persyaratan HSSE sesuai.' });
+    expect(request.request.body).toEqual({ statement: 'Persyaratan HSE sesuai.' });
     request.flush({});
   });
 
   it('sends an explicit revision command with a mandatory reason', () => {
-    api.requestRevision('permit-id', '"etag-value"', 'Kontrol perlu diperbaiki.').subscribe();
-    const request = http.expectOne('/api/v1/permits/permit-id/request-revision');
+    api.requestRevision('task-id', '"etag-value"', 'Dokumen perlu diperbaiki.').subscribe();
+    const request = http.expectOne('/api/v1/tasks/task-id/revision');
     expect(request.request.method).toBe('POST');
     expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
     expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
-    expect(request.request.body).toEqual({ reason: 'Kontrol perlu diperbaiki.' });
+    expect(request.request.body).toEqual({ reason: 'Dokumen perlu diperbaiki.' });
     request.flush({});
   });
 
   it('sends an explicit reject command instead of a generic status update', () => {
-    api.reject('permit-id', '"etag-value"', 'Risiko residual tidak diterima.').subscribe();
-    const request = http.expectOne('/api/v1/permits/permit-id/reject');
+    api.reject('task-id', '"etag-value"', 'Persyaratan tidak diterima.').subscribe();
+    const request = http.expectOne('/api/v1/tasks/task-id/reject');
     expect(request.request.method).toBe('POST');
     expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
     expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
-    expect(request.request.body).toEqual({ reason: 'Risiko residual tidak diterima.' });
+    expect(request.request.body).toEqual({ reason: 'Persyaratan tidak diterima.' });
     request.flush({});
   });
 
-  it('sends the fail-safe suspension request and area-owner approval commands', () => {
-    api.requestSuspension('permit-id', '"etag-value"', 'Kondisi lapangan berubah.').subscribe();
-    const suspensionRequest = http.expectOne('/api/v1/permits/permit-id/suspensions/request');
-    expect(suspensionRequest.request.headers.get('If-Match')).toBe('"etag-value"');
-    expect(suspensionRequest.request.headers.get('Idempotency-Key')).toBeTruthy();
-    expect(suspensionRequest.request.body).toEqual({ reason: 'Kondisi lapangan berubah.' });
-    suspensionRequest.flush({});
-
-    api.approveSuspension('permit-id', '"etag-next"', 'Penangguhan disetujui.').subscribe();
-    const suspensionApproval = http.expectOne('/api/v1/permits/permit-id/suspensions/approve');
-    expect(suspensionApproval.request.headers.get('If-Match')).toBe('"etag-next"');
-    expect(suspensionApproval.request.headers.get('Idempotency-Key')).toBeTruthy();
-    expect(suspensionApproval.request.body).toEqual({ statement: 'Penangguhan disetujui.' });
-    suspensionApproval.flush({});
-  });
-
-  it('uses explicit three-party completion and close commands', () => {
-    api.declareCompletion('permit-id', '"etag-1"', 'Pekerjaan selesai.').subscribe();
-    const declaration = http.expectOne('/api/v1/permits/permit-id/completion/declare');
-    expect(declaration.request.body).toEqual({ statement: 'Pekerjaan selesai.' });
-    expect(declaration.request.headers.get('Idempotency-Key')).toBeTruthy();
-    declaration.flush({});
-
-    api.confirmHsseCompletion('permit-id', '"etag-2"', 'Kondisi akhir aman.').subscribe();
-    const hsse = http.expectOne('/api/v1/permits/permit-id/completion/confirm/hsse');
-    expect(hsse.request.body).toEqual({ statement: 'Kondisi akhir aman.' });
-    expect(hsse.request.headers.get('If-Match')).toBe('"etag-2"');
-    hsse.flush({});
-
-    api.confirmAreaOwnerCompletion('permit-id', '"etag-3"', 'Area diterima kembali.').subscribe();
-    const areaOwner = http.expectOne('/api/v1/permits/permit-id/completion/confirm/area-owner');
-    expect(areaOwner.request.body).toEqual({ statement: 'Area diterima kembali.' });
-    expect(areaOwner.request.headers.get('If-Match')).toBe('"etag-3"');
-    areaOwner.flush({});
-
-    api.close('permit-id', '"etag-4"', 'PTW ditutup.').subscribe();
-    const close = http.expectOne('/api/v1/permits/permit-id/close');
-    expect(close.request.body).toEqual({ statement: 'PTW ditutup.' });
-    expect(close.request.headers.get('If-Match')).toBe('"etag-4"');
-    close.flush({});
-  });
-
-  it('uses the issue command rather than exposing a generic status update', () => {
-    const readiness = {
-      eSimiEligible: true,
-      locationVerified: true,
-      toolboxTalkComplete: true,
-      personnelAcknowledged: true,
-      ppeAndControlsVerified: true,
-      isolationVerified: true,
-      simopsVerified: true,
-      gasTestSatisfied: true,
-      hasUnresolvedSuspension: false,
-    };
-    api.issue('permit-id', '"etag-value"', readiness).subscribe();
-    const request = http.expectOne('/api/v1/permits/permit-id/issue');
-    expect(request.request.body).toEqual(readiness);
+  it('uses one atomic approve-and-issue task command', () => {
+    api
+      .approveAndIssue('task-id', '"etag-value"', {
+        statement: 'Disetujui dan diterbitkan.',
+        actingAssignmentId: null,
+      })
+      .subscribe();
+    const request = http.expectOne('/api/v1/tasks/task-id/approve-and-issue');
+    expect(request.request.body).toEqual({
+      statement: 'Disetujui dan diterbitkan.',
+      actingAssignmentId: null,
+    });
     expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
     request.flush({});
+  });
+
+  it('suspends immediately and resolves through explicit commands', () => {
+    api.suspend('permit-id', '"etag-value"', 'Kondisi lapangan berubah.').subscribe();
+    const suspension = http.expectOne('/api/v1/permits/permit-id/suspensions');
+    expect(suspension.request.body).toEqual({ reason: 'Kondisi lapangan berubah.' });
+    suspension.flush({});
+
+    api.resolveSuspension('permit-id', '"etag-next"', 'Kondisi aman kembali.').subscribe();
+    const resolution = http.expectOne('/api/v1/permits/permit-id/suspensions/resolve');
+    expect(resolution.request.body).toEqual({ resolution: 'Kondisi aman kembali.' });
+    resolution.flush({});
   });
 });

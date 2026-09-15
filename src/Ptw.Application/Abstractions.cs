@@ -42,8 +42,22 @@ public sealed record PermitAttachmentEntry(
     string Sha256,
     string StorageKey,
     string ScanStatus,
+    string? ScanEvidenceReference,
+    DateTimeOffset? ScannedAt,
+    string Category,
+    string? DocumentNumber,
+    string? DocumentRevision,
+    DateTimeOffset? DocumentDate,
+    int TargetPermitVersion,
+    Guid? PrintPackageId,
+    Guid? SupersedesAttachmentId,
     string UploadedBy,
     DateTimeOffset UploadedAt);
+public sealed record PrintPackageEntry(
+    Guid Id,
+    Guid PermitId,
+    int PermitVersion,
+    string RenderStatus);
 public sealed record StoredAttachmentContent(
     string StorageKey,
     long SizeBytes,
@@ -106,6 +120,8 @@ public interface IPermitStore
         IReadOnlySet<string> roles,
         IReadOnlySet<string> locationScopes,
         CancellationToken cancellationToken);
+    Task<PermitTaskEntry?> FindPendingTaskAsync(Guid taskId, CancellationToken cancellationToken);
+    Task<PrintPackageEntry?> FindPrintPackageAsync(Guid printPackageId, CancellationToken cancellationToken);
 }
 
 public interface IPermitAttachmentStore
@@ -152,12 +168,28 @@ public interface IAttachmentStorage
     Task DeleteOrphanAsync(string storageKey, CancellationToken cancellationToken);
 }
 
+public sealed record MalwareScanResult(
+    string Status,
+    string? EvidenceReference,
+    DateTimeOffset? ScannedAt);
+
+public interface IMalwareScanner
+{
+    bool IsAvailable { get; }
+    Task<MalwareScanResult> ScanAsync(
+        Stream content,
+        string mediaType,
+        string sha256,
+        CancellationToken cancellationToken);
+}
+
 public sealed record Actor(
     string Id,
     string DisplayName,
     IReadOnlySet<string> Roles,
     IReadOnlySet<string> LocationScopes,
-    IReadOnlySet<string> CompetencyCodes);
+    IReadOnlySet<string> CompetencyCodes,
+    bool IsDevelopment = false);
 
 public interface IActorContext
 {

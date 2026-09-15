@@ -29,6 +29,9 @@ builder.Services.AddScoped<IOperationalPolicyGate, OperationalPolicyGate>();
 builder.Services.AddSingleton(
     builder.Configuration.GetSection("OperationalPolicy").Get<OperationalPolicySettings>()
     ?? new OperationalPolicySettings());
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection("IssuancePolicy").Get<IssuancePolicySettings>()
+    ?? new IssuancePolicySettings());
 builder.Services.AddPtwInfrastructure(builder.Configuration);
 var attachmentMaxFileBytes = builder.Configuration.GetValue<long>("Attachments:MaxFileBytes");
 if (attachmentMaxFileBytes > 0)

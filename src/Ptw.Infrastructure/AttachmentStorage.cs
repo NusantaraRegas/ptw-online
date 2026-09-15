@@ -15,6 +15,8 @@ public sealed class AttachmentSettings
 internal sealed class LocalAttachmentStorage : IAttachmentStorage
 {
     private static readonly byte[] PdfSignature = "%PDF-"u8.ToArray();
+    private static readonly byte[] JpegSignature = [0xFF, 0xD8, 0xFF];
+    private static readonly byte[] PngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     private readonly string _root;
 
     public LocalAttachmentStorage(AttachmentSettings settings)
@@ -34,11 +36,9 @@ internal sealed class LocalAttachmentStorage : IAttachmentStorage
         long maxBytes,
         CancellationToken cancellationToken)
     {
-        var storageKey = $"{attachmentId:N}.pdf";
-        var destination = Resolve(storageKey);
-        var temporary = destination + ".upload";
+        var temporary = Path.Combine(_root, $"{attachmentId:N}.upload");
         long size = 0;
-        var signature = new byte[PdfSignature.Length];
+        var signature = new byte[PngSignature.Length];
         var signatureBytes = 0;
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         try
@@ -60,7 +60,7 @@ internal sealed class LocalAttachmentStorage : IAttachmentStorage
                     {
                         throw new InvalidRequestException(
                             "attachment.size_invalid",
-                            $"Ukuran PDF tidak boleh melebihi {maxBytes} byte.");
+                            $"Ukuran file tidak boleh melebihi {maxBytes} byte.");
                     }
 
                     if (signatureBytes < signature.Length)
@@ -75,19 +75,22 @@ internal sealed class LocalAttachmentStorage : IAttachmentStorage
                 }
             }
 
-            if (size == 0 || !signature.AsSpan().SequenceEqual(PdfSignature))
+            var detected = DetectType(signature.AsSpan(0, signatureBytes));
+            if (size == 0 || detected is null)
             {
                 throw new InvalidRequestException(
-                    "attachment.pdf_signature_invalid",
-                    "Isi file tidak memiliki signature PDF yang valid.");
+                    "attachment.signature_invalid",
+                    "Isi file tidak memiliki signature PDF, JPEG, atau PNG yang valid.");
             }
 
+            var storageKey = $"{attachmentId:N}{detected.Value.Extension}";
+            var destination = Resolve(storageKey);
             File.Move(temporary, destination);
             return new StoredAttachmentContent(
                 storageKey,
                 size,
                 Convert.ToHexString(hash.GetHashAndReset()),
-                "application/pdf");
+                detected.Value.MediaType);
         }
         catch
         {
@@ -134,7 +137,9 @@ internal sealed class LocalAttachmentStorage : IAttachmentStorage
     private string Resolve(string storageKey)
     {
         if (!string.Equals(Path.GetFileName(storageKey), storageKey, StringComparison.Ordinal)
-            || !storageKey.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+            || !new[] { ".pdf", ".jpg", ".png" }.Contains(
+                Path.GetExtension(storageKey),
+                StringComparer.OrdinalIgnoreCase))
         {
             throw new InvalidRequestException("attachment.storage_key_invalid", "Storage key lampiran tidak valid.");
         }
@@ -146,6 +151,26 @@ internal sealed class LocalAttachmentStorage : IAttachmentStorage
         }
 
         return resolved;
+    }
+
+    private static (string Extension, string MediaType)? DetectType(ReadOnlySpan<byte> signature)
+    {
+        if (signature.StartsWith(PdfSignature))
+        {
+            return (".pdf", "application/pdf");
+        }
+
+        if (signature.StartsWith(JpegSignature))
+        {
+            return (".jpg", "image/jpeg");
+        }
+
+        if (signature.StartsWith(PngSignature))
+        {
+            return (".png", "image/png");
+        }
+
+        return null;
     }
 }
 
@@ -165,4 +190,18 @@ internal sealed class DisabledAttachmentStorage : IAttachmentStorage
 
     public Task DeleteOrphanAsync(string storageKey, CancellationToken cancellationToken) =>
         Task.CompletedTask;
+}
+
+internal sealed class UnavailableMalwareScanner : IMalwareScanner
+{
+    public bool IsAvailable => false;
+
+    public Task<MalwareScanResult> ScanAsync(
+        Stream content,
+        string mediaType,
+        string sha256,
+        CancellationToken cancellationToken) =>
+        throw new InvalidRequestException(
+            "attachment.scanner_required",
+            "Malware scanner belum dikonfigurasi.");
 }

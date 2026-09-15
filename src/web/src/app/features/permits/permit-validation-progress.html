@@ -2,19 +2,21 @@
   <header class="workflow-header">
     <div>
       <span class="workflow-kicker">Workflow PTW</span>
-      <h2 id="validation-progress-title">Validasi HSSE</h2>
+      <h2 id="validation-progress-title">Validasi PIC HSE</h2>
     </div>
     <span class="progress-summary" [class.completed]="completedCount() === 1">
       {{ completedCount() }}/1 selesai
     </span>
   </header>
 
-  <p class="workflow-note">Validasi HSSE wajib selesai sebelum approval pemilik area tersedia.</p>
+  <p class="workflow-note">
+    Validasi HSE wajib selesai sebelum approval penerbitan pemilik area tersedia.
+  </p>
 
   <ol class="validation-list">
-    <li class="validation-item" [class.completed]="workflow().hsse.completed">
+    <li class="validation-item" [class.completed]="workflow().hse.completed">
       <span class="validation-marker" aria-hidden="true">
-        @if (workflow().hsse.completed) {
+        @if (workflow().hse.completed) {
           <svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-9" /></svg>
         } @else {
           1
@@ -22,41 +24,41 @@
       </span>
       <div class="validation-content">
         <div class="validation-heading">
-          <strong>HSSE</strong>
+          <strong>PIC HSE</strong>
           <span class="status-pill">
-            {{ workflow().hsse.completed ? 'Selesai' : 'Menunggu' }}
+            {{ workflow().hse.completed ? 'Selesai' : 'Menunggu' }}
           </span>
         </div>
         <span class="actor-label">Validator</span>
-        <span class="actor-id">{{ workflow().hsse.actorId || 'Belum ditentukan' }}</span>
-        @if (workflow().hsse.completedAt) {
-          <time [attr.datetime]="workflow().hsse.completedAt">
-            {{ workflow().hsse.completedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
+        <span class="actor-id">{{ workflow().hse.actorId || 'Belum ditentukan' }}</span>
+        @if (workflow().hse.completedAt) {
+          <time [attr.datetime]="workflow().hse.completedAt">
+            {{ workflow().hse.completedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
           </time>
         }
       </div>
     </li>
   </ol>
 
-  <div class="approval-panel" [class.completed]="!!workflow().approvedBy">
+  <div class="approval-panel" [class.completed]="workflow().approval.completed">
     <span class="approval-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24">
         <path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z" />
-        @if (workflow().approvedBy) {
+        @if (workflow().approval.completed) {
           <path d="m8.5 12 2.2 2.2 4.8-5" />
         }
       </svg>
     </span>
     <div class="approval-content">
       <div class="approval-heading">
-        <span>PIC pemilik area</span>
+        <span>Manager pemilik area</span>
         <span class="approval-status">{{ approvalState() }}</span>
       </div>
-      <strong>{{ workflow().approvedBy || 'Belum ada approver' }}</strong>
-      <span class="approval-role">Approver &amp; penerbit PTW</span>
-      @if (workflow().approvedAt) {
-        <time [attr.datetime]="workflow().approvedAt">
-          {{ workflow().approvedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
+      <strong>{{ workflow().approval.actorId || 'Belum ada approver' }}</strong>
+      <span class="approval-role">Approval dan penerbitan atomik</span>
+      @if (workflow().approval.approvedAt) {
+        <time [attr.datetime]="workflow().approval.approvedAt">
+          {{ workflow().approval.approvedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
         </time>
       }
     </div>

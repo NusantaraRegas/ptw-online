@@ -11,9 +11,10 @@ namespace Ptw.Api.IntegrationTests;
 public sealed class PermitMigrationTests(PtwApiFactory factory)
 {
     private const string TaskMigration = "20260903081421_PersistPermitWorkflowTasks";
+    private const string AttachmentEvidenceMigration = "20260915074426_AddV16AttachmentEvidenceMetadata";
 
     [Fact]
-    public async Task RetiredGasRouteReconcilesInFlightPermitsAndPendingTasks()
+    public async Task V16MigrationLeavesOneHseRouteAndOneAtomicAreaApprovalTask()
     {
         var builder = new SqlConnectionStringBuilder(factory.ConnectionString)
         {
@@ -46,10 +47,10 @@ public sealed class PermitMigrationTests(PtwApiFactory factory)
             db.ChangeTracker.Clear();
 
             Assert.Equal(
-                "AwaitingApproval",
+                "AwaitingAreaApproval",
                 (await db.Permits.SingleAsync(x => x.Id == hsseCompleted.Id)).Status);
             Assert.Equal(
-                "UnderReview",
+                "UnderValidation",
                 (await db.Permits.SingleAsync(x => x.Id == awaitingHsse.Id)).Status);
             Assert.Empty(await db.PermitTasks.Where(
                 x => x.Type == "GAS_DISTRIBUTION_VALIDATION" && x.Status == "PENDING").ToListAsync());
@@ -59,15 +60,15 @@ public sealed class PermitMigrationTests(PtwApiFactory factory)
                     x => x.Type == "GAS_DISTRIBUTION_VALIDATION" && x.Status == "CANCELLED"));
             Assert.Single(await db.PermitTasks.Where(
                 x => x.PermitId == awaitingHsse.Id
-                    && x.Type == "HSSE_VALIDATION"
+                    && x.Type == "HSE_VALIDATION"
                     && x.Status == "PENDING").ToListAsync());
             Assert.Single(await db.PermitTasks.Where(
                 x => x.PermitId == hsseCompleted.Id
-                    && x.Type == "AREA_OWNER_APPROVAL"
+                    && x.Type == "AREA_APPROVE_AND_ISSUE"
                     && x.Status == "PENDING").ToListAsync());
             Assert.Single(await db.PermitTasks.Where(
                 x => x.PermitId == alreadyAwaitingApproval.Id
-                    && x.Type == "AREA_OWNER_APPROVAL"
+                    && x.Type == "AREA_APPROVE_AND_ISSUE"
                     && x.Status == "PENDING").ToListAsync());
             var audits = await db.AuditEvents
                 .Where(x => x.EventType == "workflow_route_reconciled")
@@ -78,6 +79,59 @@ public sealed class PermitMigrationTests(PtwApiFactory factory)
             Assert.Equal(3, audits.Count);
             Assert.Equal(3, outbox.Count);
             Assert.All(audits, audit => Assert.Contains(outbox, message => message.Id == audit.Id));
+        }
+        finally
+        {
+            await db.Database.EnsureDeletedAsync();
+        }
+    }
+
+    [Fact]
+    public async Task MalwareEvidenceMigrationDowngradesUnverifiableCleanAttachment()
+    {
+        var builder = new SqlConnectionStringBuilder(factory.ConnectionString)
+        {
+            InitialCatalog = $"PtwMigrationTest{Guid.NewGuid():N}"
+        };
+        var options = new DbContextOptionsBuilder<PtwDbContext>()
+            .UseSqlServer(builder.ConnectionString)
+            .Options;
+        await using var db = new PtwDbContext(options);
+
+        try
+        {
+            var migrator = db.Database.GetService<IMigrator>();
+            await migrator.MigrateAsync(AttachmentEvidenceMigration);
+            var now = DateTimeOffset.UtcNow;
+            var permit = Permit(now, "Draft", "{}");
+            await InsertHistoricalPermitAsync(db, permit);
+            var attachmentId = Guid.CreateVersion7();
+            const string fileName = "legacy.pdf";
+            const string mediaType = "application/pdf";
+            var sha256 = new string('A', 64);
+            var storageKey = $"{attachmentId:N}.pdf";
+            const string cleanStatus = "CLEAN";
+            const string category = "SUPPORTING";
+            const string uploader = "sponsor.migration";
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO [ptw].[PermitAttachment]
+                    ([Id], [PermitId], [AddedInVersion], [RemovedInVersion], [FileName], [SizeBytes],
+                     [MediaType], [Sha256], [StorageKey], [ScanStatus], [Category], [DocumentNumber],
+                     [DocumentRevision], [DocumentDate], [TargetPermitVersion], [PrintPackageId],
+                     [SupersedesAttachmentId], [UploadedBy], [UploadedAt], [RemovedBy], [RemovedAt])
+                VALUES
+                    ({attachmentId}, {permit.Id}, 1, NULL, {fileName}, 8,
+                     {mediaType}, {sha256}, {storageKey}, {cleanStatus},
+                     {category}, NULL, NULL, NULL, 1, NULL, NULL, {uploader}, {now}, NULL, NULL)
+                """);
+
+            await migrator.MigrateAsync();
+            db.ChangeTracker.Clear();
+
+            var migrated = await db.PermitAttachments.SingleAsync(x => x.Id == attachmentId);
+            Assert.Equal("PENDING", migrated.ScanStatus);
+            Assert.Null(migrated.ScanEvidenceReference);
+            Assert.Null(migrated.ScannedAt);
         }
         finally
         {

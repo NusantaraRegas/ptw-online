@@ -12,62 +12,50 @@ describe('PermitValidationProgress', () => {
     fixture = TestBed.createComponent(PermitValidationProgress);
   });
 
-  it('presents completed HSSE validation and the area owner', () => {
+  it('presents the single completed HSE validation and atomic issuance decision', () => {
     const workflow: PermitWorkflow = {
-      hsse: {
-        code: 'HSSE',
-        label: 'Validasi HSSE',
+      hse: {
+        code: 'HSE',
+        label: 'Validasi HSE',
         completed: true,
         actorId: 'hsse.validator.demo',
         statement: 'Sesuai.',
         completedAt: '2026-09-02T00:00:00Z',
       },
-      gasDistribution: {
-        code: 'GAS_DISTRIBUTION',
-        label: 'Validasi Distribusi Gas & Pengelolaan ORF',
+      approval: {
         completed: true,
-        actorId: 'gas.validator.demo',
-        statement: 'Sesuai.',
-        completedAt: '2026-09-02T00:01:00Z',
+        actorId: 'area.owner.orf.demo',
+        actorPosition: 'Manager',
+        capacity: 'MANAGER',
+        principalManagerUserId: 'area.owner.orf.demo',
+        principalPosition: 'Manager',
+        authorizationId: 'authorization-id',
+        actingAssignmentId: null,
+        statement: 'Disetujui.',
+        approvedAt: '2026-09-02T00:02:00Z',
       },
-      approvedBy: 'area.owner.fsru.demo',
-      approvalStatement: 'Disetujui.',
-      approvedAt: '2026-09-02T00:02:00Z',
       suspension: {
-        requested: false,
-        requestedBy: null,
+        suspended: false,
+        suspendedBy: null,
         reason: null,
-        requestedAt: null,
-        approved: false,
-        approvedBy: null,
-        approvalStatement: null,
-        approvedAt: null,
+        suspendedAt: null,
+        resolvedBy: null,
+        resolution: null,
+        resolvedAt: null,
       },
-      completion: {
-        sponsor: {
-          code: 'SPONSOR',
-          label: '',
-          completed: false,
-          actorId: null,
-          statement: null,
-          completedAt: null,
-        },
-        hsse: {
-          code: 'HSSE',
-          label: '',
-          completed: false,
-          actorId: null,
-          statement: null,
-          completedAt: null,
-        },
-        areaOwner: {
-          code: 'AREA_OWNER',
-          label: '',
-          completed: false,
-          actorId: null,
-          statement: null,
-          completedAt: null,
-        },
+      closure: {
+        requested: false,
+        printPackageId: null,
+        signedFieldCopyAttachmentIds: [],
+        requestedBy: null,
+        completionStatement: null,
+        requestedAt: null,
+        revision: 0,
+        replacementReason: null,
+        closed: false,
+        closedBy: null,
+        closeStatement: null,
+        closedAt: null,
       },
     };
 
@@ -77,7 +65,7 @@ describe('PermitValidationProgress', () => {
     const text = fixture.nativeElement.textContent.replace(/\s+/g, ' ').trim();
     expect(text).toContain('1/1 selesai');
     expect(text).not.toContain('Distribusi Gas & Pengelolaan ORF');
-    expect(text).toContain('area.owner.fsru.demo');
-    expect(text).toContain('Disetujui');
+    expect(text).toContain('area.owner.orf.demo');
+    expect(text).toContain('Diterbitkan');
   });
 });

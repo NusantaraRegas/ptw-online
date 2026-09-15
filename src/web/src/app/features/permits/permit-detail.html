@@ -42,8 +42,8 @@
       <path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z" />
     </svg>
     <p>
-      <strong>DISETUJUI belum mengizinkan pekerjaan dimulai.</strong> Pekerjaan baru boleh berjalan
-      setelah PTW berstatus DITERBITKAN dan seluruh prasyarat lapangan tervalidasi.
+      <strong>DITERBITKAN belum otomatis mengizinkan pekerjaan dimulai.</strong> Gas test,
+      toolbox/readiness, revalidasi, dan tanda tangan lapangan tetap wajib pada hardcopy.
     </p>
   </section>
 
@@ -52,7 +52,7 @@
       <article class="card detail-card">
         <header>
           <div>
-            <span class="status" [class.open]="permit()!.status === 'OPEN'">{{
+            <span class="status" [class.open]="permit()!.status === 'ISSUED'">{{
               statusLabel()
             }}</span>
             <h2>{{ permit()!.draft.title }}</h2>
@@ -90,6 +90,33 @@
             <dd>{{ permit()!.draft.riskLevel }}</dd>
           </div>
           <div>
+            <dt>Tipe pengaju</dt>
+            <dd>{{ permit()!.draft.submitterType || 'USER_SPONSOR' }}</dd>
+          </div>
+          <div>
+            <dt>Jenis pekerjaan</dt>
+            <dd>{{ permit()!.draft.workTypeCode || 'Belum diisi' }}</dd>
+          </div>
+          <div>
+            <dt>Equipment/tag</dt>
+            <dd>{{ permit()!.draft.equipmentTag || 'Tidak berlaku' }}</dd>
+          </div>
+          <div>
+            <dt>Plant/area</dt>
+            <dd>{{ permit()!.draft.plantArea || 'Belum diisi' }}</dd>
+          </div>
+          <div>
+            <dt>CLSR</dt>
+            <dd>{{ permit()!.draft.clsrApplicable ? 'Berlaku' : 'Tidak berlaku' }}</dd>
+          </div>
+          <div>
+            <dt>JSA</dt>
+            <dd>
+              {{ permit()!.draft.jsaDocumentNumber || 'Belum diisi' }} / rev.
+              {{ permit()!.draft.jsaRevision || '-' }}
+            </dd>
+          </div>
+          <div>
             <dt>Sponsor</dt>
             <dd>{{ permit()!.draft.sponsorId }}</dd>
           </div>
@@ -108,20 +135,8 @@
         </dl>
 
         <div class="list-section">
-          <h3>Bahaya teridentifikasi</h3>
-          <div class="chips">
-            @for (hazard of permit()!.draft.hazards; track hazard) {
-              <span class="chip hazard">{{ hazard }}</span>
-            }
-          </div>
-        </div>
-        <div class="list-section">
-          <h3>Kontrol awal</h3>
-          <div class="chips">
-            @for (control of permit()!.draft.controls; track control) {
-              <span class="chip control">{{ control }}</span>
-            }
-          </div>
+          <h3>JSA dan dokumen keselamatan</h3>
+          <p>Rincian bahaya dan pengendalian harus berasal dari dokumen JSA terkontrol.</p>
         </div>
         <app-permit-attachments
           [permitId]="permit()!.id"
@@ -171,43 +186,14 @@
         </section>
         <app-permit-validation-progress [workflow]="permit()!.workflow" />
 
-        @if (permit()!.workflow.suspension.requested) {
+        @if (permit()!.workflow.suspension.suspended) {
           <section class="card evidence-card suspension-evidence">
             <h2>Penangguhan pekerjaan</h2>
             <strong>{{ permit()!.workflow.suspension.reason }}</strong>
-            <span>Diajukan oleh {{ permit()!.workflow.suspension.requestedBy }}</span>
-            <span>
-              {{
-                permit()!.workflow.suspension.approved
-                  ? 'Disetujui oleh ' + permit()!.workflow.suspension.approvedBy
-                  : 'Menunggu persetujuan PIC pemilik area'
-              }}
-            </span>
-          </section>
-        }
-
-        @if (permit()!.workflow.completion.sponsor.completed) {
-          <section class="card evidence-card completion-evidence">
-            <h2>Konfirmasi penyelesaian</h2>
-            <span class="evidence-row completed">Sponsor <strong>Selesai</strong></span>
-            <span
-              class="evidence-row"
-              [class.completed]="permit()!.workflow.completion.hsse.completed"
-            >
-              HSSE
-              <strong>{{
-                permit()!.workflow.completion.hsse.completed ? 'Selesai' : 'Menunggu'
-              }}</strong>
-            </span>
-            <span
-              class="evidence-row"
-              [class.completed]="permit()!.workflow.completion.areaOwner.completed"
-            >
-              PIC pemilik area
-              <strong>{{
-                permit()!.workflow.completion.areaOwner.completed ? 'Selesai' : 'Menunggu'
-              }}</strong>
-            </span>
+            <span>Ditangguhkan oleh {{ permit()!.workflow.suspension.suspendedBy }}</span>
+            @if (permit()!.workflow.suspension.resolvedAt) {
+              <span>Diselesaikan oleh {{ permit()!.workflow.suspension.resolvedBy }}</span>
+            }
           </section>
         }
 
@@ -273,7 +259,7 @@
         @if (canSubmit()) {
           <form class="card workflow-action" [formGroup]="submissionForm">
             <h2>Ajukan validasi</h2>
-            <p>Konfirmasi seluruh prasyarat submit sebelum mengirim PTW ke validator HSSE.</p>
+            <p>Konfirmasi seluruh prasyarat submit sebelum mengirim PTW ke PIC HSE.</p>
             <label class="check"
               ><input type="checkbox" formControlName="eSimiEligible" /> E-SIMI layak</label
             >
@@ -311,14 +297,14 @@
               ></textarea>
             </label>
             <div class="action-buttons">
-              @if (canValidateHsse()) {
+              @if (canValidateHse()) {
                 <button
                   class="primary-button"
                   type="button"
                   [disabled]="saving() || decisionStatement.invalid"
-                  (click)="endorseHsse()"
+                  (click)="validateHse()"
                 >
-                  Sahkan validasi HSSE
+                  Validasi sebagai PIC HSE
                 </button>
               }
               @if (canApprove()) {
@@ -326,9 +312,9 @@
                   class="primary-button"
                   type="button"
                   [disabled]="saving() || decisionStatement.invalid"
-                  (click)="approve()"
+                  (click)="approveAndIssue()"
                 >
-                  Setujui sebagai pemilik area
+                  Setujui dan terbitkan
                 </button>
               }
               @if (canDisposition()) {
@@ -351,130 +337,36 @@
                   </button>
                 </div>
               }
-              @if (canRequestSuspension()) {
+              @if (canSuspend()) {
                 <button
                   class="danger-button"
                   type="button"
                   [disabled]="saving() || decisionStatement.invalid"
-                  (click)="requestSuspension()"
+                  (click)="suspend()"
                 >
-                  Ajukan penangguhan
+                  Tangguhkan seketika
                 </button>
               }
-              @if (canApproveSuspension()) {
+              @if (canResolveSuspension()) {
                 <button
                   class="primary-button"
                   type="button"
                   [disabled]="saving() || decisionStatement.invalid"
-                  (click)="approveSuspension()"
+                  (click)="resolveSuspension()"
                 >
-                  Setujui penangguhan
-                </button>
-              }
-              @if (canDeclareCompletion()) {
-                <button
-                  class="secondary-button"
-                  type="button"
-                  [disabled]="saving() || decisionStatement.invalid"
-                  (click)="declareCompletion()"
-                >
-                  Nyatakan pekerjaan selesai
-                </button>
-              }
-              @if (canConfirmHsseCompletion()) {
-                <button
-                  class="primary-button"
-                  type="button"
-                  [disabled]="saving() || decisionStatement.invalid"
-                  (click)="confirmHsseCompletion()"
-                >
-                  Konfirmasi selesai sebagai HSSE
-                </button>
-              }
-              @if (canConfirmAreaOwnerCompletion()) {
-                <button
-                  class="primary-button"
-                  type="button"
-                  [disabled]="saving() || decisionStatement.invalid"
-                  (click)="confirmAreaOwnerCompletion()"
-                >
-                  Konfirmasi selesai sebagai PIC area
-                </button>
-              }
-              @if (canClose()) {
-                <button
-                  class="danger-button"
-                  type="button"
-                  [disabled]="saving() || decisionStatement.invalid"
-                  (click)="closePermit()"
-                >
-                  Tutup PTW
+                  Selesaikan penangguhan
                 </button>
               }
             </div>
           </section>
         }
 
-        @if (canIssue()) {
-          <form class="card workflow-action" [formGroup]="issueForm">
-            <h2>Penerbitan PTW</h2>
-            <p>Seluruh guard diperiksa ulang pada saat PTW diterbitkan.</p>
-            <label class="check"
-              ><input type="checkbox" formControlName="eSimiEligible" /> E-SIMI masih layak</label
-            >
-            <label class="check"
-              ><input type="checkbox" formControlName="locationVerified" /> Lokasi
-              terverifikasi</label
-            >
-            <label class="check"
-              ><input type="checkbox" formControlName="toolboxTalkComplete" /> Toolbox talk
-              selesai</label
-            >
-            <label class="check"
-              ><input type="checkbox" formControlName="personnelAcknowledged" /> Personel telah
-              melakukan acknowledgement</label
-            >
-            <label class="check"
-              ><input type="checkbox" formControlName="ppeAndControlsVerified" /> APD dan kontrol
-              terverifikasi</label
-            >
-            <label class="check"
-              ><input type="checkbox" formControlName="isolationVerified" /> Isolasi
-              terverifikasi</label
-            >
-            <label class="check"
-              ><input type="checkbox" formControlName="simopsVerified" /> Kondisi SIMOPS
-              terverifikasi</label
-            >
-            <label class="check"
-              ><input type="checkbox" formControlName="gasTestSatisfied" /> Gas test memenuhi
-              persyaratan</label
-            >
-            <label class="check"
-              ><input type="checkbox" formControlName="noUnresolvedSuspension" /> Tidak ada
-              suspension yang belum diselesaikan</label
-            >
-            @if (error()) {
-              <div class="message error" role="alert">
-                <span>{{ error() }}</span>
-              </div>
-            }
-            <button
-              class="primary-button"
-              type="button"
-              [disabled]="saving() || issueForm.invalid"
-              (click)="issue()"
-            >
-              Terbitkan PTW
-            </button>
-          </form>
-        }
         <section class="card next-step">
           <span>Langkah berikutnya</span>
           <strong>{{
             canEdit() ? 'Lengkapi dan verifikasi draft' : 'Pantau status workflow'
           }}</strong>
-          <p>Validasi HSSE wajib selesai sebelum approval PIC pemilik area tersedia.</p>
+          <p>Validasi HSE wajib selesai sebelum approval dan penerbitan pemilik area tersedia.</p>
         </section>
       </aside>
     </section>
@@ -513,6 +405,12 @@
           </small></label
         >
         <label>Perusahaan pelaksana<input formControlName="company" /></label>
+        <label
+          >Tipe pengaju<select formControlName="submitterType">
+            <option value="USER_SPONSOR">User Sponsor</option>
+            <option value="CONTRACTOR">Kontraktor</option>
+          </select></label
+        >
         <label>Nama pelaksana<input formControlName="performingAuthority" /></label>
         <label
           >Kelas izin<select formControlName="permitClass">
@@ -521,6 +419,24 @@
             <option value="ConfinedSpaceEntry">Memasuki Ruang Terbatas</option>
           </select></label
         >
+        <label>Jenis pekerjaan<input formControlName="workTypeCode" /></label>
+        <label>Equipment/tag<input formControlName="equipmentTag" /></label>
+        <label>Plant/area<input formControlName="plantArea" /></label>
+        <label class="check"
+          ><input type="checkbox" formControlName="clsrApplicable" /> CLSR berlaku</label
+        >
+        <label class="wide"
+          >Deklarasi SIMOPS<textarea formControlName="simopsDeclaration" rows="2"></textarea>
+        </label>
+        <label class="wide"
+          >APD/perlengkapan safety <input formControlName="safetyEquipmentCodes"
+        /></label>
+        <label class="wide"
+          >Isolation/precaution <input formControlName="isolationPrecautionCodes"
+        /></label>
+        <label>Nomor JSA<input formControlName="jsaDocumentNumber" /></label>
+        <label>Revisi JSA<input formControlName="jsaRevision" /></label>
+        <label>Tanggal JSA<input type="date" formControlName="jsaDate" /></label>
         <label
           >Tingkat risiko<select formControlName="riskLevel">
             <option value="Low">Rendah</option>
@@ -533,12 +449,6 @@
         <label>Mulai<input type="datetime-local" formControlName="validFrom" /></label>
         <label
           >Selesai (maks. 7 hari)<input type="datetime-local" formControlName="validUntil"
-        /></label>
-        <label class="wide"
-          >Bahaya <small>pisahkan dengan koma</small><input formControlName="hazards"
-        /></label>
-        <label class="wide"
-          >Kontrol <small>pisahkan dengan koma</small><input formControlName="controls"
         /></label>
       </div>
 

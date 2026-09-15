@@ -17,7 +17,18 @@ public sealed record PermitDraftRequest(
     string? ESimiNumber,
     IReadOnlyList<string> Hazards,
     IReadOnlyList<string> Controls,
-    IReadOnlyList<string> RequiredDocumentCodes);
+    IReadOnlyList<string> RequiredDocumentCodes,
+    string SubmitterType = "USER_SPONSOR",
+    string? WorkTypeCode = null,
+    string? EquipmentTag = null,
+    string? PlantArea = null,
+    bool ClsrApplicable = false,
+    string? SimopsDeclaration = null,
+    IReadOnlyList<string>? SafetyEquipmentCodes = null,
+    IReadOnlyList<string>? IsolationPrecautionCodes = null,
+    string? JsaDocumentNumber = null,
+    string? JsaRevision = null,
+    DateTimeOffset? JsaDate = null);
 
 public sealed record SubmitPermitRequest(
     bool ESimiEligible,
@@ -25,9 +36,11 @@ public sealed record SubmitPermitRequest(
     bool RequiredDocumentsSafe,
     IReadOnlyList<string> MissingRequirements);
 
-public sealed record EndorsePermitValidationRequest(string Statement);
+public sealed record ValidateSubmissionRequest(string Statement);
 
-public sealed record ApprovePermitRequest(string Statement);
+public sealed record ApproveAndIssuePermitRequest(
+    string Statement,
+    Guid? ActingAssignmentId);
 
 public sealed record PermitReasonRequest(string Reason);
 
@@ -35,16 +48,20 @@ public sealed record RequestPermitRenewalRequest(
     DateTimeOffset ValidFrom,
     DateTimeOffset ValidUntil);
 
-public sealed record IssuePermitRequest(
-    bool ESimiEligible,
-    bool LocationVerified,
-    bool ToolboxTalkComplete,
-    bool PersonnelAcknowledged,
-    bool PpeAndControlsVerified,
-    bool IsolationVerified,
-    bool SimopsVerified,
-    bool GasTestSatisfied,
-    bool HasUnresolvedSuspension);
+public sealed record ResolveSuspensionRequest(string Resolution);
+
+public sealed record RequestClosureRequest(
+    Guid PrintPackageId,
+    IReadOnlyList<Guid> SignedFieldCopyAttachmentIds,
+    string CompletionStatement,
+    bool AllPagesReviewed,
+    bool ReadableAndCompleteAcknowledged);
+
+public sealed record ClosePermitRequest(
+    string Statement,
+    bool CompletionConfirmed,
+    bool HandbackConfirmed,
+    bool EvidenceReadable);
 
 public sealed record PermitValidationResponse(
     string Code,
@@ -54,31 +71,46 @@ public sealed record PermitValidationResponse(
     string? Statement,
     DateTimeOffset? CompletedAt);
 
-public sealed record PermitWorkflowResponse(
-    PermitValidationResponse Hsse,
-    PermitValidationResponse GasDistribution,
-    string? ApprovedBy,
-    string? ApprovalStatement,
-    DateTimeOffset? ApprovedAt,
-    PermitSuspensionResponse Suspension,
-    PermitCompletionResponse Completion);
-
-public sealed record PermitSuspensionResponse(
-    bool Requested,
-    string? RequestedBy,
-    string? Reason,
-    DateTimeOffset? RequestedAt,
-    bool Approved,
-    string? ApprovedBy,
-    string? ApprovalStatement,
+public sealed record PermitApprovalResponse(
+    bool Completed,
+    string? ActorId,
+    string? ActorPosition,
+    string? Capacity,
+    string? PrincipalManagerUserId,
+    string? PrincipalPosition,
+    Guid? AuthorizationId,
+    Guid? ActingAssignmentId,
+    string? Statement,
     DateTimeOffset? ApprovedAt);
 
-public sealed record PermitCompletionResponse(
-    PermitValidationResponse Sponsor,
-    PermitValidationResponse Hsse,
-    PermitValidationResponse AreaOwner);
+public sealed record PermitSuspensionResponse(
+    bool Suspended,
+    string? SuspendedBy,
+    string? Reason,
+    DateTimeOffset? SuspendedAt,
+    string? ResolvedBy,
+    string? Resolution,
+    DateTimeOffset? ResolvedAt);
 
-public sealed record ConfirmPermitActionRequest(string Statement);
+public sealed record PermitClosureResponse(
+    bool Requested,
+    Guid? PrintPackageId,
+    IReadOnlyList<Guid> SignedFieldCopyAttachmentIds,
+    string? RequestedBy,
+    string? CompletionStatement,
+    DateTimeOffset? RequestedAt,
+    int Revision,
+    string? ReplacementReason,
+    bool Closed,
+    string? ClosedBy,
+    string? CloseStatement,
+    DateTimeOffset? ClosedAt);
+
+public sealed record PermitWorkflowResponse(
+    PermitValidationResponse Hse,
+    PermitApprovalResponse Approval,
+    PermitSuspensionResponse Suspension,
+    PermitClosureResponse Closure);
 
 public sealed record PermitResponse(
     Guid Id,
@@ -88,7 +120,6 @@ public sealed record PermitResponse(
     PermitDraftRequest Draft,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    Guid? ActiveWorkPeriodId,
     string? SuspensionReason,
     Guid? RenewedFromPermitId,
     Guid? RenewalPermitId,
@@ -141,6 +172,15 @@ public sealed record PermitAttachmentResponse(
     string MediaType,
     string Sha256,
     string ScanStatus,
+    string? ScanEvidenceReference,
+    DateTimeOffset? ScannedAt,
+    string Category,
+    string? DocumentNumber,
+    string? DocumentRevision,
+    DateTimeOffset? DocumentDate,
+    int TargetPermitVersion,
+    Guid? PrintPackageId,
+    Guid? SupersedesAttachmentId,
     string UploadedBy,
     DateTimeOffset UploadedAt);
 

@@ -26,6 +26,7 @@ describe('PermitAttachmentApi', () => {
     expect(request.request.headers.get('If-Match')).toBe('"etag-1"');
     expect(request.request.headers.has('Idempotency-Key')).toBe(true);
     const uploaded = request.request.body.get('file') as File;
+    expect(request.request.body.get('category')).toBe('SUPPORTING');
     expect(uploaded.name).toBe('jsa.pdf');
     expect(uploaded.type).toBe('application/pdf');
     request.flush({

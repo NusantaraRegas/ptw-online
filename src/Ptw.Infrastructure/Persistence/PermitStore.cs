@@ -283,6 +283,49 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         }).ToArray();
     }
 
+    public async Task<PermitTaskEntry?> FindPendingTaskAsync(
+        Guid taskId,
+        CancellationToken cancellationToken)
+    {
+        var record = await (
+            from task in dbContext.PermitTasks.AsNoTracking()
+            join permit in dbContext.Permits.AsNoTracking() on task.PermitId equals permit.Id
+            where task.Id == taskId && task.Status == "PENDING"
+            select new { Task = task, Permit = permit })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (record is null)
+        {
+            return null;
+        }
+
+        var draft = JsonSerializer.Deserialize<PermitDraft>(record.Permit.DraftJson, JsonOptions)
+            ?? throw new InvalidOperationException("Snapshot draft PTW tidak valid.");
+        return new PermitTaskEntry(
+            record.Task.Id,
+            record.Task.PermitId,
+            record.Task.PermitVersion,
+            record.Task.Type,
+            record.Task.Label,
+            record.Task.RequiredRole,
+            record.Task.Status,
+            record.Permit.PermitNumber,
+            draft.Title,
+            record.Permit.LocationId,
+            record.Task.CreatedAt,
+            record.Task.CompletedAt);
+    }
+
+    public async Task<PrintPackageEntry?> FindPrintPackageAsync(
+        Guid printPackageId,
+        CancellationToken cancellationToken)
+    {
+        var record = await dbContext.PrintPackageSnapshots.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == printPackageId, cancellationToken);
+        return record is null
+            ? null
+            : new PrintPackageEntry(record.Id, record.PermitId, record.PermitVersion, record.RenderStatus);
+    }
+
     private async Task ApplyWorkflowTasksAsync(
         Permit permit,
         IReadOnlyList<DomainEvent> events,
@@ -293,108 +336,47 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         {
             switch (domainEvent.Type)
             {
-                case "review_started":
-                    AddTask(permit, "HSSE_VALIDATION", "Validasi HSSE", "HSSEValidator", domainEvent.OccurredAt);
+                case "permit_submitted":
+                    AddTask(permit, "HSE_VALIDATION", "Validasi PIC HSE", "HSEValidator", domainEvent.OccurredAt);
                     break;
-                case "permit_validation_endorsed":
+                case "hse_validation_completed":
                     await CompleteTaskAsync(
                         permit.Id,
                         permit.Version,
-                        "HSSE_VALIDATION",
+                        "HSE_VALIDATION",
                         actorId,
                         domainEvent.OccurredAt,
                         cancellationToken);
-                    break;
-                case "hsse_validation_completed":
                     AddTask(
                         permit,
-                        "AREA_OWNER_APPROVAL",
-                        "Persetujuan PIC pemilik area",
-                        "AreaOwnerApprover",
+                        "AREA_APPROVE_AND_ISSUE",
+                        "Setujui dan terbitkan PTW",
+                        "AreaOwnerManager",
                         domainEvent.OccurredAt);
-                    break;
-                case "permit_approved":
-                    await CompleteTaskAsync(
-                        permit.Id,
-                        permit.Version,
-                        "AREA_OWNER_APPROVAL",
-                        actorId,
-                        domainEvent.OccurredAt,
-                        cancellationToken);
-                    AddTask(
-                        permit,
-                        "AREA_OWNER_ISSUE",
-                        "Penerbitan oleh PIC pemilik area",
-                        "AreaOwnerApprover",
-                        domainEvent.OccurredAt,
-                        actorId);
                     break;
                 case "permit_issued":
+                    await AddIssuanceArtifactsAsync(permit, domainEvent.OccurredAt, cancellationToken);
                     await CompleteTaskAsync(
                         permit.Id,
                         permit.Version,
-                        "AREA_OWNER_ISSUE",
+                        "AREA_APPROVE_AND_ISSUE",
                         actorId,
                         domainEvent.OccurredAt,
                         cancellationToken);
                     break;
-                case "suspension_requested":
+                case "closure_requested":
                     AddTask(
                         permit,
-                        "SUSPENSION_APPROVAL",
-                        "Persetujuan penangguhan pekerjaan",
-                        "AreaOwnerApprover",
-                        domainEvent.OccurredAt);
-                    break;
-                case "suspension_approved":
-                    await CompleteTaskAsync(
-                        permit.Id,
-                        permit.Version,
-                        "SUSPENSION_APPROVAL",
-                        actorId,
-                        domainEvent.OccurredAt,
-                        cancellationToken);
-                    break;
-                case "completion_declared":
-                    AddTask(
-                        permit,
-                        "HSSE_COMPLETION_CONFIRMATION",
-                        "Konfirmasi penyelesaian oleh HSSE",
-                        "HSSEValidator",
-                        domainEvent.OccurredAt);
-                    AddTask(
-                        permit,
-                        "AREA_OWNER_COMPLETION_CONFIRMATION",
-                        "Konfirmasi penyelesaian oleh PIC pemilik area",
-                        "AreaOwnerApprover",
-                        domainEvent.OccurredAt);
-                    break;
-                case "completion_confirmed":
-                    var payload = JsonSerializer.SerializeToElement(domainEvent.Payload, JsonOptions);
-                    var confirmation = payload.GetProperty("confirmation").GetString();
-                    await CompleteTaskAsync(
-                        permit.Id,
-                        permit.Version,
-                        confirmation == nameof(PermitCompletionKind.Hsse)
-                            ? "HSSE_COMPLETION_CONFIRMATION"
-                            : "AREA_OWNER_COMPLETION_CONFIRMATION",
-                        actorId,
-                        domainEvent.OccurredAt,
-                        cancellationToken);
-                    break;
-                case "completion_confirmations_completed":
-                    AddTask(
-                        permit,
-                        "AREA_OWNER_CLOSE",
-                        "Penutupan PTW oleh PIC pemilik area",
-                        "AreaOwnerApprover",
+                        "AREA_CLOSE_VERIFICATION",
+                        "Verifikasi hardcopy dan tutup PTW",
+                        "AreaOwnerManager",
                         domainEvent.OccurredAt);
                     break;
                 case "permit_closed":
                     await CompleteTaskAsync(
                         permit.Id,
                         permit.Version,
-                        "AREA_OWNER_CLOSE",
+                        "AREA_CLOSE_VERIFICATION",
                         actorId,
                         domainEvent.OccurredAt,
                         cancellationToken);
@@ -408,6 +390,78 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                     break;
             }
         }
+    }
+
+    private async Task AddIssuanceArtifactsAsync(
+        Permit permit,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken)
+    {
+        var approval = permit.Approval ?? throw new InvalidOperationException(
+            "Bukti approval wajib tersedia ketika PTW diterbitkan.");
+        var taskId = await dbContext.PermitTasks
+            .Where(x => x.PermitId == permit.Id
+                && x.PermitVersion == permit.Version
+                && x.Type == "AREA_APPROVE_AND_ISSUE"
+                && x.Status == "PENDING")
+            .Select(x => x.Id)
+            .SingleAsync(cancellationToken);
+        var evidenceJson = JsonSerializer.Serialize(approval, JsonOptions);
+        var decisionId = Guid.CreateVersion7();
+        dbContext.PermitDecisions.Add(new PermitDecisionRecord
+        {
+            Id = decisionId,
+            PermitId = permit.Id,
+            PermitVersion = permit.Version,
+            TaskId = taskId,
+            Decision = "APPROVE_AND_ISSUE",
+            ActorId = approval.ActorId,
+            ActorPosition = approval.ActorPosition,
+            ApprovalCapacity = ToUpperSnakeCase(approval.Capacity.ToString()),
+            PrincipalManagerUserId = approval.PrincipalManagerUserId,
+            PrincipalPosition = approval.PrincipalPosition,
+            AuthorizationId = approval.AuthorizationId,
+            ActingAssignmentId = approval.ActingAssignmentId,
+            Statement = approval.Statement,
+            DecidedAt = approval.ApprovedAt,
+            EvidenceHash = Hash(evidenceJson)
+        });
+
+        var snapshotJson = JsonSerializer.Serialize(new
+        {
+            permit.Id,
+            permit.PermitNumber,
+            PermitVersion = permit.Version,
+            Status = "ISSUED",
+            Permit = permit.Draft,
+            HseValidation = permit.HseValidation,
+            Approval = approval,
+            approval.RuleVersion,
+            approval.PrintTemplateVersion,
+            approval.CampaignAssetVersion,
+            CreatedAt = occurredAt
+        }, JsonOptions);
+        var snapshotId = Guid.CreateVersion7();
+        dbContext.PrintPackageSnapshots.Add(new PrintPackageSnapshotRecord
+        {
+            Id = snapshotId,
+            PermitId = permit.Id,
+            PermitVersion = permit.Version,
+            DecisionId = decisionId,
+            RuleVersion = approval.RuleVersion,
+            PrintTemplateVersion = approval.PrintTemplateVersion,
+            CampaignAssetVersion = approval.CampaignAssetVersion,
+            SnapshotJson = snapshotJson,
+            SnapshotHash = Hash(snapshotJson),
+            RenderStatus = "PENDING",
+            CreatedAt = occurredAt
+        });
+        dbContext.GeneratedDocuments.Add(new GeneratedDocumentRecord
+        {
+            Id = Guid.CreateVersion7(),
+            PrintPackageSnapshotId = snapshotId,
+            RenderStatus = "PENDING"
+        });
     }
 
     private void AddTask(
@@ -543,18 +597,15 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         DraftJson = JsonSerializer.Serialize(permit.Draft, JsonOptions),
         CreatedAt = permit.CreatedAt,
         UpdatedAt = permit.UpdatedAt,
-        ActiveWorkPeriodId = permit.ActiveWorkPeriodId,
         RenewedFromPermitId = permit.RenewedFromPermitId,
         SuspensionReason = permit.SuspensionReason,
         WorkflowEvidenceJson = JsonSerializer.Serialize(
             new PermitWorkflowSnapshot(
-                permit.HsseValidation,
-                permit.GasDistributionValidation,
+                permit.HseValidation,
                 permit.Approval,
                 permit.Suspension,
-                permit.SponsorCompletion,
-                permit.HsseCompletion,
-                permit.AreaOwnerCompletion),
+                permit.ClosureRequest,
+                permit.ClosureDecision),
             JsonOptions)
     };
 
@@ -563,7 +614,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         var draft = JsonSerializer.Deserialize<PermitDraft>(record.DraftJson, JsonOptions)
             ?? throw new InvalidOperationException("Snapshot draft PTW tidak valid.");
         var workflow = string.IsNullOrWhiteSpace(record.WorkflowEvidenceJson)
-            ? new PermitWorkflowSnapshot(null, null, null)
+            ? new PermitWorkflowSnapshot(null, null, null, null, null)
             : JsonSerializer.Deserialize<PermitWorkflowSnapshot>(record.WorkflowEvidenceJson, JsonOptions)
                 ?? throw new InvalidOperationException("Bukti workflow PTW tidak valid.");
         var permit = Permit.Rehydrate(
@@ -574,30 +625,33 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             draft,
             record.CreatedAt,
             record.UpdatedAt,
-            record.ActiveWorkPeriodId,
             record.SuspensionReason,
-            workflow.HsseValidation,
-            workflow.GasDistributionValidation,
+            workflow.HseValidation,
             workflow.Approval,
             workflow.Suspension,
-            workflow.SponsorCompletion,
-            workflow.HsseCompletion,
-            workflow.AreaOwnerCompletion,
+            workflow.ClosureRequest,
+            workflow.ClosureDecision,
             record.RenewedFromPermitId,
             renewalPermitId);
         return new StoredPermit(permit, EncodeETag(record.RowVersion));
     }
 
     private sealed record PermitWorkflowSnapshot(
-        PermitValidationEvidence? HsseValidation,
-        PermitValidationEvidence? GasDistributionValidation,
+        PermitValidationEvidence? HseValidation,
         PermitApprovalEvidence? Approval,
         PermitSuspensionEvidence? Suspension = null,
-        PermitCompletionEvidence? SponsorCompletion = null,
-        PermitCompletionEvidence? HsseCompletion = null,
-        PermitCompletionEvidence? AreaOwnerCompletion = null);
+        PermitClosureEvidence? ClosureRequest = null,
+        PermitClosureDecisionEvidence? ClosureDecision = null);
 
     private static string EncodeETag(byte[] rowVersion) => $"\"{Convert.ToBase64String(rowVersion)}\"";
+
+    private static string Hash(string value) =>
+        Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value)));
+
+    private static string ToUpperSnakeCase(string value) => string.Concat(
+        value.Select((character, index) =>
+            index > 0 && char.IsUpper(character) ? $"_{character}" : character.ToString()))
+        .ToUpperInvariant();
 
     private static byte[] DecodeETag(string etag)
     {

@@ -19,6 +19,17 @@ export interface PermitDraft {
   hazards: string[];
   controls: string[];
   requiredDocumentCodes: string[];
+  submitterType?: 'CONTRACTOR' | 'USER_SPONSOR';
+  workTypeCode?: string | null;
+  equipmentTag?: string | null;
+  plantArea?: string | null;
+  clsrApplicable?: boolean;
+  simopsDeclaration?: string | null;
+  safetyEquipmentCodes?: string[];
+  isolationPrecautionCodes?: string[];
+  jsaDocumentNumber?: string | null;
+  jsaRevision?: string | null;
+  jsaDate?: string | null;
 }
 
 export interface Permit {
@@ -29,7 +40,6 @@ export interface Permit {
   draft: PermitDraft;
   createdAt: string;
   updatedAt: string;
-  activeWorkPeriodId?: string;
   suspensionReason?: string;
   renewedFromPermitId?: string | null;
   renewalPermitId?: string | null;
@@ -47,42 +57,48 @@ export interface PermitValidation {
 }
 
 export interface PermitWorkflow {
-  hsse: PermitValidation;
-  gasDistribution: PermitValidation;
-  approvedBy: string | null;
-  approvalStatement: string | null;
-  approvedAt: string | null;
+  hse: PermitValidation;
+  approval: PermitApproval;
   suspension: PermitSuspension;
-  completion: PermitCompletion;
+  closure: PermitClosure;
+}
+
+export interface PermitApproval {
+  completed: boolean;
+  actorId: string | null;
+  actorPosition: string | null;
+  capacity: 'MANAGER' | 'ACTING_FOR_MANAGER' | null;
+  principalManagerUserId: string | null;
+  principalPosition: string | null;
+  authorizationId: string | null;
+  actingAssignmentId: string | null;
+  statement: string | null;
+  approvedAt: string | null;
 }
 
 export interface PermitSuspension {
-  requested: boolean;
-  requestedBy: string | null;
+  suspended: boolean;
+  suspendedBy: string | null;
   reason: string | null;
+  suspendedAt: string | null;
+  resolvedBy: string | null;
+  resolution: string | null;
+  resolvedAt: string | null;
+}
+
+export interface PermitClosure {
+  requested: boolean;
+  printPackageId: string | null;
+  signedFieldCopyAttachmentIds: string[];
+  requestedBy: string | null;
+  completionStatement: string | null;
   requestedAt: string | null;
-  approved: boolean;
-  approvedBy: string | null;
-  approvalStatement: string | null;
-  approvedAt: string | null;
-}
-
-export interface PermitCompletion {
-  sponsor: PermitValidation;
-  hsse: PermitValidation;
-  areaOwner: PermitValidation;
-}
-
-export interface IssuePermitRequest {
-  eSimiEligible: boolean;
-  locationVerified: boolean;
-  toolboxTalkComplete: boolean;
-  personnelAcknowledged: boolean;
-  ppeAndControlsVerified: boolean;
-  isolationVerified: boolean;
-  simopsVerified: boolean;
-  gasTestSatisfied: boolean;
-  hasUnresolvedSuspension: boolean;
+  revision: number;
+  replacementReason: string | null;
+  closed: boolean;
+  closedBy: string | null;
+  closeStatement: string | null;
+  closedAt: string | null;
 }
 
 export interface SubmitPermitRequest {
@@ -183,7 +199,7 @@ export class PermitApi {
     eTag: string,
     request: RequestPermitRenewal,
   ): Observable<PermitRenewalResult> {
-    return this.http.post<PermitRenewalResult>(`/api/v1/permits/${id}/renewals`, request, {
+    return this.http.post<PermitRenewalResult>(`/api/v1/permits/${id}/renew`, request, {
       headers: new HttpHeaders({
         'If-Match': eTag,
         'Idempotency-Key': crypto.randomUUID(),
@@ -191,48 +207,35 @@ export class PermitApi {
     });
   }
 
-  endorseHsse(id: string, eTag: string, statement: string): Observable<Permit> {
-    return this.command(id, 'validations/hsse/endorse', eTag, { statement });
+  validate(taskId: string, eTag: string, statement: string): Observable<Permit> {
+    return this.taskCommand(taskId, 'validate', eTag, { statement });
   }
 
-  approve(id: string, eTag: string, statement: string): Observable<Permit> {
-    return this.command(id, 'approve', eTag, { statement });
+  approveAndIssue(
+    taskId: string,
+    eTag: string,
+    request: {
+      statement: string;
+      actingAssignmentId: string | null;
+    },
+  ): Observable<Permit> {
+    return this.taskCommand(taskId, 'approve-and-issue', eTag, request);
   }
 
-  requestRevision(id: string, eTag: string, reason: string): Observable<Permit> {
-    return this.command(id, 'request-revision', eTag, { reason });
+  requestRevision(taskId: string, eTag: string, reason: string): Observable<Permit> {
+    return this.taskCommand(taskId, 'revision', eTag, { reason });
   }
 
-  reject(id: string, eTag: string, reason: string): Observable<Permit> {
-    return this.command(id, 'reject', eTag, { reason });
+  reject(taskId: string, eTag: string, reason: string): Observable<Permit> {
+    return this.taskCommand(taskId, 'reject', eTag, { reason });
   }
 
-  requestSuspension(id: string, eTag: string, reason: string): Observable<Permit> {
-    return this.command(id, 'suspensions/request', eTag, { reason });
+  suspend(id: string, eTag: string, reason: string): Observable<Permit> {
+    return this.command(id, 'suspensions', eTag, { reason });
   }
 
-  approveSuspension(id: string, eTag: string, statement: string): Observable<Permit> {
-    return this.command(id, 'suspensions/approve', eTag, { statement });
-  }
-
-  declareCompletion(id: string, eTag: string, statement: string): Observable<Permit> {
-    return this.command(id, 'completion/declare', eTag, { statement });
-  }
-
-  confirmHsseCompletion(id: string, eTag: string, statement: string): Observable<Permit> {
-    return this.command(id, 'completion/confirm/hsse', eTag, { statement });
-  }
-
-  confirmAreaOwnerCompletion(id: string, eTag: string, statement: string): Observable<Permit> {
-    return this.command(id, 'completion/confirm/area-owner', eTag, { statement });
-  }
-
-  close(id: string, eTag: string, statement: string): Observable<Permit> {
-    return this.command(id, 'close', eTag, { statement });
-  }
-
-  issue(id: string, eTag: string, readiness: IssuePermitRequest): Observable<Permit> {
-    return this.command(id, 'issue', eTag, readiness);
+  resolveSuspension(id: string, eTag: string, resolution: string): Observable<Permit> {
+    return this.command(id, 'suspensions/resolve', eTag, { resolution });
   }
 
   listActivity(id: string, offset = 0, limit = 10): Observable<PagedHistory<PermitActivity>> {
@@ -254,6 +257,20 @@ export class PermitApi {
     body: TRequest,
   ): Observable<Permit> {
     return this.http.post<Permit>(`/api/v1/permits/${id}/${command}`, body, {
+      headers: new HttpHeaders({
+        'If-Match': eTag,
+        'Idempotency-Key': crypto.randomUUID(),
+      }),
+    });
+  }
+
+  private taskCommand<TRequest>(
+    taskId: string,
+    command: string,
+    eTag: string,
+    body: TRequest,
+  ): Observable<Permit> {
+    return this.http.post<Permit>(`/api/v1/tasks/${taskId}/${command}`, body, {
       headers: new HttpHeaders({
         'If-Match': eTag,
         'Idempotency-Key': crypto.randomUUID(),

@@ -30,7 +30,7 @@ function localDate(hoursFromNow: number): string {
         <span>1</span>
         <div>
           <h2>Informasi pekerjaan</h2>
-          <p>Isi data dasar, klasifikasi, bahaya, dan kontrol awal.</p>
+          <p>Isi data dasar dan klasifikasi. Rincian bahaya/kontrol bersumber dari JSA.</p>
         </div>
       </div>
       <div class="grid">
@@ -71,6 +71,12 @@ function localDate(hoursFromNow: number): string {
           >Perusahaan pelaksana<input formControlName="company" placeholder="PT Mitra Kerja"
         /></label>
         <label
+          >Tipe pengaju<select formControlName="submitterType">
+            <option value="USER_SPONSOR">User Sponsor</option>
+            <option value="CONTRACTOR">Kontraktor</option>
+          </select></label
+        >
+        <label
           >Nama pelaksana<input
             formControlName="performingAuthority"
             placeholder="Nama penanggung jawab"
@@ -90,20 +96,32 @@ function localDate(hoursFromNow: number): string {
             <option value="Extreme">Ekstrem</option>
           </select></label
         >
+        <label>Jenis pekerjaan<input formControlName="workTypeCode" /></label>
+        <label>Equipment/tag<input formControlName="equipmentTag" /></label>
+        <label>Plant/area<input formControlName="plantArea" /></label>
+        <label class="check"
+          ><input type="checkbox" formControlName="clsrApplicable" /> CLSR berlaku</label
+        >
+        <label class="wide"
+          >Deklarasi SIMOPS<textarea formControlName="simopsDeclaration" rows="2"></textarea>
+        </label>
+        <label class="wide"
+          >APD/perlengkapan safety <small>kode dipisahkan koma</small
+          ><input formControlName="safetyEquipmentCodes"
+        /></label>
+        <label class="wide"
+          >Isolation/precaution <small>kode dipisahkan koma</small
+          ><input formControlName="isolationPrecautionCodes"
+        /></label>
+        <label>Nomor JSA<input formControlName="jsaDocumentNumber" /></label>
+        <label>Revisi JSA<input formControlName="jsaRevision" /></label>
+        <label>Tanggal JSA<input type="date" formControlName="jsaDate" /></label>
         <label
           >Nomor E-SIMI<input formControlName="eSimiNumber" placeholder="Akan divalidasi adapter"
         /></label>
         <label>Mulai<input type="datetime-local" formControlName="validFrom" /></label>
         <label
           >Selesai (maks. 7 hari)<input type="datetime-local" formControlName="validUntil"
-        /></label>
-        <label class="wide"
-          >Bahaya <small>pisahkan dengan koma</small
-          ><input formControlName="hazards" placeholder="Api terbuka, gas mudah terbakar"
-        /></label>
-        <label class="wide"
-          >Kontrol <small>pisahkan dengan koma</small
-          ><input formControlName="controls" placeholder="Fire watch, APAR, barricade"
         /></label>
       </div>
       @if (error()) {
@@ -250,13 +268,24 @@ export class PermitCreate {
     sponsorId: ['', Validators.required],
     performingAuthority: ['', Validators.required],
     company: ['', Validators.required],
+    submitterType: this.fb.nonNullable.control<'CONTRACTOR' | 'USER_SPONSOR'>('USER_SPONSOR', {
+      validators: [Validators.required],
+    }),
     permitClass: ['HotWork', Validators.required],
     riskLevel: ['High', Validators.required],
+    workTypeCode: ['', Validators.required],
+    equipmentTag: [''],
+    plantArea: ['', Validators.required],
+    clsrApplicable: [false],
+    simopsDeclaration: [''],
+    safetyEquipmentCodes: [''],
+    isolationPrecautionCodes: [''],
+    jsaDocumentNumber: ['', Validators.required],
+    jsaRevision: ['', Validators.required],
+    jsaDate: ['', Validators.required],
     validFrom: [localDate(1), Validators.required],
     validUntil: [localDate(9), Validators.required],
     eSimiNumber: [''],
-    hazards: ['', Validators.required],
-    controls: ['', Validators.required],
   });
 
   constructor() {
@@ -301,9 +330,18 @@ export class PermitCreate {
       validUntil: new Date(value.validUntil).toISOString(),
       eSimiExternalId: value.eSimiNumber || null,
       eSimiNumber: value.eSimiNumber || null,
-      hazards: this.split(value.hazards),
-      controls: this.split(value.controls),
+      hazards: [],
+      controls: [],
       requiredDocumentCodes: [],
+      workTypeCode: value.workTypeCode || null,
+      equipmentTag: value.equipmentTag || null,
+      plantArea: value.plantArea || null,
+      simopsDeclaration: value.simopsDeclaration || null,
+      safetyEquipmentCodes: this.split(value.safetyEquipmentCodes),
+      isolationPrecautionCodes: this.split(value.isolationPrecautionCodes),
+      jsaDocumentNumber: value.jsaDocumentNumber || null,
+      jsaRevision: value.jsaRevision || null,
+      jsaDate: value.jsaDate ? new Date(`${value.jsaDate}T00:00:00`).toISOString() : null,
     };
     this.api.create(draft).subscribe({
       next: () => void this.router.navigateByUrl('/permits'),
@@ -315,6 +353,7 @@ export class PermitCreate {
       },
     });
   }
+
   private split(value: string): string[] {
     return value
       .split(',')

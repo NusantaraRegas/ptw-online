@@ -27,7 +27,7 @@ describe('App', () => {
           id: 'task-1',
           permitId: 'permit-1',
           permitVersion: 2,
-          type: 'AREA_OWNER_APPROVAL',
+          type: 'AREA_APPROVE_AND_ISSUE',
           label: 'Persetujuan PIC pemilik area',
           requiredRole: 'AreaOwnerApprover',
           status: 'PENDING',

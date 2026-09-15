@@ -84,6 +84,56 @@ public sealed class PermitTaskRecord
     public DateTimeOffset? CancelledAt { get; set; }
 }
 
+public sealed class PermitDecisionRecord
+{
+    public Guid Id { get; set; }
+    public Guid PermitId { get; set; }
+    public int PermitVersion { get; set; }
+    public Guid TaskId { get; set; }
+    public string Decision { get; set; } = null!;
+    public string ActorId { get; set; } = null!;
+    public string ActorPosition { get; set; } = null!;
+    public string ApprovalCapacity { get; set; } = null!;
+    public string PrincipalManagerUserId { get; set; } = null!;
+    public string PrincipalPosition { get; set; } = null!;
+    public Guid AuthorizationId { get; set; }
+    public Guid? ActingAssignmentId { get; set; }
+    public string Statement { get; set; } = null!;
+    public DateTimeOffset DecidedAt { get; set; }
+    public string EvidenceHash { get; set; } = null!;
+}
+
+public sealed class PrintPackageSnapshotRecord
+{
+    public Guid Id { get; set; }
+    public Guid PermitId { get; set; }
+    public int PermitVersion { get; set; }
+    public Guid DecisionId { get; set; }
+    public string RuleVersion { get; set; } = null!;
+    public string PrintTemplateVersion { get; set; } = null!;
+    public string CampaignAssetVersion { get; set; } = null!;
+    public string SnapshotJson { get; set; } = null!;
+    public string SnapshotHash { get; set; } = null!;
+    public string RenderStatus { get; set; } = null!;
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+public sealed class GeneratedDocumentRecord
+{
+    public Guid Id { get; set; }
+    public Guid PrintPackageSnapshotId { get; set; }
+    public string? StorageKey { get; set; }
+    public string MediaType { get; set; } = "application/pdf";
+    public long? SizeBytes { get; set; }
+    public string? Sha256 { get; set; }
+    public string RenderStatus { get; set; } = null!;
+    public int Attempts { get; set; }
+    public DateTimeOffset? NextAttemptAt { get; set; }
+    public DateTimeOffset? GeneratedAt { get; set; }
+    public string? LastError { get; set; }
+    public byte[] RowVersion { get; set; } = [];
+}
+
 public sealed class PermitAttachmentRecord
 {
     public Guid Id { get; set; }
@@ -96,6 +146,15 @@ public sealed class PermitAttachmentRecord
     public string Sha256 { get; set; } = null!;
     public string StorageKey { get; set; } = null!;
     public string ScanStatus { get; set; } = null!;
+    public string? ScanEvidenceReference { get; set; }
+    public DateTimeOffset? ScannedAt { get; set; }
+    public string Category { get; set; } = null!;
+    public string? DocumentNumber { get; set; }
+    public string? DocumentRevision { get; set; }
+    public DateTimeOffset? DocumentDate { get; set; }
+    public int TargetPermitVersion { get; set; }
+    public Guid? PrintPackageId { get; set; }
+    public Guid? SupersedesAttachmentId { get; set; }
     public string UploadedBy { get; set; } = null!;
     public DateTimeOffset UploadedAt { get; set; }
     public string? RemovedBy { get; set; }

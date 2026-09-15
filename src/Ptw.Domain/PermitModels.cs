@@ -15,41 +15,52 @@ public enum RiskLevel
     Extreme
 }
 
-public enum PermitValidationKind
-{
-    Hsse,
-    GasDistribution
-}
-
 public sealed record PermitValidationEvidence(
-    PermitValidationKind Kind,
     string ActorId,
     string Statement,
     DateTimeOffset ValidatedAt);
 
+public enum ApprovalCapacity
+{
+    Manager,
+    ActingForManager
+}
+
 public sealed record PermitApprovalEvidence(
     string ActorId,
+    string ActorPosition,
+    ApprovalCapacity Capacity,
+    string PrincipalManagerUserId,
+    string PrincipalPosition,
+    Guid AuthorizationId,
+    Guid? ActingAssignmentId,
+    string RuleVersion,
+    string PrintTemplateVersion,
+    string CampaignAssetVersion,
     string Statement,
     DateTimeOffset ApprovedAt);
 
 public sealed record PermitSuspensionEvidence(
-    string RequestedBy,
+    string SuspendedBy,
     string Reason,
-    DateTimeOffset RequestedAt,
-    string? ApprovedBy = null,
-    string? ApprovalStatement = null,
-    DateTimeOffset? ApprovedAt = null);
+    DateTimeOffset SuspendedAt,
+    string? ResolvedBy = null,
+    string? Resolution = null,
+    DateTimeOffset? ResolvedAt = null);
 
-public sealed record PermitCompletionEvidence(
+public sealed record PermitClosureEvidence(
+    Guid PrintPackageId,
+    IReadOnlyList<Guid> AttachmentIds,
+    string RequestedBy,
+    string CompletionStatement,
+    DateTimeOffset RequestedAt,
+    int Revision,
+    string? ReplacementReason = null);
+
+public sealed record PermitClosureDecisionEvidence(
     string ActorId,
     string Statement,
-    DateTimeOffset ConfirmedAt);
-
-public enum PermitCompletionKind
-{
-    Hsse,
-    AreaOwner
-}
+    DateTimeOffset ClosedAt);
 
 public sealed record PermitDraft(
     string Title,
@@ -66,7 +77,18 @@ public sealed record PermitDraft(
     string? ESimiNumber,
     IReadOnlyList<string> Hazards,
     IReadOnlyList<string> Controls,
-    IReadOnlyList<string> RequiredDocumentCodes);
+    IReadOnlyList<string> RequiredDocumentCodes,
+    string SubmitterType = "USER_SPONSOR",
+    string? WorkTypeCode = null,
+    string? EquipmentTag = null,
+    string? PlantArea = null,
+    bool ClsrApplicable = false,
+    string? SimopsDeclaration = null,
+    IReadOnlyList<string>? SafetyEquipmentCodes = null,
+    IReadOnlyList<string>? IsolationPrecautionCodes = null,
+    string? JsaDocumentNumber = null,
+    string? JsaRevision = null,
+    DateTimeOffset? JsaDate = null);
 
 public sealed record SubmissionReadiness(
     bool ESimiEligible,
@@ -75,20 +97,4 @@ public sealed record SubmissionReadiness(
     IReadOnlyList<string> MissingRequirements)
 {
     public bool IsReady => ESimiEligible && RulesEvaluated && RequiredDocumentsSafe && MissingRequirements.Count == 0;
-}
-
-public sealed record FieldIssueReadiness(
-    bool ESimiEligible,
-    bool LocationVerified,
-    bool ToolboxTalkComplete,
-    bool PersonnelAcknowledged,
-    bool PpeAndControlsVerified,
-    bool IsolationVerified,
-    bool SimopsVerified,
-    bool GasTestSatisfied,
-    bool HasUnresolvedSuspension)
-{
-    public bool IsReady => ESimiEligible && LocationVerified && ToolboxTalkComplete
-        && PersonnelAcknowledged && PpeAndControlsVerified && IsolationVerified
-        && SimopsVerified && GasTestSatisfied && !HasUnresolvedSuspension;
 }

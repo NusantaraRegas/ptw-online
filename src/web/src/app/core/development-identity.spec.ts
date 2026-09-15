@@ -52,7 +52,7 @@ describe('developmentIdentityInterceptor', () => {
   it('uses one area owner actor for approval and issuance', () => {
     const areaOwner = DEVELOPMENT_IDENTITIES.find((item) => item.key === 'area-owner-orf');
 
-    expect(areaOwner?.roles).toEqual(['AreaOwnerApprover', 'IssuingAuthority']);
+    expect(areaOwner?.roles).toEqual(['AreaOwnerManager']);
     expect(areaOwner?.locationScopes).toEqual(['ORF', 'SITE-OFFICE']);
   });
 });

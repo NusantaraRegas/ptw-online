@@ -2,18 +2,18 @@
   <header>
     <div>
       <h3 id="attachments-title">Lampiran PTW</h3>
-      <p>Dokumen PDF pendukung. Tambahkan file sebanyak yang diperlukan dalam batas teknis.</p>
+      <p>Dokumen PDF, JPEG, atau PNG pendukung dalam penyimpanan privat.</p>
     </div>
     @if (canManage()) {
       <label class="upload-button" [class.disabled]="busy()">
         <input
           type="file"
-          accept="application/pdf,.pdf"
+          accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
           multiple
           [disabled]="busy()"
           (change)="selectFiles($event)"
         />
-        {{ busy() ? 'Mengunggah…' : 'Tambah PDF' }}
+        {{ busy() ? 'Mengunggah…' : 'Tambah file' }}
       </label>
     }
   </header>
@@ -39,21 +39,32 @@
   @if (loading()) {
     <p class="empty">Memuat lampiran…</p>
   } @else if (attachments().length === 0) {
-    <p class="empty">Belum ada lampiran PDF.</p>
+    <p class="empty">Belum ada lampiran.</p>
   } @else {
     <ul class="attachment-list">
       @for (attachment of attachments(); track attachment.id) {
         <li>
-          <div class="file-icon" aria-hidden="true">PDF</div>
+          <div class="file-icon" aria-hidden="true">FILE</div>
           <div class="file-info">
             <strong>{{ attachment.fileName }}</strong>
             <span>
+              {{ attachment.category }} · scan {{ attachment.scanStatus }} ·
               {{ formatSize(attachment.sizeBytes) }} · diunggah {{ attachment.uploadedBy }} ·
               {{ attachment.uploadedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
             </span>
           </div>
           <div class="file-actions">
-            <button type="button" class="download" (click)="download(attachment)">Unduh</button>
+            <button
+              type="button"
+              class="download"
+              [disabled]="attachment.scanStatus !== 'CLEAN'"
+              [attr.aria-describedby]="
+                attachment.scanStatus !== 'CLEAN' ? 'scan-download-note' : null
+              "
+              (click)="download(attachment)"
+            >
+              Unduh
+            </button>
             @if (canManage()) {
               <button type="button" class="remove" [disabled]="busy()" (click)="remove(attachment)">
                 Hapus
@@ -63,5 +74,8 @@
         </li>
       }
     </ul>
+    <p id="scan-download-note" class="empty">
+      File hanya dapat diunduh setelah malware scanner menyatakan status CLEAN.
+    </p>
   }
 </section>

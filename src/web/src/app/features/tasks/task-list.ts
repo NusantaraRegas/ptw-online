@@ -37,13 +37,9 @@ export class TaskList {
   protected taskCode(type: string): string {
     return (
       {
-        HSSE_VALIDATION: 'HSSE',
-        AREA_OWNER_APPROVAL: 'APR',
-        AREA_OWNER_ISSUE: 'TERBIT',
-        SUSPENSION_APPROVAL: 'TUNDA',
-        HSSE_COMPLETION_CONFIRMATION: 'HSSE',
-        AREA_OWNER_COMPLETION_CONFIRMATION: 'SELESAI',
-        AREA_OWNER_CLOSE: 'TUTUP',
+        HSE_VALIDATION: 'HSE',
+        AREA_APPROVE_AND_ISSUE: 'TERBIT',
+        AREA_CLOSE_VERIFICATION: 'TUTUP',
       }[type] ?? 'PTW'
     );
   }

@@ -21,17 +21,14 @@ public sealed class Permit
     public PermitDraft Draft { get; private set; }
     public DateTimeOffset CreatedAt { get; }
     public DateTimeOffset UpdatedAt { get; private set; }
-    public Guid? ActiveWorkPeriodId { get; private set; }
     public Guid? RenewedFromPermitId { get; private set; }
     public Guid? RenewalPermitId { get; private set; }
     public string? SuspensionReason { get; private set; }
-    public PermitValidationEvidence? HsseValidation { get; private set; }
-    public PermitValidationEvidence? GasDistributionValidation { get; private set; }
+    public PermitValidationEvidence? HseValidation { get; private set; }
     public PermitApprovalEvidence? Approval { get; private set; }
     public PermitSuspensionEvidence? Suspension { get; private set; }
-    public PermitCompletionEvidence? SponsorCompletion { get; private set; }
-    public PermitCompletionEvidence? HsseCompletion { get; private set; }
-    public PermitCompletionEvidence? AreaOwnerCompletion { get; private set; }
+    public PermitClosureEvidence? ClosureRequest { get; private set; }
+    public PermitClosureDecisionEvidence? ClosureDecision { get; private set; }
     public IReadOnlyList<DomainEvent> Events => _events;
 
     public static Permit CreateDraft(PermitDraft draft, DateTimeOffset now)
@@ -54,11 +51,7 @@ public sealed class Permit
         {
             RenewedFromPermitId = sourcePermitId
         };
-        permit.Raise("permit_renewal_draft_created", new
-        {
-            SourcePermitId = sourcePermitId,
-            permit.Version
-        });
+        permit.Raise("permit_renewal_draft_created", new { SourcePermitId = sourcePermitId, permit.Version });
         return permit;
     }
 
@@ -70,15 +63,12 @@ public sealed class Permit
         PermitDraft draft,
         DateTimeOffset createdAt,
         DateTimeOffset updatedAt,
-        Guid? activeWorkPeriodId,
-        string? suspensionReason,
-        PermitValidationEvidence? hsseValidation = null,
-        PermitValidationEvidence? gasDistributionValidation = null,
+        string? suspensionReason = null,
+        PermitValidationEvidence? hseValidation = null,
         PermitApprovalEvidence? approval = null,
         PermitSuspensionEvidence? suspension = null,
-        PermitCompletionEvidence? sponsorCompletion = null,
-        PermitCompletionEvidence? hsseCompletion = null,
-        PermitCompletionEvidence? areaOwnerCompletion = null,
+        PermitClosureEvidence? closureRequest = null,
+        PermitClosureDecisionEvidence? closureDecision = null,
         Guid? renewedFromPermitId = null,
         Guid? renewalPermitId = null) =>
         new(id, draft, createdAt)
@@ -86,31 +76,20 @@ public sealed class Permit
             PermitNumber = permitNumber,
             Status = status,
             Version = version,
-            UpdatedAt = updatedAt,
-            ActiveWorkPeriodId = activeWorkPeriodId,
+            UpdatedAt = updatedAt.ToUniversalTime(),
             SuspensionReason = suspensionReason,
-            HsseValidation = hsseValidation,
-            GasDistributionValidation = gasDistributionValidation,
+            HseValidation = hseValidation,
             Approval = approval,
             Suspension = suspension,
-            SponsorCompletion = sponsorCompletion,
-            HsseCompletion = hsseCompletion,
-            AreaOwnerCompletion = areaOwnerCompletion,
+            ClosureRequest = closureRequest,
+            ClosureDecision = closureDecision,
             RenewedFromPermitId = renewedFromPermitId,
             RenewalPermitId = renewalPermitId
         };
 
     public void RequestRenewal(Permit renewal, DateTimeOffset now)
     {
-        EnsureStatus(PermitStatus.Open);
-        EnsureActiveWorkPeriod();
-        if (now < Draft.ValidFrom || now > Draft.ValidUntil)
-        {
-            throw new DomainRuleViolationException(
-                "permit.renewal.source_not_active",
-                "Renewal hanya dapat diajukan ketika masa PTW asal sedang aktif.");
-        }
-
+        EnsureStatus(PermitStatus.Issued, PermitStatus.Expired);
         if (RenewalPermitId is not null)
         {
             throw new DomainRuleViolationException(
@@ -150,7 +129,7 @@ public sealed class Permit
     {
         EnsureStatus(PermitStatus.Draft, PermitStatus.RevisionRequired);
         Draft = NormalizeAndValidate(draft);
-        ClearWorkflowEvidence();
+        ClearReviewEvidence();
         Version++;
         Touch(now);
         Raise("permit_draft_updated", new { Version });
@@ -162,6 +141,21 @@ public sealed class Permit
         Version++;
         Touch(now);
         Raise("permit_attachment_added", new { AttachmentId = attachmentId, Version });
+    }
+
+    public void AddSignedFieldCopy(Guid attachmentId, Guid printPackageId, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Issued, PermitStatus.Suspended, PermitStatus.Expired);
+        if (attachmentId == Guid.Empty || printPackageId == Guid.Empty)
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.attachment_reference_required",
+                "Attachment dan PrintPackage wajib tersedia untuk signed field copy.");
+        }
+
+        Version++;
+        Touch(now);
+        Raise("signed_field_copy_uploaded", new { AttachmentId = attachmentId, PrintPackageId = printPackageId, Version });
     }
 
     public void RemoveAttachment(Guid attachmentId, DateTimeOffset now)
@@ -177,7 +171,9 @@ public sealed class Permit
         EnsureStatus(PermitStatus.Draft, PermitStatus.RevisionRequired);
         if (!readiness.IsReady)
         {
-            throw new DomainRuleViolationException("permit.submit.requirements_incomplete", "PTW belum memenuhi seluruh persyaratan submit.");
+            throw new DomainRuleViolationException(
+                "permit.submit.requirements_incomplete",
+                "PTW belum memenuhi seluruh persyaratan submit.");
         }
 
         if (string.IsNullOrWhiteSpace(permitNumber))
@@ -186,296 +182,241 @@ public sealed class Permit
         }
 
         PermitNumber ??= permitNumber.Trim();
-        MoveTo(PermitStatus.Submitted, "permit_submitted", now);
+        ClearReviewEvidence();
+        MoveTo(PermitStatus.UnderValidation, "permit_submitted", now);
     }
 
-    public void StartReview(DateTimeOffset now)
+    public void ValidateSubmission(string actorId, string statement, DateTimeOffset now)
     {
-        EnsureStatus(PermitStatus.Submitted);
-        ClearWorkflowEvidence();
-        MoveTo(PermitStatus.UnderReview, "review_started", now);
+        EnsureStatus(PermitStatus.UnderValidation);
+        EnsureEvidence(actorId, statement);
+        if (string.Equals(Draft.SponsorId, actorId.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleViolationException(
+                "permit.validation.self_validation_forbidden",
+                "Sponsor PTW tidak boleh memvalidasi pengajuannya sendiri.");
+        }
+
+        HseValidation = new PermitValidationEvidence(actorId.Trim(), statement.Trim(), now.ToUniversalTime());
+        MoveTo(PermitStatus.AwaitingAreaApproval, "hse_validation_completed", now, new
+        {
+            HseValidation.ActorId,
+            HseValidation.Statement,
+            PermitVersion = Version
+        });
     }
 
     public void RequestRevision(string reason, DateTimeOffset now)
     {
-        EnsureStatus(PermitStatus.UnderReview, PermitStatus.AwaitingApproval);
+        EnsureStatus(PermitStatus.UnderValidation, PermitStatus.AwaitingAreaApproval);
         EnsureReason(reason);
-        ClearWorkflowEvidence();
+        ClearReviewEvidence();
         MoveTo(PermitStatus.RevisionRequired, "revision_requested", now, new { Reason = reason.Trim() });
     }
 
-    public void EndorseValidation(
-        PermitValidationKind kind,
-        string actorId,
-        string statement,
-        DateTimeOffset now)
+    public void EscalateValidation(string actorId, string note, DateTimeOffset now)
     {
-        EnsureStatus(PermitStatus.UnderReview);
-        EnsureEvidence(actorId, statement);
-        var evidence = new PermitValidationEvidence(
-            kind,
-            actorId.Trim(),
-            statement.Trim(),
-            now.ToUniversalTime());
-        switch (kind)
-        {
-            case PermitValidationKind.Hsse when HsseValidation is null:
-                HsseValidation = evidence;
-                break;
-            case PermitValidationKind.GasDistribution:
-                throw new DomainRuleViolationException(
-                    "permit.validation.retired",
-                    "Validasi operasional tidak lagi menjadi bagian dari route PTW.");
-            default:
-                throw new DomainRuleViolationException(
-                    "permit.validation.already_completed",
-                    $"Validasi {kind} sudah diselesaikan untuk versi PTW ini.");
-        }
-
+        EnsureStatus(PermitStatus.UnderValidation);
+        EnsureEvidence(actorId, note);
         Touch(now);
-        Raise("permit_validation_endorsed", new
+        Raise("hse_validation_escalated", new
         {
-            Validation = kind.ToString(),
-            evidence.ActorId,
-            evidence.Statement
-        });
-        if (HsseValidation is not null)
-        {
-            MoveTo(PermitStatus.AwaitingApproval, "hsse_validation_completed", now);
-        }
-    }
-
-    public void Approve(string actorId, string statement, DateTimeOffset now)
-    {
-        EnsureStatus(PermitStatus.AwaitingApproval);
-        EnsureEvidence(actorId, statement);
-        if (HsseValidation is null)
-        {
-            throw new DomainRuleViolationException(
-                "permit.validation.incomplete",
-                "Validasi HSSE wajib selesai sebelum approval.");
-        }
-
-        Approval = new PermitApprovalEvidence(actorId.Trim(), statement.Trim(), now.ToUniversalTime());
-        MoveTo(PermitStatus.Approved, "permit_approved", now, new
-        {
-            Approval.ActorId,
-            Approval.Statement
-        });
-    }
-
-    public void MarkReadyForIssue(DateTimeOffset now)
-    {
-        EnsureStatus(PermitStatus.Approved);
-        MoveTo(PermitStatus.ReadyForIssue, "readiness_completed", now);
-    }
-
-    public Guid OpenWorkPeriod(FieldIssueReadiness readiness, string actorId, DateTimeOffset now)
-    {
-        EnsureStatus(PermitStatus.Approved, PermitStatus.ReadyForIssue);
-        EnsureEvidence(actorId, "Penerbitan PTW");
-        if (Approval is null
-            || !string.Equals(Approval.ActorId, actorId.Trim(), StringComparison.OrdinalIgnoreCase))
-        {
-            throw new DomainRuleViolationException(
-                "permit.issue.area_owner_mismatch",
-                "PTW hanya dapat diterbitkan oleh PIC pemilik area yang menyetujuinya.");
-        }
-
-        if (ActiveWorkPeriodId is not null)
-        {
-            throw new DomainRuleViolationException("work_period.already_active", "Hanya satu periode kerja yang boleh aktif.");
-        }
-
-        if (now < Draft.ValidFrom || now > Draft.ValidUntil)
-        {
-            throw new DomainRuleViolationException(
-                "permit.outside_validity",
-                "Waktu penerbitan berada di luar masa berlaku PTW.");
-        }
-
-        if (!readiness.IsReady)
-        {
-            throw new DomainRuleViolationException(
-                "permit.issue.guards_failed",
-                "Prasyarat aktual belum lengkap; PTW tidak dapat diterbitkan.");
-        }
-
-        ActiveWorkPeriodId = Guid.CreateVersion7();
-        MoveTo(PermitStatus.Open, "permit_issued", now, new
-        {
-            WorkPeriodId = ActiveWorkPeriodId,
-            IssuedBy = actorId.Trim()
-        });
-        return ActiveWorkPeriodId.Value;
-    }
-
-    public void RequestSuspension(string actorId, string reason, DateTimeOffset now)
-    {
-        EnsureStatus(PermitStatus.Open);
-        EnsureEvidence(actorId, reason);
-        if (!string.Equals(Draft.SponsorId, actorId.Trim(), StringComparison.OrdinalIgnoreCase))
-        {
-            throw new DomainRuleViolationException(
-                "permit.suspension.sponsor_mismatch",
-                "Hanya Sponsor PTW yang dapat meminta penangguhan.");
-        }
-
-        EnsureActiveWorkPeriod();
-        var periodId = ActiveWorkPeriodId;
-        ActiveWorkPeriodId = null;
-        SuspensionReason = reason.Trim();
-        Suspension = new PermitSuspensionEvidence(
-            actorId.Trim(),
-            SuspensionReason,
-            now.ToUniversalTime());
-        MoveTo(PermitStatus.SuspensionRequested, "suspension_requested", now, new
-        {
-            WorkPeriodId = periodId,
-            Suspension.RequestedBy,
-            Suspension.Reason
-        });
-    }
-
-    public void ApproveSuspension(string actorId, string statement, DateTimeOffset now)
-    {
-        EnsureStatus(PermitStatus.SuspensionRequested);
-        EnsureEvidence(actorId, statement);
-        if (Suspension is null)
-        {
-            throw new DomainRuleViolationException(
-                "permit.suspension.evidence_missing",
-                "Bukti permintaan penangguhan tidak tersedia.");
-        }
-
-        Suspension = Suspension with
-        {
-            ApprovedBy = actorId.Trim(),
-            ApprovalStatement = statement.Trim(),
-            ApprovedAt = now.ToUniversalTime()
-        };
-        MoveTo(PermitStatus.Suspended, "suspension_approved", now, new
-        {
-            Suspension.ApprovedBy,
-            Suspension.ApprovalStatement
-        });
-    }
-
-    public void ResolveSuspension(string resolution, DateTimeOffset now)
-    {
-        EnsureStatus(PermitStatus.Suspended);
-        EnsureReason(resolution);
-        var previousReason = SuspensionReason;
-        SuspensionReason = null;
-        MoveTo(PermitStatus.ReadyForIssue, "permit_resumed", now, new { Reason = previousReason, Resolution = resolution.Trim() });
-    }
-
-    public void DeclareCompletion(string actorId, string statement, DateTimeOffset now)
-    {
-        EnsureStatus(PermitStatus.Open);
-        EnsureEvidence(actorId, statement);
-        if (!string.Equals(Draft.SponsorId, actorId.Trim(), StringComparison.OrdinalIgnoreCase))
-        {
-            throw new DomainRuleViolationException(
-                "permit.completion.sponsor_mismatch",
-                "Hanya Sponsor PTW yang dapat menyatakan pekerjaan selesai.");
-        }
-
-        EnsureActiveWorkPeriod();
-        var periodId = ActiveWorkPeriodId;
-        ActiveWorkPeriodId = null;
-        SponsorCompletion = new PermitCompletionEvidence(
-            actorId.Trim(),
-            statement.Trim(),
-            now.ToUniversalTime());
-        HsseCompletion = null;
-        AreaOwnerCompletion = null;
-        MoveTo(PermitStatus.CompletionConfirmationPending, "completion_declared", now, new
-        {
-            WorkPeriodId = periodId,
-            SponsorCompletion.ActorId,
-            SponsorCompletion.Statement
-        });
-    }
-
-    public void ConfirmCompletion(
-        PermitCompletionKind kind,
-        string actorId,
-        string statement,
-        DateTimeOffset now)
-    {
-        EnsureStatus(PermitStatus.CompletionConfirmationPending);
-        EnsureEvidence(actorId, statement);
-        var evidence = new PermitCompletionEvidence(
-            actorId.Trim(),
-            statement.Trim(),
-            now.ToUniversalTime());
-        switch (kind)
-        {
-            case PermitCompletionKind.Hsse when HsseCompletion is null:
-                HsseCompletion = evidence;
-                break;
-            case PermitCompletionKind.AreaOwner when AreaOwnerCompletion is null:
-                AreaOwnerCompletion = evidence;
-                break;
-            default:
-                throw new DomainRuleViolationException(
-                    "permit.completion.already_confirmed",
-                    $"Konfirmasi penyelesaian {kind} sudah direkam.");
-        }
-
-        Touch(now);
-        Raise("completion_confirmed", new
-        {
-            Confirmation = kind.ToString(),
-            evidence.ActorId,
-            evidence.Statement
-        });
-        if (HsseCompletion is not null && AreaOwnerCompletion is not null)
-        {
-            MoveTo(PermitStatus.WorkCompleted, "completion_confirmations_completed", now);
-        }
-    }
-
-    public void Close(string actorId, string statement, DateTimeOffset now)
-    {
-        EnsureStatus(PermitStatus.WorkCompleted);
-        EnsureEvidence(actorId, statement);
-        if (SponsorCompletion is null || HsseCompletion is null || AreaOwnerCompletion is null)
-        {
-            throw new DomainRuleViolationException(
-                "permit.completion.incomplete",
-                "Konfirmasi Sponsor, HSSE, dan PIC pemilik area wajib lengkap sebelum PTW ditutup.");
-        }
-
-        MoveTo(PermitStatus.Closed, "permit_closed", now, new
-        {
-            ClosedBy = actorId.Trim(),
-            Statement = statement.Trim()
+            EscalatedBy = actorId.Trim(),
+            Note = note.Trim(),
+            PermitVersion = Version
         });
     }
 
     public void Reject(string reason, DateTimeOffset now)
     {
-        EnsureStatus(PermitStatus.UnderReview, PermitStatus.AwaitingApproval);
+        EnsureStatus(PermitStatus.UnderValidation, PermitStatus.AwaitingAreaApproval);
         EnsureReason(reason);
         MoveTo(PermitStatus.Rejected, "permit_rejected", now, new { Reason = reason.Trim() });
     }
 
+    public void ApproveAndIssue(PermitApprovalEvidence approval, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.AwaitingAreaApproval);
+        EnsureEvidence(approval.ActorId, approval.Statement);
+        if (HseValidation is null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.validation.incomplete",
+                "Validasi HSE wajib selesai sebelum approval penerbitan.");
+        }
+
+        if (string.Equals(Draft.SponsorId, approval.ActorId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(HseValidation.ActorId, approval.ActorId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleViolationException(
+                "permit.approval.separation_of_duty",
+                "Sponsor atau validator HSE tidak boleh menyetujui dan menerbitkan PTW yang sama.");
+        }
+
+        if (approval.AuthorizationId == Guid.Empty
+            || string.IsNullOrWhiteSpace(approval.ActorPosition)
+            || string.IsNullOrWhiteSpace(approval.PrincipalManagerUserId)
+            || string.IsNullOrWhiteSpace(approval.PrincipalPosition)
+            || string.IsNullOrWhiteSpace(approval.RuleVersion)
+            || string.IsNullOrWhiteSpace(approval.PrintTemplateVersion)
+            || string.IsNullOrWhiteSpace(approval.CampaignAssetVersion)
+            || approval.Capacity == ApprovalCapacity.ActingForManager && approval.ActingAssignmentId is null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.approval.authorization_evidence_required",
+                "Snapshot otorisasi Manager atau pengganti resmi wajib lengkap.");
+        }
+
+        Approval = approval with { ApprovedAt = now.ToUniversalTime() };
+        MoveTo(PermitStatus.Issued, "permit_issued", now, new
+        {
+            Approval.ActorId,
+            Capacity = Approval.Capacity.ToString(),
+            Approval.PrincipalManagerUserId,
+            Approval.AuthorizationId,
+            Approval.ActingAssignmentId,
+            Approval.Statement,
+            PermitVersion = Version
+        });
+    }
+
+    public void Suspend(string actorId, string reason, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Issued);
+        EnsureEvidence(actorId, reason);
+        SuspensionReason = reason.Trim();
+        Suspension = new PermitSuspensionEvidence(actorId.Trim(), SuspensionReason, now.ToUniversalTime());
+        MoveTo(PermitStatus.Suspended, "permit_suspended", now, new
+        {
+            Suspension.SuspendedBy,
+            Suspension.Reason
+        });
+    }
+
+    public void ResolveSuspension(string actorId, string resolution, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Suspended);
+        EnsureEvidence(actorId, resolution);
+        if (Suspension is null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.suspension.evidence_missing",
+                "Bukti penangguhan tidak tersedia.");
+        }
+
+        var previousReason = SuspensionReason;
+        Suspension = Suspension with
+        {
+            ResolvedBy = actorId.Trim(),
+            Resolution = resolution.Trim(),
+            ResolvedAt = now.ToUniversalTime()
+        };
+        SuspensionReason = null;
+        MoveTo(PermitStatus.Issued, "permit_suspension_resolved", now, new
+        {
+            Reason = previousReason,
+            Suspension.ResolvedBy,
+            Suspension.Resolution,
+            RequiresHardcopyRevalidation = true
+        });
+    }
+
+    public void RequestClosure(
+        Guid printPackageId,
+        IReadOnlyList<Guid> attachmentIds,
+        string actorId,
+        string completionStatement,
+        DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Issued, PermitStatus.Suspended, PermitStatus.Expired);
+        EnsureEvidence(actorId, completionStatement);
+        if (!string.Equals(Draft.SponsorId, actorId.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.sponsor_mismatch",
+                "Hanya Sponsor PTW yang dapat mengajukan penutupan.");
+        }
+
+        if (printPackageId == Guid.Empty || attachmentIds.Count == 0 || attachmentIds.Any(x => x == Guid.Empty))
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.evidence_required",
+                "Paket cetak dan hardcopy final wajib dipilih sebelum mengajukan penutupan.");
+        }
+
+        ClosureRequest = new PermitClosureEvidence(
+            printPackageId,
+            attachmentIds.Distinct().ToArray(),
+            actorId.Trim(),
+            completionStatement.Trim(),
+            now.ToUniversalTime(),
+            1);
+        MoveTo(PermitStatus.ClosureRequested, "closure_requested", now, new
+        {
+            PrintPackageId = printPackageId,
+            AttachmentIds = ClosureRequest.AttachmentIds,
+            ClosureRequest.RequestedBy,
+            ClosureRequest.CompletionStatement,
+            PermitVersion = Version
+        });
+    }
+
+    public void RequestClosureEvidenceReplacement(string actorId, string reason, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.ClosureRequested);
+        EnsureEvidence(actorId, reason);
+        if (ClosureRequest is null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.request_missing",
+                "Permintaan penutupan tidak tersedia.");
+        }
+
+        ClosureRequest = ClosureRequest with
+        {
+            Revision = ClosureRequest.Revision + 1,
+            ReplacementReason = reason.Trim()
+        };
+        Touch(now);
+        Raise("closure_evidence_replacement_requested", new
+        {
+            RequestedBy = actorId.Trim(),
+            Reason = reason.Trim(),
+            ClosureRequest.Revision
+        });
+    }
+
+    public void Close(string actorId, string statement, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.ClosureRequested);
+        EnsureEvidence(actorId, statement);
+        if (ClosureRequest is null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.evidence_required",
+                "Bukti hardcopy final wajib tersedia sebelum PTW ditutup.");
+        }
+
+        ClosureDecision = new PermitClosureDecisionEvidence(actorId.Trim(), statement.Trim(), now.ToUniversalTime());
+        MoveTo(PermitStatus.Closed, "permit_closed", now, new
+        {
+            ClosedBy = actorId.Trim(),
+            Statement = statement.Trim(),
+            ClosureRequest.PrintPackageId,
+            ClosureRequest.AttachmentIds
+        });
+    }
+
     public void Cancel(string reason, DateTimeOffset now)
     {
-        EnsureStatus(PermitStatus.Draft, PermitStatus.Submitted, PermitStatus.RevisionRequired);
+        EnsureStatus(PermitStatus.Draft, PermitStatus.UnderValidation, PermitStatus.RevisionRequired);
         EnsureReason(reason);
         MoveTo(PermitStatus.Cancelled, "permit_cancelled", now, new { Reason = reason.Trim() });
     }
 
     public void Expire(DateTimeOffset now)
     {
-        EnsureStatus(
-            PermitStatus.Approved,
-            PermitStatus.ReadyForIssue,
-            PermitStatus.SuspensionRequested,
-            PermitStatus.Suspended);
+        EnsureStatus(PermitStatus.Issued, PermitStatus.Suspended);
         if (now < Draft.ValidUntil)
         {
             throw new DomainRuleViolationException("permit.not_expired", "PTW belum mencapai akhir masa berlaku.");
@@ -497,7 +438,17 @@ public sealed class Permit
             || string.IsNullOrWhiteSpace(value.LocationId) || string.IsNullOrWhiteSpace(value.SponsorId)
             || string.IsNullOrWhiteSpace(value.PerformingAuthority) || string.IsNullOrWhiteSpace(value.Company))
         {
-            throw new DomainRuleViolationException("permit.required_fields", "Data pekerjaan, lokasi, sponsor, pelaksana, dan perusahaan wajib diisi.");
+            throw new DomainRuleViolationException(
+                "permit.required_fields",
+                "Data pekerjaan, lokasi, Sponsor, pelaksana, dan perusahaan wajib diisi.");
+        }
+
+        var submitterType = (value.SubmitterType ?? string.Empty).Trim().ToUpperInvariant();
+        if (submitterType is not ("CONTRACTOR" or "USER_SPONSOR"))
+        {
+            throw new DomainRuleViolationException(
+                "permit.submitter_type_invalid",
+                "Tipe pengaju harus CONTRACTOR atau USER_SPONSOR.");
         }
 
         var from = value.ValidFrom.ToUniversalTime();
@@ -509,12 +460,9 @@ public sealed class Permit
 
         if (until - from > TimeSpan.FromDays(7))
         {
-            throw new DomainRuleViolationException("permit.validity_exceeds_seven_days", "Masa berlaku PTW maksimum tujuh hari.");
-        }
-
-        if (value.Hazards.Count == 0 || value.Controls.Count == 0)
-        {
-            throw new DomainRuleViolationException("permit.hazard_control_required", "Sedikitnya satu bahaya dan satu kontrol wajib dicatat.");
+            throw new DomainRuleViolationException(
+                "permit.validity_exceeds_seven_days",
+                "Masa berlaku PTW maksimum tujuh hari.");
         }
 
         return value with
@@ -525,10 +473,31 @@ public sealed class Permit
             SponsorId = value.SponsorId.Trim(),
             PerformingAuthority = value.PerformingAuthority.Trim(),
             Company = value.Company.Trim(),
+            SubmitterType = submitterType,
+            WorkTypeCode = NormalizeOptional(value.WorkTypeCode),
+            EquipmentTag = NormalizeOptional(value.EquipmentTag),
+            PlantArea = NormalizeOptional(value.PlantArea),
+            SimopsDeclaration = NormalizeOptional(value.SimopsDeclaration),
+            SafetyEquipmentCodes = NormalizeCodes(value.SafetyEquipmentCodes),
+            IsolationPrecautionCodes = NormalizeCodes(value.IsolationPrecautionCodes),
+            JsaDocumentNumber = NormalizeOptional(value.JsaDocumentNumber),
+            JsaRevision = NormalizeOptional(value.JsaRevision),
+            JsaDate = value.JsaDate?.ToUniversalTime(),
             ValidFrom = from,
             ValidUntil = until
         };
     }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string[] NormalizeCodes(IReadOnlyList<string>? values) =>
+        values?.Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray()
+        ?? [];
 
     private void MoveTo(PermitStatus status, string eventType, DateTimeOffset now, object? payload = null)
     {
@@ -565,22 +534,13 @@ public sealed class Permit
         {
             throw new DomainRuleViolationException(
                 "permit.evidence_required",
-                "Identitas actor dan pernyataan keputusan wajib dicatat.");
+                "Identitas aktor dan pernyataan keputusan wajib dicatat.");
         }
     }
 
-    private void ClearWorkflowEvidence()
+    private void ClearReviewEvidence()
     {
-        HsseValidation = null;
-        GasDistributionValidation = null;
+        HseValidation = null;
         Approval = null;
-    }
-
-    private void EnsureActiveWorkPeriod()
-    {
-        if (ActiveWorkPeriodId is null)
-        {
-            throw new DomainRuleViolationException("work_period.none_active", "Tidak ada periode kerja aktif.");
-        }
     }
 }
