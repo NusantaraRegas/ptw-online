@@ -3,16 +3,16 @@
 
 | Atribut | Nilai |
 | --- | --- |
-| Versi | 1.6 — klarifikasi validator tunggal PIC HSE; hibrida hardcopy dan pilot ORF |
-| Tanggal | 8 September 2026 |
+| Versi | 1.7 — tiga lokasi aktif dan pembaruan pemilik wilayah |
+| Tanggal | 16 September 2026 |
 | Status | Draft untuk review Arsitektur, Security, Operasi, HSSE, dan Delivery |
-| Input | [BRD v1.6](BRD-NR-PTW-Online-v1.6-ID.md), [PRD v1.6](PRD-NR-PTW-Online-v1.6-ID.md) |
+| Input | [BRD v1.7](BRD-NR-PTW-Online-v1.7-ID.md), [PRD v1.7](PRD-NR-PTW-Online-v1.7-ID.md) |
 | Arsitektur | Modular monolith, REST API, SPA, asynchronous worker |
 | Platform | ASP.NET Core 10 / .NET 10 LTS; Angular 22; SQL Server 2025; Docker Compose V2 |
 
 ## 1. Tujuan dan batas spesifikasi
 
-FSD ini menjelaskan bagaimana requirement PTW diwujudkan secara fungsional dan teknis. Dokumen ini bukan pengganti SOP dan tidak menetapkan nilai ambang keselamatan yang belum disahkan. Pada pilot ORF, sistem mengelola pengajuan sampai penerbitan serta penutupan, sedangkan gas test, revalidasi harian, dan tanda tangan lapangan dilakukan pada hardcopy yang dihasilkan sistem. Template, checklist, requirement dokumen, SLA, retensi, dan otoritas dimodelkan sebagai konfigurasi berversi.
+FSD ini menjelaskan bagaimana requirement PTW diwujudkan secara fungsional dan teknis. Dokumen ini bukan pengganti SOP dan tidak menetapkan nilai ambang keselamatan yang belum disahkan. Pada rilis awal ORF, Site Office, dan Water-Based Activity, sistem mengelola pengajuan sampai penerbitan serta penutupan, sedangkan gas test, revalidasi harian, dan tanda tangan lapangan dilakukan pada hardcopy yang dihasilkan sistem. Template, checklist, requirement dokumen, SLA, retensi, otoritas, dan configuration bundle dimodelkan secara berversi per lokasi.
 
 ## 2. Keputusan arsitektur
 
@@ -28,7 +28,7 @@ FSD ini menjelaskan bagaimana requirement PTW diwujudkan secara fungsional dan t
 | ADR-008 | Configuration-as-versioned-data | Requirements, checklist, authority, print template, dan campaign assets dapat berubah tanpa kehilangan interpretasi historis. |
 | ADR-009 | Hybrid digital-to-paper field execution | Bagian pengajuan/keputusan digital; gas test, revalidasi harian, dan completion/handback pada hardcopy. Close merekonsiliasi scan/foto ke print package resmi. |
 | ADR-010 | Immutable print snapshot + asynchronous rendering | Approval penerbitan mengunci snapshot dalam transaksi; Worker merender PDF. Kegagalan renderer dapat diulang tanpa mengubah keputusan. |
-| ADR-011 | Pilot location feature flag | Hanya ORF aktif secara default. Konfigurasi lokasi lain dapat disiapkan tetapi tidak dapat menerima submission sebelum bundle disahkan. |
+| ADR-011 | Location release feature flag | ORF, Site Office, dan Water-Based Activity merupakan tiga lokasi rilis awal. Setiap lokasi hanya menerima submission setelah configuration bundle-nya disahkan dan `LocationRelease` berstatus `PILOT` atau `ACTIVE`; HO dan FSRU default `DISABLED`. |
 
 ## 3. System context dan container
 
@@ -98,11 +98,11 @@ Modul berkomunikasi melalui application interfaces/domain events, bukan query la
 
 | Command | Dari | Ke | Aktor | Guard utama |
 | --- | --- | --- | --- | --- |
-| `SubmitPermit` | DRAFT/REVISION_REQUIRED | UNDER_VALIDATION | Kontraktor/User Sponsor | ORF aktif, versi terkini, JSA/requirement lengkap, E-SIMI policy lulus, dokumen aman; membuat satu task validasi HSE |
+| `SubmitPermit` | DRAFT/REVISION_REQUIRED | UNDER_VALIDATION | Kontraktor/User Sponsor | Lokasi termasuk `ORF`/`SITE_OFFICE`/`WATER_BASED` dan configuration bundle aktif, versi terkini, JSA/requirement lengkap, E-SIMI policy lulus, dokumen aman; membuat satu task validasi HSE |
 | `ValidateSubmission` | UNDER_VALIDATION | AWAITING_AREA_APPROVAL | PIC HSE | Task aktif; hasil valid pada versi sama → Awaiting Area Approval |
 | `RequestRevision` | UNDER_VALIDATION/AWAITING_AREA_APPROVAL | REVISION_REQUIRED | PIC/Area Approver | Task aktif, komentar dan reason code |
 | `RejectPermit` | UNDER_VALIDATION/AWAITING_AREA_APPROVAL | REJECTED | PIC/Area Approver sesuai policy | Otorisasi dan alasan |
-| `ApproveAndIssuePermit` | AWAITING_AREA_APPROVAL | ISSUED | Manager pemilik area atau pengganti resmi | Validasi HSE valid; Manager/acting assignment aktif; ORF owner/location/scope, SoD, current version, JSA/requirements, validity; commit decision+issue+print snapshot |
+| `ApproveAndIssuePermit` | AWAITING_AREA_APPROVAL | ISSUED | Manager pemilik wilayah atau pengganti resmi | Validasi HSE valid; Manager/acting assignment aktif; owner mapping sesuai lokasi, location release/bundle aktif, SoD, current version, JSA/requirements, validity; commit decision+issue+print snapshot |
 | `SuspendPermit` | ISSUED | SUSPENDED | Authorized actor/system | Reason; instruksi pencatatan hardcopy tetap ditampilkan |
 | `ResolveSuspension` | SUSPENDED | ISSUED | Authority sesuai sebab | Resolution tercatat; revalidasi hardcopy diwajibkan sebelum kerja dilanjutkan |
 | `CreateRenewal` | ISSUED/EXPIRED | DRAFT | Kontraktor/User Sponsor | Lineage, periode baru ≤7 hari, no-overlap; tidak menyalin attachment/decision/field evidence |
@@ -127,7 +127,7 @@ Modul berkomunikasi melalui application interfaces/domain events, bukan query la
 - Area Approver harus merupakan Manager pada departemen pemilik area atau acting approver dengan penugasan resmi yang masih efektif dan menunjuk Manager principal yang digantikan;
 - `ApproveAndIssuePermit` hanya dapat dijalankan Manager pemilik area/pengganti resmi; tidak ada task digital `IssuePermit` terpisah pada pilot;
 - task approval tidak dapat dialihkan secara ad hoc; expiry/revocation acting assignment sebelum command memblokir keputusan dan memicu reroute;
-- hanya location code `ORF` yang dapat submit pada pilot; `LocationRelease` ORF boleh `PILOT` atau `ACTIVE`, sedangkan lokasi lain diblokir sampai configuration bundle disahkan dan statusnya diaktifkan;
+- hanya location code `ORF`, `SITE_OFFICE`, dan `WATER_BASED` yang dapat submit pada rilis awal; masing-masing `LocationRelease` harus `PILOT` atau `ACTIVE` dan menunjuk configuration bundle yang disahkan; `HO`, `FSRU`, serta lokasi lain diblokir sampai activation decision tersedia;
 - tidak ada penerbitan apabila current time/validity, E-SIMI policy, mandatory requirement, authorization, SoD, atau current version gagal;
 - status `ISSUED` tidak merepresentasikan revalidasi harian; izin bekerja saat itu masih memerlukan isian/tanda tangan hardcopy dan kondisi aman;
 - `PrintPackageSnapshot` memakai exact PermitVersion, keputusan, template version, requirement evaluation, dan campaign asset version pada saat issuance;
@@ -139,10 +139,10 @@ Modul berkomunikasi melalui application interfaces/domain events, bukan query la
 
 ### UC-01 Membuat dan submit PTW
 
-**Precondition:** Kontraktor/User Sponsor authenticated dan memiliki scope; untuk Kontraktor, company assignment, Sponsor NR, serta masa akses valid; lokasi ORF; referensi E-SIMI tersedia sesuai mode integrasi.
+**Precondition:** Kontraktor/User Sponsor authenticated dan memiliki scope; untuk Kontraktor, company assignment, Sponsor NR, serta masa akses valid; lokasi termasuk ORF, Site Office, atau Water-Based Activity dan configuration bundle lokasi aktif; referensi E-SIMI tersedia sesuai mode integrasi.
 
 1. UI mencari E-SIMI bila adapter tersedia; fallback meminta nomor E-SIMI dan memberi label `MANUAL_VERIFIED` setelah pemeriksaan yang ditetapkan.
-2. API menyimpan external reference/snapshot atau manual verification evidence lalu membuat Draft ORF.
+2. API menyimpan external reference/snapshot atau manual verification evidence lalu membuat Draft pada salah satu lokasi aktif dan menurunkan `AreaOwnerDepartmentId` dari master efektif.
 3. Kontraktor/User Sponsor mengisi wizard Bagian 1-5/7: pekerjaan, pihak, kelas/jenis, CLSR/SIMOPS, safety equipment, JSA/dokumen, isolation/precaution. Tidak ada authoring bahaya/pengendalian yang menduplikasi JSA.
 4. API mengevaluasi requirement matrix dan mengembalikan missing checklist/documents serta route proyeksi. Item tambahan boleh dibuat dengan alasan; item standar tidak dapat dihapus.
 5. Pada submit, API mengulang validasi, mengalokasikan nomor, membekukan PermitVersion, menyimpan requirement/route/owner snapshot, lalu membuat tepat satu task validasi untuk PIC HSE dalam transaksi yang sama.
@@ -152,15 +152,18 @@ Modul berkomunikasi melalui application interfaces/domain events, bukan query la
 
 ### UC-02 Validasi HSE, revisi, dan approval
 
-Satu validation task aktif untuk PIC HSE setelah submit. PIC HSE membuka task, memperoleh decision context dan diff, lalu memilih Validate, Request Revision, Reject, atau Escalate. Command mengunci task secara logis, memeriksa assignment/authority, dan mencatat evidence. Setelah hasil `VALID` pada version yang sama, sistem membuat Area Approval task berdasarkan `AreaOwnerDepartmentId`. Task ditujukan kepada Manager aktif atau acting approver yang penugasannya sah. Revisi membuat version baru dan menginvalidasi hasil validasi sebelumnya. Approval hanya berlaku pada exact current version, route snapshot, pemilik area, serta assignment Manager/pengganti yang efektif saat keputusan. Distribusi Gas & Pengelolaan ORF berperan sebagai pemilik area ORF/Site Office, bukan validator.
+Satu validation task aktif untuk PIC HSE setelah submit. PIC HSE membuka task, memperoleh decision context dan diff, lalu memilih Validate, Request Revision, Reject, atau Escalate. Command mengunci task secara logis, memeriksa assignment/authority, dan mencatat evidence. Setelah hasil `VALID` pada version yang sama, sistem membuat Area Approval task berdasarkan `AreaOwnerDepartmentId`. Task ditujukan kepada Manager aktif atau acting approver yang penugasannya sah. Revisi membuat version baru dan menginvalidasi hasil validasi sebelumnya. Approval hanya berlaku pada exact current version, route snapshot, pemilik wilayah, serta assignment Manager/pengganti yang efektif saat keputusan. Routing wajib mengikuti lokasi: ORF ke Departemen Distribusi Gas dan Pengelolaan ORF; Site Office ke Departemen General Affair; Water-Based Activity ke Departemen Transport & Operasi FSRU. Tidak satu pun departemen pemilik wilayah tersebut menjadi validator HSE.
 
 ```mermaid
 sequenceDiagram
     actor P as Kontraktor/User Sponsor
     participant API as PTW API
+    participant R as Location Owner Resolver
     actor H as PIC HSE
-    actor A as Manager pemilik area / pengganti resmi
+    actor A as Manager pemilik wilayah / pengganti resmi
     P->>API: Submit PTW
+    API->>R: Resolve active location + effective owner
+    R-->>API: ORF→Distribusi Gas ORF / Site Office→GA / Water-Based→Transport & Operasi FSRU
     API-->>H: Task validasi HSE
     H->>API: VALID / REVISION / REJECT
     alt Hasil VALID pada versi sama
@@ -226,13 +229,13 @@ Untuk `ApproveAndIssuePermit`, policy menghasilkan `ApprovalCapacity = MANAGER |
 
 | LocationCode | Nama lokasi | AreaOwnerDepartmentCode | Nama departemen |
 | --- | --- | --- | --- |
-| `HO` | HO | `GENERAL_AFFAIR` | Departemen General Affair — target rollout |
-| `ORF` | ORF | `DISTRIBUSI_GAS_ORF` | Departemen Distribusi Gas & Pengelolaan ORF — **pilot aktif** |
-| `SITE_OFFICE` | Site Office | `DISTRIBUSI_GAS_ORF` | Departemen Distribusi Gas & Pengelolaan ORF — target rollout |
-| `FSRU` | FSRU | `TRANSPORTASI_FSRU_OPS` | Departemen Transportasi & FSRU Operation — target rollout |
-| `WATER_BASED` | Water-Based Activity | `TRANSPORTASI_FSRU_OPS` | Departemen Transportasi & FSRU Operation — target rollout |
+| `HO` | HO | `GENERAL_AFFAIR` | Departemen General Affair — `DISABLED`, target rollout |
+| `ORF` | ORF | `DISTRIBUSI_GAS_ORF` | Departemen Distribusi Gas dan Pengelolaan ORF — **aktif** |
+| `SITE_OFFICE` | Site Office | `GENERAL_AFFAIR` | Departemen General Affair — **aktif** |
+| `FSRU` | FSRU | `TRANSPORT_OPERASI_FSRU` | Departemen Transport & Operasi FSRU — `DISABLED`, target rollout |
+| `WATER_BASED` | Water-Based Activity | `TRANSPORT_OPERASI_FSRU` | Departemen Transport & Operasi FSRU — **aktif** |
 
-Resolver menggunakan master efektif pada waktu submit dan menyimpan snapshot pada PermitVersion. Selain owner mapping, `cfg.LocationRelease` harus `PILOT` atau `ACTIVE` dan memiliki approved configuration bundle; seed pilot hanya memberi status `PILOT` pada ORF. Perubahan lokasi setelah submit adalah perubahan material: route dan validasi/approval terdampak diulang. Lokasi multi-area tidak menggunakan default owner; submission diblokir sampai dipecah atau aturan multi-area disahkan.
+Resolver menggunakan master efektif pada waktu submit dan menyimpan snapshot pada PermitVersion. Selain owner mapping, `cfg.LocationRelease` harus `PILOT` atau `ACTIVE` dan memiliki approved configuration bundle. Seed rilis awal memberi status `PILOT` pada ORF, Site Office, dan Water-Based Activity; HO dan FSRU tetap `DISABLED`. Setiap bundle berdiri sendiri agar satu lokasi dapat dinonaktifkan tanpa membuka akses lokasi lain. Perubahan lokasi setelah submit adalah perubahan material: route dan validasi/approval terdampak diulang. Lokasi multi-area tidak menggunakan default owner; submission diblokir sampai dipecah atau aturan multi-area disahkan.
 
 ## 8. Desain API
 
@@ -323,8 +326,8 @@ Resolver menggunakan master efektif pada waktu submit dan menyimpan snapshot pad
 | `cfg.PrintTemplateVersion` | permit class/location, layout/paper size, template asset checksum, field schema version, state/effective dates, maker/checker |
 | `cfg.CampaignAssetVersion` | code (`CLSR_10`, `ARAHAN_DIREKSI`, `PERILAKU_WAJIB`), storage key/checksum, version/effective dates, approvedBy |
 | `cfg.Location` | code/name, parent, `AreaOwnerDepartmentId`, effective dates, active; satu owner efektif per tanggal |
-| `cfg.LocationRelease` | LocationId, status (`DISABLED/PILOT/ACTIVE`), ConfigurationBundleId, effective dates, approvedBy/At; seed ORF=`PILOT` |
-| `cfg.Department` | code/name; GA, Distribusi Gas & Pengelolaan ORF, Transportasi & FSRU Operation serta master terkendali lain |
+| `cfg.LocationRelease` | LocationId, status (`DISABLED/PILOT/ACTIVE`), ConfigurationBundleId, effective dates, approvedBy/At; seed ORF/Site Office/Water-Based Activity=`PILOT`, HO/FSRU=`DISABLED` |
+| `cfg.Department` | code/name; General Affair, Distribusi Gas dan Pengelolaan ORF, Transport & Operasi FSRU serta master terkendali lain |
 | `sec.ExternalUserCompany` | UserId, CompanyId, NrSponsorUserId, effective dates, verification/revocation state |
 | `sec.UserAuthorization` | UserId, role/action, location/department, class, max risk, competency ref, effective dates, issuer, state |
 | `sec.ActingAssignment` | PrincipalManagerUserId/PositionId, ActingUserId, document no/reference, department/location/risk scope, effectiveFrom/Until, reason, issuedBy, checkedBy, state, revokedBy/At; tidak boleh overlap konflik untuk scope yang sama |
@@ -623,13 +626,13 @@ Start/stop/restart, deployment/rollback, migration failure, E-SIMI outage, notif
 
 Quality gate: semua Must acceptance lulus; critical/high security issue ditutup atau diterima formal; coverage risk-critical domain ditargetkan ≥ 90% branch; tidak ada state transition tanpa negative tests.
 
-Test wajib tambahan untuk flow v1.6: submit membuat tepat satu task validasi HSE; hasil valid pada versi sama membuat tepat satu approve-and-issue task; pegawai HSE yang menjadi Sponsor tidak dapat self-validate; revisi/penolakan menghentikan gate; retry tidak menggandakan task; perubahan JSA/versi membatalkan validasi terdampak; pilot hanya menerima ORF; Manager dapat approve-and-issue; pengganti resmi dapat bertindak atas nama principal; delegasi informal/tidak efektif/expired/revoked/scope salah/risk limit kurang ditolak; decision+ISSUED+PrintPackageSnapshot atomik; render failure dapat diretry; PDF memuat seluruh section dan controlled campaign asset; renewal tidak overlap/tidak menyalin file; field copy salah versi/malware/tidak terbaca ditolak; close hanya oleh pemilik area setelah evidence current; HSE tidak memperoleh closure approval task tetapi dapat membaca rekap; serta `ISSUED` selalu menampilkan peringatan kontrol hardcopy.
+Test wajib tambahan untuk flow v1.7: submit membuat tepat satu task validasi HSE; hasil valid pada versi sama membuat tepat satu approve-and-issue task; pegawai HSE yang menjadi Sponsor tidak dapat self-validate; revisi/penolakan menghentikan gate; retry tidak menggandakan task; perubahan JSA/versi membatalkan validasi terdampak; ORF/Site Office/Water-Based Activity diterima hanya dengan bundle aktif; HO/FSRU/lokasi lain ditolak; routing owner ORF→Distribusi Gas dan Pengelolaan ORF, Site Office→General Affair, Water-Based Activity→Transport & Operasi FSRU diuji positif dan negatif; Manager dapat approve-and-issue; pengganti resmi dapat bertindak atas nama principal; delegasi informal/tidak efektif/expired/revoked/scope salah/risk limit kurang ditolak; decision+ISSUED+PrintPackageSnapshot atomik; render failure dapat diretry; PDF memuat seluruh section dan controlled campaign asset; renewal tidak overlap/tidak menyalin file; field copy salah versi/malware/tidak terbaca ditolak; close hanya oleh pemilik wilayah setelah evidence current; HSE tidak memperoleh closure approval task tetapi dapat membaca rekap; serta `ISSUED` selalu menampilkan peringatan kontrol hardcopy.
 
 ## 19. Migration dan data awal
 
 MVP tidak harus memigrasikan seluruh kertas historis. Opsi disarankan:
 
-1. master data ORF, otorisasi, requirement/checklist, template cetak, dan campaign assets diimpor dengan maker-checker;
+1. master data ORF, Site Office, dan Water-Based Activity beserta owner mapping, otorisasi, requirement/checklist, template cetak, dan campaign assets diimpor dengan maker-checker; HO dan FSRU diimpor sebagai `DISABLED` bila diperlukan untuk rollout berikutnya;
 2. PTW kertas yang masih aktif dimasukkan sebagai controlled opening balance dengan scan dan label `MIGRATED_ACTIVE` setelah verifikasi;
 3. histori lama tetap arsip records atau diindeks metadata minimal, bukan direkayasa seolah-olah memiliki digital audit;
 4. setiap import menghasilkan dry-run, error report, source checksum, batch ID, actor, dan reconciliation total.
@@ -650,18 +653,18 @@ MVP tidak harus memigrasikan seluruh kertas historis. Opsi disarankan:
 
 ## 21. Keputusan sebelum development
 
-Tidak boleh mengunci konfigurasi atau membangun journey final sebelum keputusan BRD OPN-001–012 yang relevan memiliki owner dan decision record. Paling kritis: template/checklist ORF, Manager/pengganti dan verifier close, definisi tujuh hari/renewal, exact campaign assets, format cetak, status hukum bukti persetujuan, E-SIMI fallback/API, dan akses VPN. Development fondasi dapat berjalan paralel untuk identity abstraction, skeleton modules, Compose, CI, audit/outbox, master framework, renderer spike, dan prototype E-SIMI contract.
+Tidak boleh mengunci konfigurasi atau membangun journey final sebelum keputusan BRD OPN-001–012 yang relevan memiliki owner dan decision record. Paling kritis: template/checklist dan configuration bundle ORF/Site Office/Water-Based Activity, Manager/pengganti dan verifier close pada masing-masing departemen pemilik wilayah, definisi tujuh hari/renewal, exact campaign assets, format cetak, status hukum bukti persetujuan, E-SIMI fallback/API, dan akses VPN. Development fondasi dapat berjalan paralel untuk identity abstraction, skeleton modules, Compose, CI, audit/outbox, master framework, renderer spike, dan prototype E-SIMI contract.
 
 ## 22. Checklist kesiapan produksi
 
-- SOP/STK ORF, mapping Bagian 1-10, checklist/document matrix, gas-test field, template print, dan campaign assets disahkan;
+- SOP/STK untuk ORF, Site Office, dan Water-Based Activity, mapping Bagian 1-10, checklist/document matrix, gas-test field, template print, serta campaign assets disahkan per lokasi;
 - threat model, security test, privacy/retention, dan access recertification disetujui;
 - E-SIMI contract atau manual-verification fallback, timeout, credential, dan support owner diuji;
 - image/tag/digest, license SQL Server, CPU/RAM/storage, TLS/DNS, backup/restore siap;
 - monitoring, alert, runbook, on-call, incident dan contingency paper process siap;
 - UAT tiga kelas izin, PDF/hardcopy lapangan, renewal, close upload, dan negative paths disetujui HSSE/Operasi;
 - training menegaskan `ISSUED` tidak menghapus gas test/revalidasi/tanda tangan hardcopy, serta prosedur suspend/handback/upload close;
-- hanya ORF aktif; pilot terkontrol, hypercare, KPI baseline, serta rollback decision dibuat.
+- hanya ORF, Site Office, dan Water-Based Activity aktif; HO dan FSRU tetap `DISABLED`; pilot terkontrol, hypercare, KPI baseline, serta rollback decision per lokasi dibuat.
 
 ## 23. Referensi resmi teknologi
 

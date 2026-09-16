@@ -382,7 +382,9 @@ Jika .NET 10 hanya tersedia melalui Docker, mount Docker socket dan set `TESTCON
 
 | Dokumen | Isi |
 | --- | --- |
-| [BRD/PRD/FSD v1.7](docs/) | kebutuhan bisnis, kebutuhan produk, dan spesifikasi fungsional baseline |
+| [BRD v1.7](docs/BRD-NR-PTW-Online-v1.7-ID.md) | kebutuhan bisnis |
+| [PRD v1.7](docs/PRD-NR-PTW-Online-v1.7-ID.md) | kebutuhan produk |
+| [FSD v1.7](docs/FSD-NR-PTW-Online-v1.7-ID.md) | spesifikasi fungsional |
 | [Status implementasi](docs/implementation-status.md) | traceability requirement → komponen → endpoint → migration → test |
 | [Decision records](docs/decisions/README.md) | OPN-001..009 dan PTW-RENEWAL yang disahkan |
 | [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) | panduan kerja dan aturan normatif untuk kontributor dan agen |

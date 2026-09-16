@@ -4,19 +4,19 @@
 | Atribut | Nilai |
 | --- | --- |
 | Produk | NR PTW Online |
-| Versi | 1.6 — klarifikasi validator tunggal PIC HSE; model hibrida dan pilot ORF |
-| Tanggal | 8 September 2026 |
+| Versi | 1.7 — tiga lokasi aktif dan pembaruan pemilik wilayah |
+| Tanggal | 16 September 2026 |
 | Status | Draft terkontrol; memerlukan persetujuan Product Owner, Operasi, HSSE, dan TI |
 | Pemilik bisnis yang diusulkan | Fungsi Operasi/HSSE Nusantara Regas |
-| Dokumen terkait | [PRD v1.6](PRD-NR-PTW-Online-v1.6-ID.md), [FSD v1.6](FSD-NR-PTW-Online-v1.6-ID.md) |
+| Dokumen terkait | [PRD v1.7](PRD-NR-PTW-Online-v1.7-ID.md), [FSD v1.7](FSD-NR-PTW-Online-v1.7-ID.md) |
 
 ## 1. Ringkasan eksekutif
 
 NR PTW Online adalah sistem internal untuk mendigitalkan proses Izin Kerja (*Permit to Work/PTW*) Nusantara Regas tanpa mengurangi kontrol keselamatan yang saat ini terdapat pada formulir manual. Sistem melengkapi E-SIMI yang telah dimiliki NR: **E-SIMI mengendalikan izin masuk instalasi, sedangkan PTW mengendalikan izin melaksanakan pekerjaan tertentu pada lokasi, periode, dan kondisi lapangan tertentu.** Persetujuan salah satunya tidak menggantikan yang lain.
 
-Ruang lingkup dibuat lebih sederhana daripada benchmark Pertamina Geothermal/JPO. Kontraktor atau User Sponsor dapat mengajukan PTW. Setiap submission wajib divalidasi oleh **satu validator, yaitu PIC HSE**. Setelah PIC HSE menyatakan valid pada versi yang sama, **Manager departemen pemilik area**, atau **pejabat pengganti resmi yang masih berlaku**, memberi approval penerbitan. Sistem lalu menetapkan status **DITERBITKAN (`ISSUED`)** dan menghasilkan paket PTW siap cetak beserta bukti persetujuan elektronik. Departemen Distribusi Gas & Pengelolaan ORF tetap menjadi pemilik area untuk ORF dan Site Office, bukan validator.
+Ruang lingkup dibuat lebih sederhana daripada benchmark Pertamina Geothermal/JPO. Kontraktor atau User Sponsor dapat mengajukan PTW. Setiap submission wajib divalidasi oleh **satu validator, yaitu PIC HSE**. Setelah PIC HSE menyatakan valid pada versi yang sama, **Manager departemen pemilik wilayah**, atau **pejabat pengganti resmi yang masih berlaku**, memberi approval penerbitan. Sistem lalu menetapkan status **DITERBITKAN (`ISSUED`)** dan menghasilkan paket PTW siap cetak beserta bukti persetujuan elektronik. Departemen Distribusi Gas dan Pengelolaan ORF berperan sebagai pemilik wilayah ORF, bukan validator.
 
-Rilis awal menggunakan model hibrida dan difokuskan pada **ORF** sesuai STK/template yang saat ini tersedia. Bagian pengajuan, validasi, approval penerbitan, pelacakan, perpanjangan, dan penutupan dikelola dalam aplikasi. Hardcopy resmi tetap ditempatkan di lapangan; gas test awal, validasi harian, pembukaan/penutupan harian, dan tanda tangan lapangan diisi manual pada lembar cetak. Pada akhir pekerjaan, Sponsor mengunggah hardcopy lengkap sebagai bukti, lalu pemilik area memverifikasi penutupan. PIC HSE tidak menjadi approver penutupan, tetapi memperoleh visibilitas dan rekap.
+Rilis awal menggunakan model hibrida pada **tiga lokasi aktif: ORF, Site Office, dan Water-Based Activity**. Pemilik wilayah ditentukan otomatis dari lokasi: ORF dimiliki Departemen Distribusi Gas dan Pengelolaan ORF; Site Office dimiliki Departemen General Affair; dan Water-Based Activity dimiliki Departemen Transport & Operasi FSRU. Bagian pengajuan, validasi, approval penerbitan, pelacakan, perpanjangan, dan penutupan dikelola dalam aplikasi. Hardcopy resmi tetap ditempatkan di lapangan; gas test awal, validasi harian, pembukaan/penutupan harian, dan tanda tangan lapangan diisi manual pada lembar cetak. Pada akhir pekerjaan, Sponsor mengunggah hardcopy lengkap sebagai bukti, lalu pemilik wilayah memverifikasi penutupan. PIC HSE tidak menjadi approver penutupan, tetapi memperoleh visibilitas dan rekap.
 
 Solusi dibangun sebagai aplikasi modular baru yang terintegrasi dengan E-SIMI melalui API/adapter. SQL Server menjadi *system of record* untuk data PTW; E-SIMI tetap menjadi *system of record* izin masuk. Tidak ada akses langsung ke tabel E-SIMI kecuali diputuskan melalui desain integrasi formal. Target teknologi dijelaskan pada PRD dan FSD: ASP.NET Core 10/.NET 10 LTS, Angular 22, SQL Server 2025, dan Docker Compose.
 
@@ -44,6 +44,7 @@ BRD ini menyepakati kebutuhan dan aturan bisnis sebelum pembangunan. Jika sumber
 | Klarifikasi otoritas approval, 1 September 2026 | Approval pemilik area untuk menuju penerbitan wajib dilakukan Manager pemilik area atau pejabat pengganti dengan penugasan/delegasi resmi yang aktif |
 | Rekaman rapat progress 7 September 2026 | Paritas isi template, penghapusan duplikasi bahaya/kontrol, paket cetak, operasi lapangan manual, bukti hardcopy saat close, penyederhanaan approver penutupan, renewal, dan pilot ORF |
 | Klarifikasi validator, 8 September 2026 | Menetapkan validator tunggal PIC HSE; Distribusi Gas & Pengelolaan ORF tetap sebagai pemilik area ORF/Site Office, bukan validator |
+| Klarifikasi lokasi aktif dan pemilik wilayah, 16 September 2026 | Menetapkan ORF, Site Office, dan Water-Based Activity sebagai lokasi aktif; memperbarui pemilik wilayah Site Office menjadi General Affair dan Water-Based Activity menjadi Transport & Operasi FSRU |
 | Analisis rapat bertimestamp | `.analysis/meeting-2026-09-07/meeting-findings.txt`; memisahkan keputusan, usulan, pertanyaan terbuka, dan perilaku prototipe |
 
 ### 2.2 Keputusan flow sampai versi 1.6
@@ -55,7 +56,7 @@ BRD ini menyepakati kebutuhan dan aturan bisnis sebelum pembangunan. Jika sumber
 | DEC-103 | Sistem membuat satu validation task aktif untuk PIC HSE pada setiap submission. | Dikonfirmasi v1.6 |
 | DEC-104 | Approval baru dapat berjalan setelah validasi PIC HSE berstatus valid pada PermitVersion yang sama. | Dikonfirmasi v1.6 |
 | DEC-105 | Approval dan penerbitan PTW mengikuti departemen pemilik area. | Dikonfirmasi |
-| DEC-106 | HO dimiliki General Affair; ORF dan Site Office dimiliki Distribusi Gas & Pengelolaan ORF; FSRU dan Water-Based Activity dimiliki Transportasi & FSRU Operation. | Dikonfirmasi |
+| DEC-106 | HO dimiliki General Affair; ORF dan Site Office dimiliki Distribusi Gas & Pengelolaan ORF; FSRU dan Water-Based Activity dimiliki Transportasi & FSRU Operation. | Digantikan DEC-116 pada 16 Sep 2026 |
 | DEC-107 | Istilah resmi setelah approval penerbitan adalah **PTW Diterbitkan** (`ISSUED`), bukan `OPEN`. Kesiapan mulai/lanjut kerja tetap dikendalikan terpisah melalui isian dan tanda tangan hardcopy. | Dikonfirmasi; diselaraskan v1.5 |
 | DEC-108 | Approval pemilik area sebelum penerbitan wajib dilakukan oleh Manager departemen pemilik area atau pejabat pengganti yang ditunjuk secara resmi, memiliki scope yang sama, dan masih efektif pada saat keputusan. | Dikonfirmasi |
 | DEC-109 | Isi kontrol pada tiga template PTW manual dipertahankan; tata letak digital/cetak boleh dioptimalkan. | Dikonfirmasi 7 Sep 2026 |
@@ -63,8 +64,9 @@ BRD ini menyepakati kebutuhan dan aturan bisnis sebelum pembangunan. Jika sumber
 | DEC-111 | Setelah approval penerbitan, sistem menghasilkan paket PTW siap cetak dengan bukti persetujuan dan lembar lapangan. | Dikonfirmasi 7 Sep 2026 |
 | DEC-112 | Gas test, revalidasi harian, pembukaan/penutupan harian, dan tanda tangan lapangan tetap manual pada hardcopy untuk rilis awal. | Dikonfirmasi 7 Sep 2026 |
 | DEC-113 | Close mewajibkan upload hardcopy lengkap; Sponsor mengajukan penutupan dan pemilik area memverifikasi. PIC HSE tidak meng-approve close, tetapi memperoleh rekap. | Dikonfirmasi 7 Sep 2026 |
-| DEC-114 | Pilot/rilis awal difokuskan pada ORF; lokasi lain merupakan rollout berikut setelah aturan area/template dikonfirmasi. | Dikonfirmasi 7 Sep 2026 |
+| DEC-114 | Pilot/rilis awal difokuskan pada ORF; lokasi lain merupakan rollout berikut setelah aturan area/template dikonfirmasi. | Digantikan DEC-116 pada 16 Sep 2026 |
 | DEC-115 | Perpanjangan dicatat sebagai PTW turunan maksimum tujuh hari, tidak overlap, memerlukan dokumen/attachment baru, dan menghasilkan paket cetak baru. | Dikonfirmasi 7 Sep 2026 |
+| DEC-116 | Lokasi aktif rilis awal adalah ORF, Site Office, dan Water-Based Activity. ORF dimiliki Departemen Distribusi Gas dan Pengelolaan ORF; Site Office dimiliki Departemen General Affair; Water-Based Activity dimiliki Departemen Transport & Operasi FSRU. HO dan FSRU tidak aktif sampai configuration bundle dan sign-off masing-masing tersedia. | Dikonfirmasi 16 Sep 2026 |
 
 ## 3. Latar belakang dan masalah bisnis
 
@@ -105,7 +107,7 @@ Proses kertas saat ini memiliki kontrol keselamatan yang penting, tetapi menimbu
 
 ### 5.1 Dalam lingkup MVP
 
-- pilot operasional untuk pekerjaan di ORF dengan owner Departemen Distribusi Gas & Pengelolaan ORF;
+- cakupan operasional awal untuk ORF, Site Office, dan Water-Based Activity dengan pemilik wilayah sesuai matriks Bagian 6.1;
 - autentikasi pengguna internal dan akun kontraktor terkelola, dengan otorisasi berbasis peran, perusahaan, lokasi, risiko, dan kompetensi;
 - pembuatan dan pengajuan PTW oleh Kontraktor atau User Sponsor;
 - input/tautan E-SIMI; pengisian otomatis melalui API diperlakukan sebagai backlog integrasi dengan fallback manual yang tervalidasi;
@@ -131,7 +133,7 @@ Proses kertas saat ini memiliki kontrol keselamatan yang penting, tetapi menimbu
 - integrasi otomatis alat gas detector, badge/gate, CCTV, atau sensor;
 - aplikasi mobile native dan operasi offline penuh;
 - penggantian atau migrasi aplikasi E-SIMI;
-- aktivasi operasional HO, Site Office, FSRU, dan Water-Based Activity pada pilot ORF; desain tetap menyiapkan rollout multi-lokasi setelah governance disahkan;
+- aktivasi operasional HO dan FSRU pada rilis awal; desain tetap menyiapkan rollout kedua lokasi tersebut setelah governance, template, dan otoritasnya disahkan;
 - tanda tangan digital tersertifikasi PSrE, kecuali disetujui sebagai fase lanjutan.
 
 ### 5.3 Pemetaan sepuluh bagian formulir manual
@@ -160,28 +162,30 @@ Checklist digital mempertahankan maksud keselamatan formulir, tetapi nama, uruta
 | User Sponsor | Pengaju internal NR dan/atau sponsor pekerjaan kontraktor; accountable atas representasi crew pada sistem | Draft, submit, perbaikan, renewal, upload hardcopy final, dan request close |
 | Pelaksana/Performing Authority | Menjelaskan metode kerja, menjalankan kontrol, dan melakukan validasi/tanda tangan lapangan | Tidak wajib mempunyai akun pada MVP; acknowledgement/tanda tangan melalui hardcopy |
 | PIC HSE | Validator tunggal yang memvalidasi bahaya, risiko, kontrol, JSA, kelengkapan pengajuan, dan kebutuhan gas test | Validate, request revision, reject, escalate |
-| Departemen Distribusi Gas & Pengelolaan ORF | Pemilik area untuk ORF dan Site Office | Menyediakan Manager/pengganti resmi sebagai approver penerbitan dan pemilik proses area; bukan validator |
-| Area Approver/Owner | Manager departemen pemilik area, atau pejabat pengganti resmi | Approval penerbitan; sistem menerbitkan PTW dan membuat paket cetak. Pada close, pemilik area memverifikasi bukti hardcopy dan menutup PTW. |
-| Petugas Lapangan Pemilik Area | Menjaga kontrol area dan mengisi bagian operasional pada hardcopy | Gas test/readiness/revalidasi/inspeksi/tanda tangan manual sesuai kewenangan SOP |
+| Departemen Distribusi Gas dan Pengelolaan ORF | Pemilik wilayah ORF | Menyediakan Manager/pengganti resmi sebagai approver penerbitan dan pemilik proses wilayah; bukan validator |
+| Departemen General Affair | Pemilik wilayah Site Office | Menyediakan Manager/pengganti resmi sebagai approver penerbitan dan verifier close Site Office; bukan validator |
+| Departemen Transport & Operasi FSRU | Pemilik wilayah Water-Based Activity | Menyediakan Manager/pengganti resmi sebagai approver penerbitan dan verifier close Water-Based Activity; bukan validator |
+| Area Approver/Owner | Manager departemen pemilik wilayah, atau pejabat pengganti resmi | Approval penerbitan; sistem menerbitkan PTW dan membuat paket cetak. Pada close, pemilik wilayah memverifikasi bukti hardcopy dan menutup PTW. |
+| Petugas Lapangan Pemilik Wilayah | Menjaga kontrol wilayah dan mengisi bagian operasional pada hardcopy | Gas test/readiness/revalidasi/inspeksi/tanda tangan manual sesuai kewenangan SOP |
 | Gas Tester | Melakukan pengujian atmosfer bila diwajibkan | Record/sign gas test secara manual pada lembar PTW |
 | Isolating Authority | Menyiapkan/verifikasi isolasi | Catatan dan tanda tangan manual pada hardcopy sesuai template |
 | Site/Shift Supervisor | Revalidasi kondisi harian/shift | Tanda tangan pembukaan/penutupan periode pada hardcopy |
 | Administrator | Mengelola konfigurasi terkontrol | Master data/ruleset; tidak boleh self-approve |
 | Auditor/Read-only | Memeriksa bukti dan riwayat | Read/export sesuai cakupan |
 
-Untuk approval pemilik area, level Manager merupakan syarat bisnis. Namun jabatan saja tidak cukup: aktor tetap harus memiliki assignment aktif, scope departemen/lokasi yang sesuai, dan memenuhi pemisahan tugas. Pejabat pengganti hanya dapat bertindak bila penugasan/delegasinya tercatat resmi, efektif, dan dapat diaudit.
+Untuk approval pemilik wilayah, level Manager merupakan syarat bisnis. Namun jabatan saja tidak cukup: aktor tetap harus memiliki assignment aktif, scope departemen/lokasi yang sesuai, dan memenuhi pemisahan tugas. Pejabat pengganti hanya dapat bertindak bila penugasan/delegasinya tercatat resmi, efektif, dan dapat diaudit.
 
 ### 6.1 Matriks pemilik area
 
 | Kode lokasi | Lokasi | Departemen pemilik area | Tanggung jawab pada flow |
 | --- | --- | --- | --- |
-| `HO` | Head Office (HO) | Departemen General Affair | Target rollout; konfirmasi sublokasi, template, dan posisi berwenang sebelum aktivasi |
-| `ORF` | ORF | Departemen Distribusi Gas & Pengelolaan ORF | **Pilot/MVP aktif**; menyediakan Manager Area Approver dan verifier close |
-| `SITE_OFFICE` | Site Office | Departemen Distribusi Gas & Pengelolaan ORF | Target rollout; konfirmasi template dan posisi berwenang sebelum aktivasi |
-| `FSRU` | FSRU | Departemen Transportasi & FSRU Operation | Target rollout; konfirmasi template dan posisi berwenang sebelum aktivasi |
-| `WATER_BASED` | Water-Based Activity | Departemen Transportasi & FSRU Operation | Target rollout; konfirmasi template dan posisi berwenang sebelum aktivasi |
+| `HO` | Head Office (HO) | Departemen General Affair | **Tidak aktif**; target rollout setelah sublokasi, template, dan posisi berwenang disahkan |
+| `ORF` | ORF | Departemen Distribusi Gas dan Pengelolaan ORF | **Aktif**; menyediakan Manager Area Approver dan verifier close ORF |
+| `SITE_OFFICE` | Site Office | Departemen General Affair | **Aktif**; menyediakan Manager Area Approver dan verifier close Site Office |
+| `FSRU` | FSRU | Departemen Transport & Operasi FSRU | **Tidak aktif**; target rollout setelah template dan posisi berwenang disahkan |
+| `WATER_BASED` | Water-Based Activity | Departemen Transport & Operasi FSRU | **Aktif**; menyediakan Manager Area Approver dan verifier close Water-Based Activity |
 
-Pemilik area ditentukan dari lokasi utama PTW. Matriks ini mempertahankan klarifikasi sebelumnya sebagai desain target, tetapi hanya ORF yang diaktifkan pada pilot. Aktivasi lokasi lain memerlukan sign-off pemilik area, wording, checklist, dan template cetak. Pekerjaan lintas area harus dipecah menjadi PTW terpisah atau mengikuti aturan multi-area yang kelak disahkan; sistem tidak boleh memilih satu pemilik area secara diam-diam.
+Pemilik wilayah ditentukan dari lokasi utama PTW. ORF, Site Office, dan Water-Based Activity diaktifkan pada rilis awal melalui `LocationRelease` dan configuration bundle terpisah. HO dan FSRU tetap `DISABLED` sampai sign-off pemilik wilayah, wording, checklist, dan template cetak tersedia. Pekerjaan lintas wilayah harus dipecah menjadi PTW terpisah atau mengikuti aturan multi-area yang kelak disahkan; sistem tidak boleh memilih satu pemilik wilayah secara diam-diam.
 
 ## 7. Alur bisnis target
 
@@ -195,8 +199,14 @@ flowchart TD
     E --> V{"Hasil validasi HSE"}
     V -- Revisi --> B
     V -- Tolak --> X["Rejected / selesai"]
-    V -- Valid --> G["Approval penerbitan oleh Manager pemilik area / pengganti resmi"]
-    G --> H{"Disetujui?"}
+    V -- Valid --> W{"Lokasi aktif dan pemilik wilayah"}
+    W -- ORF --> G1["Manager Distribusi Gas dan Pengelolaan ORF / pengganti"]
+    W -- Site Office --> G2["Manager General Affair / pengganti"]
+    W -- Water-Based --> G3["Manager Transport & Operasi FSRU / pengganti"]
+    W -- HO / FSRU / lainnya --> Y["Submission diblokir: lokasi belum aktif"]
+    G1 --> H{"Disetujui?"}
+    G2 --> H
+    G3 --> H
     H -- Tidak --> X
     H -- Ya --> I["Sistem: DITERBITKAN + kunci snapshot + buat paket PDF"]
     I --> J["Cetak dan tempatkan hardcopy di lapangan"]
@@ -206,7 +216,7 @@ flowchart TD
     R --> D
     L -- Ya --> M["Manual: completion, inspeksi, restorasi, handback, tanda tangan"]
     M --> N["Sponsor upload hardcopy final + request close"]
-    N --> O{"Pemilik area memverifikasi?"}
+    N --> O{"Pemilik wilayah sesuai lokasi memverifikasi?"}
     O -- Perbaikan bukti --> N
     O -- Ya --> T["CLOSED; PIC HSE dapat melihat rekap"]
 ```
@@ -281,7 +291,7 @@ Prioritas: **M** Must, **S** Should, **C** Could.
 | BR-APR-001 | Approval penerbitan dilakukan oleh Manager departemen pemilik area atau pejabat pengganti resmi yang masih efektif, dengan scope lokasi/departemen yang sesuai. | M |
 | BR-APR-002 | Bukti keputusan menyimpan aktor aktual, kapasitas sebagai Manager/pengganti, Manager yang digantikan bila berlaku, ID penugasan/otorisasi, timestamp, versi data, dan pernyataan yang disetujui. | M |
 | BR-APR-003 | Approval yang berhasil mengunci PermitVersion dan secara atomik menetapkan status `ISSUED`; pekerjaan belum boleh dimulai sampai prasyarat/tanda tangan lapangan pada hardcopy dipenuhi. | M |
-| BR-APR-004 | Departemen pemilik area untuk HO, ORF, Site Office, FSRU, dan Water-Based Activity wajib mengikuti matriks pada Bagian 6.1. | M |
+| BR-APR-004 | Routing lokasi aktif wajib mengikuti matriks Bagian 6.1: ORF ke Departemen Distribusi Gas dan Pengelolaan ORF; Site Office ke Departemen General Affair; Water-Based Activity ke Departemen Transport & Operasi FSRU. | M |
 | BR-APR-005 | Bila Manager berhalangan, sistem hanya merutekan approval kepada pengganti yang penugasannya telah disahkan, belum kedaluwarsa, tidak dicabut, dan mencakup departemen/lokasi serta risiko PTW tersebut. | M |
 | BR-APR-006 | Berakhir atau dicabutnya penugasan pengganti sebelum keputusan memblokir approval dan merutekan ulang task tanpa menghapus riwayat. | M |
 | BR-APR-007 | Paket cetak menampilkan bukti elektronik aktor, jabatan/peran, kapasitas pengganti bila ada, keputusan, dan waktu; bentuk ini bukan tanda tangan digital tersertifikasi kecuali kelak disahkan. | M |
@@ -347,7 +357,7 @@ Prioritas: **M** Must, **S** Should, **C** Could.
 | RB-015 | Kolom bahaya/pengendalian bebas yang menduplikasi JSA tidak menjadi bagian form digital; perubahan JSA setelah submit merupakan perubahan material dan memicu validasi ulang. |
 | RB-016 | Hanya hardcopy final dari PermitVersion/paket cetak yang sama yang dapat menjadi evidence close; QR/reference dan hash upload digunakan untuk rekonsiliasi. |
 | RB-017 | Close hanya dapat disahkan pemilik area setelah Sponsor mengunggah hardcopy lengkap; PIC HSE menerima visibilitas/rekap tanpa task approval close. |
-| RB-018 | Pilot hanya menerima lokasi ORF; lokasi lain gagal aman sampai feature flag dan konfigurasi area telah disahkan. |
+| RB-018 | Rilis awal hanya menerima `ORF`, `SITE_OFFICE`, dan `WATER_BASED`; `HO`, `FSRU`, atau lokasi lain gagal aman sampai feature flag, configuration bundle, dan sign-off pemilik wilayah telah disahkan. |
 
 ## 10. Informasi, laporan, dan retensi
 
@@ -394,14 +404,14 @@ Retensi PTW, lampiran, audit, dan bukti elektronik harus ditetapkan Records Mana
 | Risiko | Docker Compose menjadi single-host SPOF → backup/restore, capacity plan; HA multi-host menjadi keputusan deployment terpisah. |
 | Risiko | Hardcopy final tidak terbaca/tidak lengkap → panduan scan/foto, quality gate, preview, dan hak pemilik area meminta upload ulang. |
 | Risiko | Bukti persetujuan visual disalahartikan sebagai tanda tangan digital tersertifikasi → label yang tepat, immutable audit trail, dan keputusan Legal sebelum klaim hukum. |
-| Risiko | Scope lintas lokasi aktif terlalu cepat → feature flag per lokasi; pilot hanya ORF sampai konfigurasi dan sign-off tersedia. |
+| Risiko | Tiga lokasi aktif memiliki template atau otoritas yang belum seragam → feature flag dan configuration bundle per lokasi; suatu lokasi hanya menerima submission setelah konfigurasi dan sign-off lokasi tersebut tersedia. |
 
 ## 13. Keputusan yang masih terbuka
 
 | ID | Keputusan yang dibutuhkan | Pemilik |
 | --- | --- | --- |
-| OPN-001 | Struktur sublokasi/equipment ORF untuk pilot; detail HO, Site Office, FSRU, dan Water-Based Activity sebelum rollout | Operasi |
-| OPN-002 | Nama posisi Manager ORF, format/dasar penugasan pengganti, pihak pengesah, batas risiko, dan aturan SoD; kemudian ekuivalen untuk lokasi rollout | HSSE/Operasi/HC |
+| OPN-001 | Struktur sublokasi/equipment untuk ORF, Site Office, dan Water-Based Activity; detail HO dan FSRU sebelum rollout berikutnya | Operasi/General Affair/Transport & Operasi FSRU |
+| OPN-002 | Nama posisi Manager dan verifier close untuk masing-masing pemilik wilayah aktif, format/dasar penugasan pengganti, pihak pengesah, batas risiko, dan aturan SoD | HSSE/Operasi/General Affair/Transport & Operasi FSRU/HC |
 | OPN-003 | Baseline checklist per kelas izin, item yang wajib, dan final mapping sepuluh bagian formulir | HSSE/Operasi |
 | OPN-004 | Aturan gas test yang dicetak per kelas, parameter, unit, frekuensi, retest, dan kompetensi penanda tangan | HSSE |
 | OPN-005 | SLA PIC HSE, mekanisme eskalasi, serta perlakuan task ketika validator meminta revisi/menolak | PO/HSSE/Operasi |
@@ -419,24 +429,24 @@ Dengan satu squad (PO, BA, UX paruh waktu, 2–3 engineer, QA, serta SME HSSE/Op
 
 | Tahap | Durasi |
 | --- | --- |
-| Discovery ORF, finalisasi template/checklist/otoritas, UX | 2–3 minggu |
+| Discovery tiga lokasi aktif, finalisasi template/checklist/otoritas, UX | 3–4 minggu |
 | Fondasi, identitas, master, desain adapter E-SIMI | 3–4 minggu |
 | Pengajuan, dokumen, validasi PIC HSE, approval penerbitan | 4–5 minggu |
 | Generator PDF, renewal, upload hardcopy, verifikasi close | 3–4 minggu |
-| Dashboard, audit, hardening, UAT, dan pilot ORF | 3–4 minggu |
+| Dashboard, audit, hardening, UAT, dan pilot tiga lokasi aktif | 4–5 minggu |
 
-Dengan pekerjaan paralel dan keputusan bisnis tersedia tepat waktu, target pilot ORF realistis **15–20 minggu**. Integrasi E-SIMI penuh dan rollout HO/Site Office/FSRU/Water-Based diperkirakan membawa total menjadi **20–28 minggu**. Estimasi tidak mencakup keterlambatan sign-off template, keputusan legal tanda tangan, pengadaan infrastruktur, atau remediasi integrasi legacy.
+Dengan pekerjaan paralel dan keputusan bisnis tersedia tepat waktu, target rilis awal untuk ORF, Site Office, dan Water-Based Activity realistis **18–24 minggu**. Integrasi E-SIMI penuh dan rollout HO/FSRU diperkirakan membawa total menjadi **22–30 minggu**. Estimasi tidak mencakup keterlambatan sign-off template per lokasi, keputusan legal tanda tangan, pengadaan infrastruktur, atau remediasi integrasi legacy.
 
 ## 15. Kriteria penerimaan dan sign-off BRD
 
 BRD dapat disahkan bila:
 
-1. cakupan lokasi, peran, tiga kelas izin, dan relasi E-SIMI disepakati;
+1. tiga lokasi aktif dan routing pemilik wilayahnya—ORF→Distribusi Gas dan Pengelolaan ORF, Site Office→General Affair, Water-Based Activity→Transport & Operasi FSRU—beserta peran, tiga kelas izin, dan relasi E-SIMI disepakati;
 2. alur hibrida dari draft sampai close, termasuk hardcopy lapangan dan renewal, diterima Operasi/HSSE;
 3. makna Issued serta kewajiban gas test/revalidasi/tanda tangan hardcopy sebelum kerja diterima dan masuk SOP/training;
 4. matriks approval, checklist, dokumen, gas test manual, bukti close, SoD, dan handback memiliki pemilik serta tanggal keputusan;
 5. KPI, retensi, RPO/RTO, dan acceptance UAT disepakati;
-6. Product Owner, Operasi, HSSE, TI, dan pihak governance menandatangani baseline.
+6. Product Owner, Operasi, HSSE, General Affair, Transport & Operasi FSRU, TI, dan pihak governance menandatangani baseline.
 
 ## 16. Matriks ketertelusuran tingkat tinggi
 
