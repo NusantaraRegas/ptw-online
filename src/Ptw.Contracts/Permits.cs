@@ -29,13 +29,31 @@ public sealed record PermitDraftRequest(
     string? JsaDocumentNumber = null,
     string? JsaRevision = null,
     DateTimeOffset? JsaDate = null,
-    IReadOnlyList<string>? WorkTypeCodes = null);
+    IReadOnlyList<string>? WorkTypeCodes = null,
+    string? OtherWorkTypeDescription = null,
+    string? EquipmentName = null,
+    string? WorkOrderNumber = null,
+    string? AdditionalHazardReference = null);
 
-public sealed record PermitWorkTypeOptionResponse(string Code, string Label);
+public sealed record PermitWorkTypeOptionResponse(string Code, string Label, bool RequiresDetail);
 
 public sealed record PermitWorkTypeCatalogResponse(
     string PermitClass,
     IReadOnlyList<PermitWorkTypeOptionResponse> Options);
+
+public sealed record PermitSafetyEquipmentOptionResponse(string Code, string Label);
+
+public sealed record PermitSafetyEquipmentCatalogResponse(
+    string PermitClass,
+    IReadOnlyList<PermitSafetyEquipmentOptionResponse> Options);
+
+public sealed record PermitSupportingDocumentOptionResponse(
+    string Code,
+    string Label,
+    int TemplateColumn,
+    int TemplateIndex,
+    bool Required,
+    bool RequiresMetadata);
 
 public sealed record SubmitPermitRequest(
     bool ESimiEligible,
@@ -43,7 +61,9 @@ public sealed record SubmitPermitRequest(
     bool RequiredDocumentsSafe,
     IReadOnlyList<string> MissingRequirements);
 
-public sealed record ValidateSubmissionRequest(string Statement);
+public sealed record ValidateSubmissionRequest(
+    string Statement,
+    IReadOnlyList<string> SafetyEquipmentCodes);
 
 public sealed record ApproveAndIssuePermitRequest(
     string Statement,
@@ -76,7 +96,8 @@ public sealed record PermitValidationResponse(
     bool Completed,
     string? ActorId,
     string? Statement,
-    DateTimeOffset? CompletedAt);
+    DateTimeOffset? CompletedAt,
+    IReadOnlyList<string> SafetyEquipmentCodes);
 
 public sealed record PermitApprovalResponse(
     bool Completed,
@@ -182,6 +203,7 @@ public sealed record PermitAttachmentResponse(
     string? ScanEvidenceReference,
     DateTimeOffset? ScannedAt,
     string Category,
+    string? SupportingDocumentCode,
     string? DocumentNumber,
     string? DocumentRevision,
     DateTimeOffset? DocumentDate,

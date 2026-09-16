@@ -16,7 +16,7 @@ namespace Ptw.Infrastructure.Printing;
 /// </remarks>
 internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
 {
-    internal const string RendererVersion = "ptw-form-renderer/2.0.0";
+    internal const string RendererVersion = "ptw-form-renderer/2.3.0";
 
     private const double PageWidth = 420;
     private const double PageHeight = 297;
@@ -157,8 +157,14 @@ internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
             "Tanggal :",
             FormCanvas.Wib(snapshot.CreatedAt, "dd/MM/yy"),
             22);
-        // Work Order No. is not captured by the digital form yet; printed blank for manual entry.
-        canvas.Field(infoX + 1.5, y + (rowHeight * 2), infoWidth - 3, rowHeight, "Work Order No. :", null, 22);
+        canvas.Field(
+            infoX + 1.5,
+            y + (rowHeight * 2),
+            infoWidth - 3,
+            rowHeight,
+            "Work Order No. :",
+            snapshot.Permit.WorkOrderNumber,
+            22);
     }
 
     private static void DrawSection1WorkTypes(
@@ -228,8 +234,7 @@ internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
 
         var row2 = y + rowHeight;
         canvas.Field(LeftX + 1.5, row2, 82, rowHeight, "No. Equipment :", draft.EquipmentTag, 26);
-        // Nama Equipment is a separate controlled field that the digital form does not capture yet.
-        canvas.Field(LeftX + 86, row2, 84, rowHeight, "Nama Equipment :", null, 28);
+        canvas.Field(LeftX + 86, row2, 84, rowHeight, "Nama Equipment :", draft.EquipmentName, 28);
         canvas.Field(LeftX + 172, row2, 82, rowHeight, "Plant / Area :", draft.PlantArea, 22);
         canvas.Line(LeftX, row2 + rowHeight, LeftX + LeftWidth, row2 + rowHeight);
 
@@ -246,17 +251,16 @@ internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
         canvas.WritingRule(LeftX + 62, row4 + rowHeight - 0.9, LeftWidth - 65);
         canvas.Line(LeftX, row4 + rowHeight, LeftX + LeftWidth, row4 + rowHeight);
 
-        // Retained from the controlled form. v1.6 DEC-110 removed free hazard authoring from the digital
-        // form, so this stays blank for manual entry pending OPN-003.
         var row5 = row4 + rowHeight;
-        canvas.Text(
+        canvas.Field(
             LeftX + 1.5,
             row5,
-            110,
+            LeftWidth - 3,
             rowHeight,
             "Informasi tentang bahaya yang terkait yang belum masuk di permit ini :",
+            draft.AdditionalHazardReference,
+            112,
             4.6);
-        canvas.WritingRule(LeftX + 112, row5 + rowHeight - 0.9, LeftWidth - 115);
     }
 
     private static void DrawFooter(
@@ -348,6 +352,21 @@ internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
         }
 
         return false;
+    }
+
+    private static string[] SelectedSafetyEquipmentLabels(PrintPackageSnapshotPayload snapshot)
+    {
+        var selected = snapshot.HseValidation?.SafetyEquipmentCodes is { Count: > 0 }
+            ? snapshot.HseValidation.SafetyEquipmentCodes
+            : snapshot.Permit.SafetyEquipmentCodes;
+        return PermitSafetyEquipmentCatalog.Resolve(snapshot.Permit.PermitClass)
+            .Where(option =>
+                IsSelected(selected, option.Code)
+                || IsSelected(selected, option.Label))
+            .OrderBy(option => option.TemplateColumn)
+            .ThenBy(option => option.TemplateIndex)
+            .Select(option => option.Label)
+            .ToArray();
     }
 
     private static string Normalise(string value) =>

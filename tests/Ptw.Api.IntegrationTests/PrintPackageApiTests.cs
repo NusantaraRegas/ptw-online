@@ -1,5 +1,7 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -52,7 +54,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         Assert.Equal("READY", snapshot.RenderStatus);
         var document = await db.GeneratedDocuments.AsNoTracking()
             .SingleAsync(x => x.PrintPackageSnapshotId == snapshot.Id);
-        Assert.Equal("ptw-form-renderer/2.0.0", document.RendererVersion);
+        Assert.Equal("ptw-form-renderer/2.3.0", document.RendererVersion);
         // Sensitive downloads are material audit events under BR-AUD-001.
         Assert.True(await db.AuditEvents.AsNoTracking().AnyAsync(
             x => x.PermitId == issued.Id && x.EventType == "print_package_downloaded"));
@@ -174,6 +176,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         using var manager = Client(Unique("manager"), "AreaOwnerManager", "ORF");
 
         var draft = await CreateAsync(sponsor, sponsorId, "ORF");
+        draft = await UploadJsaAsync(sponsor, draft);
         using var submitResponse = await sponsor.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/permits/{draft.Id}/submit",
@@ -187,7 +190,9 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
             HttpMethod.Post,
             $"/api/v1/tasks/{validationTask.Id}/validate",
             submitted.ETag,
-            new ValidateSubmissionRequest("JSA dan requirement telah diverifikasi.")));
+            new ValidateSubmissionRequest(
+                "JSA dan requirement telah diverifikasi.",
+                ["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"])));
         validateResponse.EnsureSuccessStatusCode();
         var validated = Required(await validateResponse.Content.ReadFromJsonAsync<PermitResponse>());
 
@@ -199,6 +204,33 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
             new ApproveAndIssuePermitRequest("Saya menyetujui dan menerbitkan PTW ini.", null)));
         issueResponse.EnsureSuccessStatusCode();
         return Required(await issueResponse.Content.ReadFromJsonAsync<PermitResponse>());
+    }
+
+    private static async Task<PermitResponse> UploadJsaAsync(HttpClient client, PermitResponse permit)
+    {
+        using var content = new MultipartFormDataContent();
+        var file = new ByteArrayContent(Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF\n"));
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        content.Add(file, "file", "jsa.pdf");
+        content.Add(new StringContent("JSA"), "category");
+        content.Add(new StringContent("JSA"), "supportingDocumentCode");
+        content.Add(new StringContent(Required(permit.Draft.JsaDocumentNumber)), "documentNumber");
+        content.Add(new StringContent(Required(permit.Draft.JsaRevision)), "documentRevision");
+        content.Add(new StringContent(permit.Draft.JsaDate!.Value.ToString("O")), "documentDate");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1/permits/{permit.Id}/attachments")
+        {
+            Content = content
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", permit.ETag);
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+
+        using var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        var mutation = Required(
+            await response.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
+        return permit with { ETag = mutation.ETag, Version = mutation.PermitVersion };
     }
 
     private static async Task<PermitResponse> CreateAsync(HttpClient client, string sponsorId, string location)
@@ -253,6 +285,9 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
             [],
             [],
             ["JSA"],
+            JsaDocumentNumber: "JSA-TEST-001",
+            JsaRevision: "1",
+            JsaDate: now,
             WorkTypeCodes: ["HOT_WELDING"]);
     }
 

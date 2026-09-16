@@ -41,7 +41,11 @@ public sealed class PermitStateMachineTests
     {
         var permit = SubmittedPermit();
         var error = Assert.Throws<DomainRuleViolationException>(() =>
-            permit.ValidateSubmission("sponsor.demo", "Valid.", Now.AddMinutes(2)));
+            permit.ValidateSubmission(
+                "sponsor.demo",
+                "Valid.",
+                ["SAFETY_FIRE_EXTINGUISHER"],
+                Now.AddMinutes(2)));
 
         Assert.Equal("permit.validation.self_validation_forbidden", error.Code);
         Assert.Equal(PermitStatus.UnderValidation, permit.Status);
@@ -51,11 +55,40 @@ public sealed class PermitStateMachineTests
     public void HseValidationCreatesAreaApprovalGateForSameVersion()
     {
         var permit = SubmittedPermit();
-        permit.ValidateSubmission("hse.validator", "JSA dan requirement konsisten.", Now.AddMinutes(2));
+        permit.ValidateSubmission(
+            "hse.validator",
+            "JSA dan requirement konsisten.",
+            ["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"],
+            Now.AddMinutes(2));
 
         Assert.Equal(PermitStatus.AwaitingAreaApproval, permit.Status);
         Assert.Equal("hse.validator", permit.HseValidation?.ActorId);
+        Assert.Equal(
+            ["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"],
+            permit.HseValidation?.SafetyEquipmentCodes);
+        Assert.Empty(permit.Draft.SafetyEquipmentCodes ?? []);
         Assert.Equal(1, permit.Version);
+    }
+
+    [Theory]
+    [InlineData(null, "permit.safety_equipment_required")]
+    [InlineData("SAFETY_NOT_IN_TEMPLATE", "permit.safety_equipment_invalid")]
+    public void HseValidationRejectsMissingOrUnknownSafetyEquipment(
+        string? safetyEquipmentCode,
+        string expectedCode)
+    {
+        var permit = SubmittedPermit();
+        string[] selected = safetyEquipmentCode is null ? [] : [safetyEquipmentCode];
+
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.ValidateSubmission(
+                "hse.validator",
+                "JSA dan requirement konsisten.",
+                selected,
+                Now.AddMinutes(2)));
+
+        Assert.Equal(expectedCode, error.Code);
+        Assert.Equal(PermitStatus.UnderValidation, permit.Status);
     }
 
     [Fact]
@@ -67,6 +100,30 @@ public sealed class PermitStateMachineTests
         Assert.Equal(PermitStatus.Issued, permit.Status);
         Assert.Equal(ApprovalCapacity.Manager, permit.Approval?.Capacity);
         Assert.Contains(permit.Events, x => x.Type == "permit_issued");
+    }
+
+    [Fact]
+    public void ApprovalRejectsLegacyHseEvidenceWithoutBagian5Selection()
+    {
+        var permit = Permit.Rehydrate(
+            Guid.NewGuid(),
+            "PTW-20260915-0001",
+            PermitStatus.AwaitingAreaApproval,
+            1,
+            ValidDraft(),
+            Now,
+            Now.AddMinutes(2),
+            hseValidation: new PermitValidationEvidence(
+                "hse.validator",
+                "Validasi legacy tanpa pilihan Bagian 5.",
+                Now.AddMinutes(2)));
+
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.ApproveAndIssue(ManagerApproval(), Now.AddMinutes(3)));
+
+        Assert.Equal("permit.safety_equipment_required", error.Code);
+        Assert.Contains("Minta revisi", error.Message);
+        Assert.Equal(PermitStatus.AwaitingAreaApproval, permit.Status);
     }
 
     [Fact]
@@ -210,7 +267,7 @@ public sealed class PermitStateMachineTests
     }
 
     [Fact]
-    public void DraftNormalizesV16PlanningFieldsWithoutInventingSafetyRules()
+    public void DraftNormalizesV16PlanningFieldsWithoutAssigningHseSafetyEquipment()
     {
         var permit = Permit.CreateDraft(ValidDraft() with
         {
@@ -218,9 +275,11 @@ public sealed class PermitStateMachineTests
             WorkTypeCode = null,
             WorkTypeCodes = [" hot_welding ", "HOT_GRINDING", "HOT_WELDING"],
             EquipmentTag = " P-101 ",
+            EquipmentName = " Gas inlet separator ",
+            WorkOrderNumber = " WO-2026-001 ",
+            AdditionalHazardReference = " Potensi akses licin di sisi utara ",
             PlantArea = " Process Area ",
             SimopsDeclaration = " Tidak ada SIMOPS ",
-            SafetyEquipmentCodes = ["APAR", " APAR ", "FIRE_WATCH"],
             IsolationPrecautionCodes = ["LOTO"],
             JsaDocumentNumber = " JSA-001 ",
             JsaRevision = " 2 ",
@@ -230,8 +289,44 @@ public sealed class PermitStateMachineTests
         Assert.Equal("CONTRACTOR", permit.Draft.SubmitterType);
         Assert.Equal("HOT_GRINDING", permit.Draft.WorkTypeCode);
         Assert.Equal(["HOT_GRINDING", "HOT_WELDING"], permit.Draft.WorkTypeCodes);
-        Assert.Equal(["APAR", "FIRE_WATCH"], permit.Draft.SafetyEquipmentCodes);
+        Assert.Empty(permit.Draft.SafetyEquipmentCodes ?? []);
+        Assert.Equal("Gas inlet separator", permit.Draft.EquipmentName);
+        Assert.Equal("WO-2026-001", permit.Draft.WorkOrderNumber);
+        Assert.Equal("Potensi akses licin di sisi utara", permit.Draft.AdditionalHazardReference);
         Assert.Equal("JSA-001", permit.Draft.JsaDocumentNumber);
+    }
+
+    [Theory]
+    [InlineData("equipment", 101, "permit.equipment_name_too_long")]
+    [InlineData("work-order", 61, "permit.work_order_number_too_long")]
+    [InlineData("hazard-reference", 161, "permit.additional_hazard_reference_too_long")]
+    public void DraftRejectsPlanningReferenceFieldsThatExceedThePrintedSpace(
+        string field,
+        int length,
+        string expectedCode)
+    {
+        var value = new string('X', length);
+        var draft = field switch
+        {
+            "equipment" => ValidDraft() with { EquipmentName = value },
+            "work-order" => ValidDraft() with { WorkOrderNumber = value },
+            _ => ValidDraft() with { AdditionalHazardReference = value }
+        };
+
+        var error = Assert.Throws<DomainRuleViolationException>(() => Permit.CreateDraft(draft, Now));
+
+        Assert.Equal(expectedCode, error.Code);
+    }
+
+    [Fact]
+    public void SponsorDraftCannotAssignHseOwnedSafetyEquipment()
+    {
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            Permit.CreateDraft(
+                ValidDraft() with { SafetyEquipmentCodes = ["SAFETY_FIRE_EXTINGUISHER"] },
+                Now));
+
+        Assert.Equal("permit.safety_equipment.hse_owned", error.Code);
     }
 
     [Fact]
@@ -261,6 +356,104 @@ public sealed class PermitStateMachineTests
         Assert.Equal("permit.work_type_required", error.Code);
     }
 
+    [Fact]
+    public void DraftRequiresJsaAndNormalizesOptionalSupportingDocumentsInTemplateOrder()
+    {
+        var missingJsa = Assert.Throws<DomainRuleViolationException>(() =>
+            Permit.CreateDraft(ValidDraft() with { RequiredDocumentCodes = ["MSDS"] }, Now));
+        Assert.Equal("permit.supporting_document.jsa_required", missingJsa.Code);
+
+        var permit = Permit.CreateDraft(ValidDraft() with
+        {
+            RequiredDocumentCodes = ["MSDS", "JSA", "Lifting Plan", "MSDS"]
+        }, Now);
+
+        Assert.Equal(["JSA", "LIFTING_PLAN", "MSDS"], permit.Draft.RequiredDocumentCodes);
+    }
+
+    [Fact]
+    public void LegacyDraftWithoutJsaCanBeReadButCannotEnterWorkflow()
+    {
+        var permit = Permit.Rehydrate(
+            Guid.NewGuid(),
+            null,
+            PermitStatus.Draft,
+            1,
+            ValidDraft() with { RequiredDocumentCodes = [] },
+            Now,
+            Now);
+
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.Submit("PTW-LEGACY-002", ReadyToSubmit(), Now.AddMinutes(1)));
+
+        Assert.Equal("permit.supporting_document.jsa_required", error.Code);
+    }
+
+    [Fact]
+    public void DraftNormalizesOtherWorkTypeDescriptionWhenOtherIsSelected()
+    {
+        var permit = Permit.CreateDraft(ValidDraft() with
+        {
+            WorkTypeCodes = ["HOT_OTHER", "HOT_WELDING"],
+            OtherWorkTypeDescription = "  Pemanasan bearing dengan induction heater  "
+        }, Now);
+
+        Assert.Equal("Pemanasan bearing dengan induction heater", permit.Draft.OtherWorkTypeDescription);
+        Assert.Contains("HOT_OTHER", permit.Draft.WorkTypeCodes ?? []);
+    }
+
+    [Fact]
+    public void DraftRejectsOtherSelectionWithoutDescription()
+    {
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            Permit.CreateDraft(ValidDraft() with { WorkTypeCodes = ["HOT_OTHER"] }, Now));
+
+        Assert.Equal("permit.work_type_other_detail_required", error.Code);
+    }
+
+    [Fact]
+    public void DraftRejectsOtherDescriptionWithoutOtherSelection()
+    {
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            Permit.CreateDraft(ValidDraft() with
+            {
+                OtherWorkTypeDescription = "Pekerjaan tidak terpilih"
+            }, Now));
+
+        Assert.Equal("permit.work_type_other_detail_without_selection", error.Code);
+    }
+
+    [Fact]
+    public void DraftRejectsOtherDescriptionLongerThanOfficialFormCapacity()
+    {
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            Permit.CreateDraft(ValidDraft() with
+            {
+                WorkTypeCodes = ["HOT_OTHER"],
+                OtherWorkTypeDescription = new string('A', 81)
+            }, Now));
+
+        Assert.Equal("permit.work_type_other_detail_too_long", error.Code);
+    }
+
+    [Fact]
+    public void LegacyOtherDraftCanBeReadButCannotEnterWorkflowWithoutDescription()
+    {
+        var permit = Permit.Rehydrate(
+            Guid.NewGuid(),
+            null,
+            PermitStatus.Draft,
+            1,
+            ValidDraft() with { WorkTypeCodes = ["HOT_OTHER"] },
+            Now,
+            Now);
+
+        Assert.Null(permit.Draft.OtherWorkTypeDescription);
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.Submit("PTW-LEGACY-001", ReadyToSubmit(), Now.AddMinutes(1)));
+        Assert.Equal("permit.work_type_other_detail_required", error.Code);
+    }
+
     private static Permit CreatePermit() => Permit.CreateDraft(ValidDraft(), Now);
 
     private static Permit SubmittedPermit()
@@ -273,7 +466,11 @@ public sealed class PermitStateMachineTests
     private static Permit ValidatedPermit()
     {
         var permit = SubmittedPermit();
-        permit.ValidateSubmission("hse.validator", "JSA dan requirement konsisten.", Now.AddMinutes(2));
+        permit.ValidateSubmission(
+            "hse.validator",
+            "JSA dan requirement konsisten.",
+            ["SAFETY_FIRE_EXTINGUISHER"],
+            Now.AddMinutes(2));
         return permit;
     }
 

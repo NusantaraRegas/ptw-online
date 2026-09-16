@@ -2,6 +2,16 @@ using Ptw.Domain;
 
 namespace Ptw.Application;
 
+public sealed record SupportingDocumentEvidenceSnapshot(
+    Guid AttachmentId,
+    string DocumentCode,
+    string FileName,
+    string Sha256,
+    string ScanStatus,
+    string? DocumentNumber,
+    string? DocumentRevision,
+    DateTimeOffset? DocumentDate);
+
 /// <summary>
 /// Canonical content of an immutable <c>doc.PrintPackageSnapshot</c>. The renderer consumes only this
 /// payload, never live permit tables, so a retry always reproduces the approved document (FSD ADR-010).
@@ -17,7 +27,8 @@ public sealed record PrintPackageSnapshotPayload(
     string RuleVersion,
     string PrintTemplateVersion,
     string CampaignAssetVersion,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<SupportingDocumentEvidenceSnapshot>? SupportingDocuments = null);
 
 public sealed record PrintPackageDocumentEntry(
     Guid PrintPackageId,

@@ -196,6 +196,7 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         permitAttachment.Property(x => x.ScanStatus).HasMaxLength(20);
         permitAttachment.Property(x => x.ScanEvidenceReference).HasMaxLength(500);
         permitAttachment.Property(x => x.Category).HasMaxLength(40);
+        permitAttachment.Property(x => x.SupportingDocumentCode).HasMaxLength(100);
         permitAttachment.Property(x => x.DocumentNumber).HasMaxLength(100);
         permitAttachment.Property(x => x.DocumentRevision).HasMaxLength(50);
         permitAttachment.Property(x => x.UploadedBy).HasMaxLength(200);
@@ -203,6 +204,7 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         permitAttachment.Property(x => x.RowVersion).IsRowVersion();
         permitAttachment.HasIndex(x => new { x.PermitId, x.RemovedInVersion, x.UploadedAt });
         permitAttachment.HasIndex(x => new { x.PermitId, x.Category, x.TargetPermitVersion });
+        permitAttachment.HasIndex(x => new { x.PermitId, x.SupportingDocumentCode, x.RemovedInVersion });
         permitAttachment.HasIndex(x => x.SupersedesAttachmentId);
         permitAttachment.HasIndex(x => x.StorageKey).IsUnique();
         permitAttachment.HasOne<PermitRecord>()

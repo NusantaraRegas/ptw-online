@@ -8,12 +8,12 @@ Panduan operasional Claude untuk repository **NR PTW Online**. Berisi orientasi 
 > menjadi checklist review yang dapat dieksekusi. Bila terjadi konflik, `AGENTS.md` menang.
 
 Urutan rujukan ketika ambigu: (1) permintaan pengguna, (2) decision record yang disahkan di
-`docs/decisions/`, (3) invariant dan kontrak yang sudah diuji, (4) BRD/PRD/FSD v1.6 di
+`docs/decisions/`, (3) invariant dan kontrak yang sudah diuji, (4) BRD/PRD/FSD v1.7 di
 `docs/`, (5) asumsi teknis yang dinyatakan eksplisit.
 
 ## 1. Orientasi
 
-Modular monolith Permit to Work untuk Nusantara Regas, baseline requirement **v1.6**. MVP
+Modular monolith Permit to Work untuk Nusantara Regas, baseline requirement **v1.7**. MVP
 bersifat hybrid digital-ke-kertas: sistem mengelola lifecycle dan menerbitkan paket cetak,
 sedangkan gas test, readiness, revalidasi, completion, inspeksi/restorasi, handback, dan
 tanda tangan lapangan tetap dikendalikan pada hardcopy.
@@ -30,16 +30,18 @@ tanda tangan lapangan tetap dikendalikan pada hardcopy.
 ## 2. Peta repository
 
 ```
-src/Ptw.Domain          aggregate, state machine, invariant  — tanpa EF/ASP.NET/IO
+src/Ptw.Domain          aggregate, state machine, invariant, katalog checklist formulir — tanpa EF/ASP.NET/IO
 src/Ptw.Contracts       DTO netral — tanpa domain behavior
 src/Ptw.Application     use case, authorization, ports (IPermitStore, IPrintPackage...)
 src/Ptw.Infrastructure  EF Core, storage, audit, outbox, Printing/ (renderer + template)
 src/Ptw.Api             mapping HTTP, DevelopmentAuthenticationHandler, ApiExceptionHandler
 src/Ptw.Worker          job idempotent dan bounded
 src/web                 Angular: core/*-api.ts (HTTP) + features/* (komponen)
+deploy/compose, deploy/nginx  compose.dev.yaml dan reverse proxy (cache index.html, 404 chunk hilang)
 tests/Ptw.Domain.Tests           unit state machine
 tests/Ptw.Api.IntegrationTests   end-to-end via PtwApiFactory + Testcontainers
 tests/Ptw.Printing.Tests         regresi layout dokumen (akses internal via InternalsVisibleTo)
+docs/                            BRD/PRD/FSD v1.7 (sumber requirement)
 docs/decisions/                  OPN-001..009, PTW-RENEWAL — sumber kebijakan yang disahkan
 docs/implementation-status.md    matriks traceability requirement -> komponen -> test
 ```
@@ -52,12 +54,15 @@ mengimplementasikan port `Application`. Tidak ada arah balik.
 Backend (SDK sesuai `global.json`, .NET 10):
 
 ```powershell
+dotnet tool restore
 dotnet restore PtwOnline.sln
 dotnet build PtwOnline.sln --configuration Release --no-restore
 dotnet test PtwOnline.sln --configuration Release --no-build
 dotnet format PtwOnline.sln --verify-no-changes --no-restore
 dotnet list PtwOnline.sln package --vulnerable --include-transitive
 ```
+
+Bila SDK .NET 10 tidak terpasang lokal, jalankan perintah yang sama melalui image `mcr.microsoft.com/dotnet/sdk:10.0` dengan repository di-mount sebagai `/workspace` (lihat `AGENTS.md`). Integration test memerlukan Docker untuk SQL Server disposable.
 
 Frontend:
 
@@ -108,6 +113,7 @@ Frontend:
 Printing:
 
 - `PrintTemplateDescriptor` adalah transkripsi formulir terkontrol. Jangan merapikan teks, urutan item, atau kolomnya tanpa decision record yang disahkan.
+- `PermitWorkTypeCatalog`, `PermitSupportingDocumentCatalog`, dan `PermitSafetyEquipmentCatalog` di `Ptw.Domain` adalah transkripsi Bagian 1, 4, dan 5 dengan koordinat template. Perlakukan sama seperti descriptor: tanpa decision record, jangan mengubah label, urutan, kewajiban item, atau kelas izin yang memuatnya.
 - `PtwFormRenderer.RendererVersion` harus dinaikkan bila output dokumen berubah.
 - Font dan logo di-embed sebagai `EmbeddedResource` agar render deterministik pada image runtime tanpa font sistem.
 
@@ -151,6 +157,8 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 
 - [ ] Scope filter diterapkan pada query, termasuk pengecekan parent permit untuk resource turunan dan attachment. Menyembunyikan tombol di UI tidak dihitung.
 - [ ] Identitas actor dan Sponsor aktif berasal dari `/api/v1/me`, bukan profil demo yang di-hard-code ke payload domain.
+- [ ] Bagian 5 hanya dapat ditetapkan PIC HSE saat validasi; payload draft Sponsor yang membawa Bagian 5 ditolak, dan approval tanpa evidence Bagian 5 diarahkan ke revisi.
+- [ ] Bagian 4: JSA wajib, setiap dokumen terpilih memerlukan lampiran bertaut, dan metadata lampiran JSA harus cocok dengan draft sebelum submit. Validasi ini di server, bukan di UI.
 - [ ] Development identity header hanya aktif pada environment `Development`.
 - [ ] Tidak ada secret, `.env`, token, connection string ber-secret, PII nyata, isi attachment, atau build output yang masuk Git.
 - [ ] Log tidak memuat token, secret, isi dokumen, atau PII berlebih; correlation ID (`X-Correlation-ID`) tetap dipertahankan.
@@ -173,6 +181,7 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 - [ ] Error command terlihat di dekat aksi pemicunya pada halaman panjang; summary global tetap tersedia untuk aksesibilitas.
 - [ ] Form panjang memakai reactive forms dengan asosiasi error, summary, dan remediation yang jelas.
 - [ ] Memenuhi minimal WCAG 2.2 AA: keyboard, focus terlihat, heading semantik, label, kontras, error terasosiasi.
+- [ ] Konfigurasi Nginx menjaga `index.html` selalu direvalidasi, aset JS/CSS ber-hash immutable, dan chunk hilang tetap `404`; pemulihan chunk basi di klien tetap dibatasi satu reload per menit.
 
 ### Gate G — Test dan quality gate
 

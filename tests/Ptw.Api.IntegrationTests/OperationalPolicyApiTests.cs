@@ -558,7 +558,7 @@ public sealed class OperationalPolicyApiTests(PtwApiFactory factory)
         null,
         ["Energi tersimpan"],
         ["Isolasi energi"],
-        [],
+        ["JSA"],
         WorkTypeCodes: ["COLD_MECHANICAL"]);
 
     private static PolicyUatSuiteDraftRequest UatDraft(

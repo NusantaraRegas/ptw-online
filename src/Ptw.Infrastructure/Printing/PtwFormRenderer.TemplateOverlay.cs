@@ -22,8 +22,9 @@ internal sealed partial class PtwFormRenderer
         var layout = TemplateOverlayCatalog.Resolve(descriptor.PermitClass);
         var draft = snapshot.Permit;
 
-        OverlayText(canvas, layout.PermitNumber, snapshot.PermitNumber, 4.4, bold: true);
-        OverlayText(canvas, layout.PermitDate, FormCanvas.Wib(snapshot.CreatedAt, "dd/MM/yy"), 4.4, bold: true);
+        OverlayText(canvas, layout.PermitNumber, snapshot.PermitNumber, 4.1, bold: true);
+        OverlayText(canvas, layout.PermitDate, FormCanvas.Wib(snapshot.CreatedAt, "dd/MM/yy"), 4.0);
+        OverlayFittedText(canvas, layout.WorkOrderNumber, draft.WorkOrderNumber, 4.0, 2.8);
 
         DrawSelection(
             canvas,
@@ -34,23 +35,37 @@ internal sealed partial class PtwFormRenderer
                 draft.WorkTypeCode),
             layout.WorkTypeCheckXs,
             layout.WorkTypeCheckYs);
+        OverlayFittedText(
+            canvas,
+            layout.OtherWorkTypeDescription,
+            draft.OtherWorkTypeDescription,
+            preferredSize: 4.0,
+            minimumSize: 2.8);
 
-        OverlayText(canvas, layout.AppliedDate, FormCanvas.Wib(snapshot.CreatedAt, "dd/MM/yy"), 4.2, bold: true);
-        OverlayText(canvas, layout.PlannedStart, FormCanvas.Wib(draft.ValidFrom, "dd/MM/yy HH:mm"), 4.2, bold: true);
-        OverlayText(canvas, layout.EquipmentTag, draft.EquipmentTag, 4.2, bold: true);
-        OverlayText(canvas, layout.PlantArea, draft.PlantArea, 4.2, bold: true);
+        OverlayText(canvas, layout.AppliedDate, FormCanvas.Wib(snapshot.CreatedAt, "dd/MM/yy"), 4.0);
+        OverlayText(canvas, layout.PlannedStart, FormCanvas.Wib(draft.ValidFrom, "dd/MM/yy HH:mm"), 4.0);
+        OverlayText(canvas, layout.EquipmentTag, draft.EquipmentTag, 4.0);
+        OverlayFittedText(canvas, layout.EquipmentName, draft.EquipmentName, 4.0, 2.8);
+        OverlayText(canvas, layout.PlantArea, draft.PlantArea, 4.0);
 
         var description = string.IsNullOrWhiteSpace(draft.Description)
             ? draft.Title
             : $"{draft.Title} - {draft.Description}";
-        OverlayParagraph(canvas, layout.Description, description, 4.1, 3.0, 2);
+        OverlayParagraph(canvas, layout.Description, description, 3.5, 3.0, 2, bold: true, yOffsetPoints: -1.0);
+        OverlayFittedText(
+            canvas,
+            layout.AdditionalHazardReference,
+            draft.AdditionalHazardReference,
+            preferredSize: 3.8,
+            minimumSize: 2.6);
 
-        OverlayText(canvas, layout.SponsorName, draft.SponsorId, 4.2, bold: true, clearBackground: true);
-        OverlayText(canvas, layout.Company, draft.Company, 4.2, bold: true, clearBackground: true);
-        OverlayText(canvas, layout.PerformingAuthority, draft.PerformingAuthority, 4.0, bold: true, clearBackground: true);
-        OverlayText(canvas, layout.SponsorRole, draft.SponsorId, 4.0, clearBackground: true);
+        OverlayText(canvas, layout.SponsorName, draft.SponsorId, 4.0, clearBackground: true);
+        OverlayText(canvas, layout.Company, draft.Company, 4.0, clearBackground: true);
+        OverlayText(canvas, layout.PerformingAuthority, draft.PerformingAuthority, 3.8, clearBackground: true);
+        OverlayText(canvas, layout.SponsorRole, draft.SponsorId, 3.8, clearBackground: true);
 
         var selectedDocuments = BuildDocumentSelection(snapshot);
+        var selectedSafetyEquipment = SelectedSafetyEquipmentLabels(snapshot);
         DrawChecklistSelection(
             canvas,
             descriptor.SupportingDocumentsPrimary,
@@ -66,13 +81,13 @@ internal sealed partial class PtwFormRenderer
         DrawChecklistSelection(
             canvas,
             descriptor.SafetyEquipmentPrimary,
-            draft.SafetyEquipmentCodes,
+            selectedSafetyEquipment,
             layout.SafetyPrimaryX,
             layout.ChecklistYs);
         DrawChecklistSelection(
             canvas,
             descriptor.SafetyEquipmentSecondary,
-            draft.SafetyEquipmentCodes,
+            selectedSafetyEquipment,
             layout.SafetySecondaryX,
             layout.ChecklistYs);
 
@@ -84,12 +99,20 @@ internal sealed partial class PtwFormRenderer
             }
         }
 
-        OverlayText(canvas, layout.ValidFromDate, FormCanvas.Wib(draft.ValidFrom, "dd/MM/yy"), 4.0, bold: true, TextAlign.Center);
-        OverlayText(canvas, layout.ValidFromTime, FormCanvas.Wib(draft.ValidFrom, "HH:mm"), 4.0, bold: true, TextAlign.Center);
-        OverlayText(canvas, layout.ValidUntilDate, FormCanvas.Wib(draft.ValidUntil, "dd/MM/yy"), 4.0, bold: true, TextAlign.Center);
-        OverlayText(canvas, layout.ValidUntilTime, FormCanvas.Wib(draft.ValidUntil, "HH:mm"), 4.0, bold: true, TextAlign.Center);
+        OverlayText(canvas, layout.ValidFromDate, FormCanvas.Wib(draft.ValidFrom, "dd/MM/yy"), 3.8, align: TextAlign.Center);
+        OverlayText(canvas, layout.ValidFromTime, FormCanvas.Wib(draft.ValidFrom, "HH:mm"), 3.8, align: TextAlign.Center);
+        OverlayText(canvas, layout.ValidUntilDate, FormCanvas.Wib(draft.ValidUntil, "dd/MM/yy"), 3.8, align: TextAlign.Center);
+        OverlayText(canvas, layout.ValidUntilTime, FormCanvas.Wib(draft.ValidUntil, "HH:mm"), 3.8, align: TextAlign.Center);
 
         DrawApprovalEvidence(canvas, layout, snapshot.Approval);
+
+        // The official COLD worksheet builds the Bagian 3/4 divider from adjacent PDF segments.
+        // Chromium can round those segment endpoints differently at common zoom levels, leaving
+        // visible gaps. Re-stroking the same rule as one path keeps the controlled layout intact.
+        foreach (var rule in TemplateOverlayCatalog.StructuralRepairRules(descriptor.PermitClass))
+        {
+            canvas.Line(Pt(rule.Start.X), Pt(rule.Start.Y), Pt(rule.End.X), Pt(rule.End.Y));
+        }
 
         var reference = snapshotHash.Length >= 12 ? snapshotHash[..12] : snapshotHash;
         OverlayText(
@@ -166,8 +189,8 @@ internal sealed partial class PtwFormRenderer
         }
 
         var target = layout.ApprovalRows[row];
-        OverlayText(canvas, target.Name, approval.ActorId, 3.8, bold: true, TextAlign.Center);
-        OverlayText(canvas, target.Signature, "Disetujui elektronik", 3.6, bold: true, TextAlign.Center);
+        OverlayText(canvas, target.Name, approval.ActorId, 3.6, align: TextAlign.Center);
+        OverlayText(canvas, target.Signature, "Disetujui elektronik", 3.4, align: TextAlign.Center);
         OverlayText(
             canvas,
             target.Date,
@@ -207,20 +230,54 @@ internal sealed partial class PtwFormRenderer
         string? text,
         double size,
         double lineHeightMm,
-        int maxLines)
+        int maxLines,
+        bool bold = false,
+        double yOffsetPoints = 0)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
             return;
         }
 
-        canvas.Paragraph(Pt(rect.X), Pt(rect.Y), Pt(rect.Width), text, size, lineHeightMm, maxLines);
+        canvas.Paragraph(
+            Pt(rect.X),
+            Pt(rect.Y + yOffsetPoints),
+            Pt(rect.Width),
+            text,
+            size,
+            lineHeightMm,
+            maxLines,
+            bold);
+    }
+
+    private static void OverlayFittedText(
+        FormCanvas canvas,
+        PdfRect rect,
+        string? text,
+        double preferredSize,
+        double minimumSize)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        var size = preferredSize;
+        while (size > minimumSize && canvas.MeasureMm(text, size, bold: false) > Pt(rect.Width))
+        {
+            size -= 0.2;
+        }
+
+        canvas.Fill(Pt(rect.X), Pt(rect.Y + 0.8), Pt(rect.Width), Pt(rect.Height - 1.6), XColors.White);
+        canvas.Text(Pt(rect.X), Pt(rect.Y), Pt(rect.Width), Pt(rect.Height), text, size);
     }
 
     private static double Pt(double points) => points * PointToMillimetre;
 }
 
 internal readonly record struct PdfPoint(double X, double Y);
+
+internal readonly record struct PdfLine(PdfPoint Start, PdfPoint End);
 
 internal readonly record struct PdfRect(double X, double Y, double Width, double Height);
 
@@ -230,17 +287,21 @@ internal sealed record TemplateOverlayLayout(
     int PageNumber,
     PdfRect PermitNumber,
     PdfRect PermitDate,
+    PdfRect WorkOrderNumber,
     PdfRect AppliedDate,
     PdfRect PlannedStart,
     PdfRect EquipmentTag,
+    PdfRect EquipmentName,
     PdfRect PlantArea,
     PdfRect Description,
+    PdfRect AdditionalHazardReference,
     PdfRect SponsorName,
     PdfRect Company,
     PdfRect PerformingAuthority,
     PdfRect SponsorRole,
     IReadOnlyList<double> WorkTypeCheckXs,
     IReadOnlyList<double> WorkTypeCheckYs,
+    PdfRect OtherWorkTypeDescription,
     double SupportingPrimaryX,
     double SupportingSecondaryX,
     double SafetyPrimaryX,
@@ -256,21 +317,30 @@ internal sealed record TemplateOverlayLayout(
 
 internal static class TemplateOverlayCatalog
 {
+    private static readonly PdfLine[] ColdWorkStructuralRepairRules =
+    [
+        new(new(282.25, 349.75), new(282.25, 454.25))
+    ];
+
     private static readonly TemplateOverlayLayout HotWork = new(
         1,
         new(514, 198, 258, 7),
         new(514, 207, 258, 7),
+        new(520, 214, 252, 7),
         new(130, 287, 185, 7),
         new(421, 287, 302, 7),
         new(111, 295, 160, 7),
+        new(320, 295, 145, 7),
         new(511, 295, 261, 7),
         new(125, 302, 645, 18),
+        new(223, 331, 549, 7),
         new(116, 354, 177, 7),
         new(162, 372, 131, 7),
         new(123, 412, 169, 7),
         new(119, 450, 174, 7),
         [87.3, 217.6, 309.6, 383.4, 462.9],
         [231.8, 244.2, 256.2, 267.5],
+        new(505, 244, 263, 8),
         309.6,
         462.9,
         549.4,
@@ -294,17 +364,21 @@ internal static class TemplateOverlayCatalog
         2,
         new(530, 196, 214, 7),
         new(530, 205, 214, 7),
+        new(536, 212, 208, 7),
         new(115, 285, 192, 7),
         new(415, 285, 283, 7),
         new(96, 292, 162, 7),
+        new(304, 292, 180, 7),
         new(526, 292, 218, 7),
         new(110, 300, 634, 18),
+        new(207, 329, 537, 7),
         new(100, 352, 195, 7),
         new(146, 370, 149, 7),
         new(107, 410, 188, 7),
         new(103, 448, 192, 7),
         [71.4, 201.7, 300.6, 381.5, 475.9, 556.5],
         [229.4, 241.8, 253.8, 265.1],
+        new(602, 253.5, 139, 8),
         300.6,
         475.9,
         556.5,
@@ -328,17 +402,21 @@ internal static class TemplateOverlayCatalog
         3,
         new(497, 196, 262, 7),
         new(497, 205, 262, 7),
+        new(502, 212, 257, 7),
         new(80, 284, 189, 7),
         new(372, 284, 346, 7),
         new(63, 291, 155, 7),
+        new(259, 291, 194, 7),
         new(493, 291, 266, 7),
         new(76, 298, 682, 18),
+        new(162, 325, 597, 7),
         new(67, 346, 187, 7),
         new(108, 364, 146, 7),
         new(74, 401, 180, 7),
         new(70, 436, 184, 7),
         [41.5, 163.8, 256.7, 340.6, 440.2, 526.3],
         [227.5, 239.2, 250.5, 263.2],
+        new(564, 238.8, 190, 8),
         256.7,
         440.2,
         526.3,
@@ -363,6 +441,13 @@ internal static class TemplateOverlayCatalog
         PermitClass.HotWork => HotWork,
         PermitClass.ColdWork => ColdWork,
         PermitClass.ConfinedSpaceEntry => ConfinedSpaceEntry,
+        _ => throw new ArgumentOutOfRangeException(nameof(permitClass), permitClass, "Template overlay PTW tidak tersedia.")
+    };
+
+    internal static IReadOnlyList<PdfLine> StructuralRepairRules(PermitClass permitClass) => permitClass switch
+    {
+        PermitClass.ColdWork => ColdWorkStructuralRepairRules,
+        PermitClass.HotWork or PermitClass.ConfinedSpaceEntry => [],
         _ => throw new ArgumentOutOfRangeException(nameof(permitClass), permitClass, "Template overlay PTW tidak tersedia.")
     };
 }

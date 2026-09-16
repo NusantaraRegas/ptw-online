@@ -1,7 +1,19 @@
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { PermitAttachmentApi } from '../../core/permit-attachment-api';
+import { PermitApi } from '../../core/permit-api';
 import { PermitAttachments } from './permit-attachments';
+
+const supportingDocuments = [
+  {
+    code: 'JSA',
+    label: 'Job Safety Analisis (JSA)',
+    templateColumn: 0,
+    templateIndex: 0,
+    required: true,
+    requiresMetadata: true,
+  },
+];
 
 describe('PermitAttachments', () => {
   it('shows a readable category and pending security status for each file', async () => {
@@ -38,6 +50,10 @@ describe('PermitAttachments', () => {
               ]),
           },
         },
+        {
+          provide: PermitApi,
+          useValue: { listSupportingDocuments: () => of(supportingDocuments) },
+        },
       ],
     }).compileComponents();
 
@@ -62,6 +78,10 @@ describe('PermitAttachments', () => {
           provide: PermitAttachmentApi,
           useValue: { list: () => of([]) },
         },
+        {
+          provide: PermitApi,
+          useValue: { listSupportingDocuments: () => of(supportingDocuments) },
+        },
       ],
     }).compileComponents();
 
@@ -69,10 +89,18 @@ describe('PermitAttachments', () => {
     fixture.componentRef.setInput('permitId', 'permit-id');
     fixture.componentRef.setInput('eTag', '"etag-value"');
     fixture.componentRef.setInput('canManage', true);
+    fixture.componentRef.setInput('jsaDocumentNumber', 'JSA-001');
+    fixture.componentRef.setInput('jsaRevision', '2');
+    fixture.componentRef.setInput('jsaDate', '2026-09-16T00:00:00.000Z');
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.empty-state')).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Belum ada lampiran');
     expect(fixture.nativeElement.textContent).toContain('Tambah lampiran');
+    expect((fixture.nativeElement.querySelector('select') as HTMLSelectElement).value).toBe('JSA');
+    const metadataValues = Array.from<HTMLInputElement>(
+      fixture.nativeElement.querySelectorAll('.upload-metadata input'),
+    ).map((input) => input.value);
+    expect(metadataValues).toEqual(['JSA-001', '2', '2026-09-16']);
   });
 });

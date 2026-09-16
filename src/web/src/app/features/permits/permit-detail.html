@@ -28,7 +28,7 @@
       <a [routerLink]="['/permits', renewalCreatedId()]">Buka draft renewal</a>
     </div>
   }
-  @if (error() && !editing()) {
+  @if (error() && !editing() && !hasDecisionAction()) {
     <div class="message error workflow-error" role="alert">
       <span>{{ error() }}</span>
       @if (conflict()) {
@@ -98,8 +98,16 @@
             <dd>{{ workTypeLabels(permit()!.draft) }}</dd>
           </div>
           <div>
-            <dt>Equipment/tag</dt>
+            <dt>No. equipment/tag</dt>
             <dd>{{ permit()!.draft.equipmentTag || 'Tidak berlaku' }}</dd>
+          </div>
+          <div>
+            <dt>Nama equipment</dt>
+            <dd>{{ permit()!.draft.equipmentName || 'Belum diisi' }}</dd>
+          </div>
+          <div>
+            <dt>Work Order No.</dt>
+            <dd>{{ permit()!.draft.workOrderNumber || 'Belum diisi' }}</dd>
           </div>
           <div>
             <dt>Plant/area</dt>
@@ -137,11 +145,19 @@
         <div class="list-section">
           <h3>JSA dan dokumen keselamatan</h3>
           <p>Rincian bahaya dan pengendalian harus berasal dari dokumen JSA terkontrol.</p>
+          <p>
+            <strong>Referensi bahaya tambahan:</strong>
+            {{ permit()!.draft.additionalHazardReference || 'Tidak ada.' }}
+          </p>
         </div>
         <app-permit-attachments
           [permitId]="permit()!.id"
           [eTag]="permit()!.eTag"
           [canManage]="canManageAttachments()"
+          [selectedDocumentCodes]="permit()!.draft.requiredDocumentCodes"
+          [jsaDocumentNumber]="permit()!.draft.jsaDocumentNumber ?? ''"
+          [jsaRevision]="permit()!.draft.jsaRevision ?? ''"
+          [jsaDate]="permit()!.draft.jsaDate ?? ''"
           [printPackages]="readyPrintPackages()"
           (permitChanged)="applyAttachmentPermitChange($event)"
         />
@@ -297,6 +313,59 @@
         @if (hasDecisionAction()) {
           <section class="card workflow-action">
             <h2>Keputusan workflow</h2>
+            @if (canValidateHse()) {
+              <fieldset
+                class="work-types safety-equipment-selector"
+                [attr.aria-describedby]="
+                  hseSafetyEquipmentCodes.touched && hseSafetyEquipmentCodes.invalid
+                    ? 'safety-equipment-help safety-equipment-error'
+                    : 'safety-equipment-help'
+                "
+                [attr.aria-invalid]="
+                  hseSafetyEquipmentCodes.touched && hseSafetyEquipmentCodes.invalid
+                "
+              >
+                <legend>APD/perlengkapan safety</legend>
+                <small id="safety-equipment-help">
+                  Pilih satu atau lebih item sesuai Bagian 5 formulir PTW. Pilihan ini hanya
+                  ditetapkan oleh PIC HSE dan akan dicentang pada paket cetak.
+                </small>
+                @if (loadingSafetyEquipment()) {
+                  <p class="work-type-state">Memuat daftar Bagian 5...</p>
+                } @else if (safetyEquipmentError()) {
+                  <p class="work-type-state error-text" role="alert">
+                    {{ safetyEquipmentError() }}
+                  </p>
+                } @else {
+                  <div class="work-type-options safety-equipment-options">
+                    @for (option of safetyEquipmentOptions(); track option.code) {
+                      <label class="work-type-option safety-equipment-option">
+                        <input
+                          type="checkbox"
+                          [checked]="isSafetyEquipmentSelected(option.code)"
+                          (change)="toggleSafetyEquipment(option.code, $event)"
+                        />
+                        <span>{{ option.label }}</span>
+                      </label>
+                    }
+                  </div>
+                }
+                @if (hseSafetyEquipmentCodes.touched && hseSafetyEquipmentCodes.invalid) {
+                  <span id="safety-equipment-error" class="field-error" role="alert">
+                    Pilih minimal satu APD/perlengkapan safety.
+                  </span>
+                }
+              </fieldset>
+            }
+            @if (approvalMissingSafetyEquipment()) {
+              <div class="field-error approval-prerequisite" role="alert">
+                <span>
+                  <strong>Bagian 5 belum lengkap.</strong>
+                  PIC HSE belum mencatat APD/perlengkapan safety. Gunakan
+                  <strong>Minta revisi</strong> sebelum PTW diterbitkan.
+                </span>
+              </div>
+            }
             <label
               >Pernyataan atau alasan<textarea
                 rows="3"
@@ -309,7 +378,13 @@
                 <button
                   class="primary-button"
                   type="button"
-                  [disabled]="saving() || decisionStatement.invalid"
+                  [disabled]="
+                    saving() ||
+                    decisionStatement.invalid ||
+                    hseSafetyEquipmentCodes.invalid ||
+                    loadingSafetyEquipment() ||
+                    !!safetyEquipmentError()
+                  "
                   (click)="validateHse()"
                 >
                   Validasi sebagai PIC HSE
@@ -319,7 +394,9 @@
                 <button
                   class="primary-button"
                   type="button"
-                  [disabled]="saving() || decisionStatement.invalid"
+                  [disabled]="
+                    saving() || decisionStatement.invalid || approvalMissingSafetyEquipment()
+                  "
                   (click)="approveAndIssue()"
                 >
                   Setujui dan terbitkan
@@ -366,6 +443,14 @@
                 </button>
               }
             </div>
+            @if (error()) {
+              <div class="message error action-error" role="alert">
+                <span>{{ error() }}</span>
+                @if (conflict()) {
+                  <button type="button" (click)="reload()">Muat versi terbaru</button>
+                }
+              </div>
+            }
           </section>
         }
 
@@ -453,9 +538,47 @@
           @if (form.controls.workTypeCodes.touched && form.controls.workTypeCodes.invalid) {
             <span class="field-error" role="alert">Pilih minimal satu jenis pekerjaan.</span>
           }
+          @if (hasOtherWorkTypeSelected()) {
+            <label class="work-type-other-detail" for="edit-other-work-type-description">
+              Jelaskan jenis pekerjaan lainnya
+              <small>Maksimum 80 karakter; teks ini akan dicetak pada Bagian 1.</small>
+              <input
+                id="edit-other-work-type-description"
+                formControlName="otherWorkTypeDescription"
+                maxlength="80"
+                autocomplete="off"
+                aria-describedby="edit-other-work-type-help edit-other-work-type-error"
+              />
+            </label>
+            <small id="edit-other-work-type-help" class="sr-only">
+              Wajib diisi karena jenis pekerjaan Lain-lain dipilih.
+            </small>
+            @if (
+              form.controls.otherWorkTypeDescription.touched &&
+              form.controls.otherWorkTypeDescription.invalid
+            ) {
+              <span id="edit-other-work-type-error" class="field-error" role="alert">
+                Jelaskan jenis pekerjaan lainnya, maksimum 80 karakter.
+              </span>
+            }
+          }
         </fieldset>
-        <label>Equipment/tag<input formControlName="equipmentTag" /></label>
+        <label>No. equipment/tag<input formControlName="equipmentTag" autocomplete="off" /></label>
+        <label
+          >Nama equipment<input formControlName="equipmentName" maxlength="100" autocomplete="off"
+        /></label>
+        <label
+          >Work Order No.<input formControlName="workOrderNumber" maxlength="60" autocomplete="off"
+        /></label>
         <label>Plant/area<input formControlName="plantArea" /></label>
+        <label class="wide">
+          Referensi bahaya terkait
+          <small>
+            Opsional dan hanya sebagai referensi. Identifikasi bahaya serta pengendalian tetap
+            mengacu pada JSA terlampir.
+          </small>
+          <textarea formControlName="additionalHazardReference" rows="2" maxlength="160"></textarea>
+        </label>
         <label class="clsr-option">
           <input type="checkbox" formControlName="clsrApplicable" />
           <span>CLSR berlaku</span>
@@ -464,14 +587,45 @@
           >Deklarasi SIMOPS<textarea formControlName="simopsDeclaration" rows="2"></textarea>
         </label>
         <label class="wide"
-          >APD/perlengkapan safety <input formControlName="safetyEquipmentCodes"
-        /></label>
-        <label class="wide"
           >Isolation/precaution <input formControlName="isolationPrecautionCodes"
         /></label>
         <label>Nomor JSA<input formControlName="jsaDocumentNumber" /></label>
         <label>Revisi JSA<input formControlName="jsaRevision" /></label>
         <label>Tanggal JSA<input type="date" formControlName="jsaDate" /></label>
+        <fieldset
+          class="work-types supporting-documents wide"
+          aria-describedby="edit-supporting-help"
+        >
+          <legend>Dokumen pendukung (Bagian 4)</legend>
+          <small id="edit-supporting-help">
+            JSA wajib. Dokumen lain dipilih sesuai kebutuhan; unggah file setelah perubahan
+            disimpan.
+          </small>
+          @if (loadingSupportingDocuments()) {
+            <p class="work-type-state">Memuat daftar dokumen pendukung...</p>
+          } @else if (supportingDocumentError()) {
+            <p class="work-type-state error-text" role="alert">
+              {{ supportingDocumentError() }}
+            </p>
+          } @else {
+            <div class="supporting-document-options">
+              @for (option of supportingDocumentOptions(); track option.code) {
+                <label class="supporting-document-option" [class.required]="option.required">
+                  <input
+                    type="checkbox"
+                    [checked]="isSupportingDocumentSelected(option.code)"
+                    [disabled]="option.required"
+                    (change)="toggleSupportingDocument(option, $event)"
+                  />
+                  <span>
+                    <strong>{{ option.label }}</strong>
+                    <small>{{ option.required ? 'Wajib' : 'Opsional' }}</small>
+                  </span>
+                </label>
+              }
+            </div>
+          }
+        </fieldset>
         <label
           >Tingkat risiko<select formControlName="riskLevel">
             <option value="Low">Rendah</option>

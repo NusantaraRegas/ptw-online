@@ -427,6 +427,23 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             EvidenceHash = Hash(evidenceJson)
         });
 
+        var supportingDocuments = (await dbContext.PermitAttachments.AsNoTracking()
+                .Where(x => x.PermitId == permit.Id
+                    && x.RemovedInVersion == null
+                    && (x.SupportingDocumentCode != null || x.Category == "JSA"))
+                .OrderBy(x => x.UploadedAt)
+                .ToListAsync(cancellationToken))
+            .Select(attachment => new SupportingDocumentEvidenceSnapshot(
+                attachment.Id,
+                attachment.SupportingDocumentCode ?? PermitSupportingDocumentCatalog.JsaCode,
+                attachment.FileName,
+                attachment.Sha256,
+                attachment.ScanStatus,
+                attachment.DocumentNumber,
+                attachment.DocumentRevision,
+                attachment.DocumentDate))
+            .ToArray();
+
         var snapshotJson = JsonSerializer.Serialize(new
         {
             permit.Id,
@@ -439,7 +456,8 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             approval.RuleVersion,
             approval.PrintTemplateVersion,
             approval.CampaignAssetVersion,
-            CreatedAt = occurredAt
+            CreatedAt = occurredAt,
+            SupportingDocuments = supportingDocuments
         }, JsonOptions);
         var snapshotId = Guid.CreateVersion7();
         dbContext.PrintPackageSnapshots.Add(new PrintPackageSnapshotRecord

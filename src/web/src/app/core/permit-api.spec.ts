@@ -103,13 +103,28 @@ describe('PermitApi', () => {
   });
 
   it('sends explicit validation command with concurrency and idempotency headers', () => {
-    api.validate('task-id', '"etag-value"', 'Persyaratan HSE sesuai.').subscribe();
+    api
+      .validate('task-id', '"etag-value"', {
+        statement: 'Persyaratan HSE sesuai.',
+        safetyEquipmentCodes: ['SAFETY_FIRE_EXTINGUISHER', 'SAFETY_LOTO'],
+      })
+      .subscribe();
     const request = http.expectOne('/api/v1/tasks/task-id/validate');
     expect(request.request.method).toBe('POST');
     expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
     expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
-    expect(request.request.body).toEqual({ statement: 'Persyaratan HSE sesuai.' });
+    expect(request.request.body).toEqual({
+      statement: 'Persyaratan HSE sesuai.',
+      safetyEquipmentCodes: ['SAFETY_FIRE_EXTINGUISHER', 'SAFETY_LOTO'],
+    });
     request.flush({});
+  });
+
+  it('loads the controlled Bagian 5 safety-equipment catalogue', () => {
+    api.listSafetyEquipment().subscribe();
+    const request = http.expectOne('/api/v1/reference-data/safety-equipment');
+    expect(request.request.method).toBe('GET');
+    request.flush([]);
   });
 
   it('sends an explicit revision command with a mandatory reason', () => {

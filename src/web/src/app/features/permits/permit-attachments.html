@@ -34,6 +34,39 @@
     }
   </header>
 
+  <section class="document-readiness" aria-labelledby="document-readiness-title">
+    <div class="document-readiness-head">
+      <div>
+        <h4 id="document-readiness-title">Checklist Bagian 4</h4>
+        <p>JSA wajib; dokumen lain mengikuti pilihan pada draft PTW.</p>
+      </div>
+      <span>{{ selectedSupportingDocuments().length }} dipilih</span>
+    </div>
+    @if (supportingDocumentError()) {
+      <p class="attachment-error" role="alert">{{ supportingDocumentError() }}</p>
+    } @else {
+      <ul class="document-readiness-list">
+        @for (document of selectedSupportingDocuments(); track document.code) {
+          <li>
+            <span class="document-check" [class.complete]="documentComplete(document.code)">
+              {{ documentComplete(document.code) ? '✓' : '○' }}
+            </span>
+            <div>
+              <strong>{{ document.label }}</strong>
+              <small>{{ document.required ? 'Wajib' : 'Opsional' }}</small>
+              @for (attachment of attachmentsFor(document.code); track attachment.id) {
+                <span class="document-file">{{ attachment.fileName }}</span>
+              }
+            </div>
+            <span class="document-status" [class.complete]="documentComplete(document.code)">
+              {{ documentStatus(document.code) }}
+            </span>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
   @if (canManage()) {
     <fieldset class="upload-metadata">
       <legend>Detail dokumen yang akan diunggah</legend>
@@ -51,6 +84,22 @@
             <option value="SIGNED_FIELD_COPY">Salinan lapangan bertanda tangan</option>
           </select>
         </label>
+
+        @if (category() === 'SUPPORTING') {
+          <label class="field category-field">
+            <span>Jenis dokumen Bagian 4</span>
+            <select
+              [value]="supportingDocumentCode()"
+              [disabled]="busy()"
+              (change)="supportingDocumentCode.set($any($event.target).value)"
+            >
+              <option value="">Lampiran pendukung umum</option>
+              @for (option of selectedOptionalDocuments(); track option.code) {
+                <option [value]="option.code">{{ option.label }}</option>
+              }
+            </select>
+          </label>
+        }
 
         @if (category() !== 'SUPPORTING') {
           <label class="field">
@@ -102,7 +151,8 @@
         } @else if (category() === 'JSA') {
           Nomor, revisi, dan tanggal diperlukan untuk menjaga keterlacakan dokumen JSA.
         } @else {
-          Gunakan kategori ini untuk foto, gambar, atau dokumen pendukung lainnya.
+          Pilih jenis Bagian 4 untuk menghubungkan file dengan checklist, atau gunakan lampiran umum
+          untuk foto dan drawing tambahan.
         }
       </p>
     </fieldset>
@@ -173,6 +223,9 @@
             <strong [title]="attachment.fileName">{{ attachment.fileName }}</strong>
             <div class="file-badges">
               <span class="category-badge">{{ categoryLabel(attachment.category) }}</span>
+              @if (documentLabel(attachment); as supportingLabel) {
+                <span class="category-badge document-code-badge">{{ supportingLabel }}</span>
+              }
               <span
                 class="scan-badge"
                 [class.clean]="attachment.scanStatus === 'CLEAN'"

@@ -44,7 +44,11 @@ internal static class PermitMapper
             request.JsaDocumentNumber,
             request.JsaRevision,
             request.JsaDate,
-            request.WorkTypeCodes);
+            request.WorkTypeCodes,
+            request.OtherWorkTypeDescription,
+            request.EquipmentName,
+            request.WorkOrderNumber,
+            request.AdditionalHazardReference);
     }
 
     public static PermitResponse ToResponse(this StoredPermit stored)
@@ -111,7 +115,8 @@ internal static class PermitMapper
         evidence is not null,
         evidence?.ActorId,
         evidence?.Statement,
-        evidence?.ValidatedAt);
+        evidence?.ValidatedAt,
+        evidence?.SafetyEquipmentCodes ?? []);
 
     private static string ToUpperSnakeCase(string value) => string.Concat(
         value.Select((character, index) =>
@@ -151,6 +156,10 @@ internal static class PermitMapper
             draft.JsaDocumentNumber,
             draft.JsaRevision,
             draft.JsaDate,
-            workTypeCodes);
+            workTypeCodes,
+            draft.OtherWorkTypeDescription,
+            draft.EquipmentName,
+            draft.WorkOrderNumber,
+            draft.AdditionalHazardReference);
     }
 }

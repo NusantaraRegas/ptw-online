@@ -49,12 +49,15 @@ Increment P0 lifecycle v1.7 telah tersedia:
 - suspend berlaku langsung, resolve kembali ke `ISSUED`, dan renewal membuat permit baru tanpa overlap;
 - closure memakai task pemilik area dan memerlukan signed field copy yang `CLEAN`, bermetadata lengkap, tidak superseded, serta cocok dengan exact PermitVersion dan PrintPackage;
 - lampiran privat mengenali signature PDF/JPEG/PNG, menyimpan SHA-256, kategori, metadata dokumen, target version, PrintPackage, replacement lineage, serta evidence malware scan; file selain `CLEAN` tidak dapat diunduh;
-- form draft memuat tipe pengaju, work type, equipment/tag, plant/area, CLSR, SIMOPS, safety equipment, isolation/precaution, serta nomor/revisi/tanggal JSA; input hazards/controls bebas telah dihapus dari UI;
+- form draft Sponsor memuat tipe pengaju, work type multi-select (opsi `Lain-lain` mewajibkan detail yang ikut tercetak), nomor dan nama equipment, Work Order No., plant/area, CLSR, SIMOPS, isolation/precaution, serta nomor/revisi/tanggal JSA. Referensi bahaya tambahan bersifat opsional dan informatif; JSA tetap menjadi sumber resmi identifikasi bahaya dan pengendalian;
+- Bagian 4 memakai 15 pilihan dokumen sesuai template resmi: JSA wajib dan pilihan lain opsional. Setiap pilihan harus memiliki lampiran yang tertaut sebelum submit, metadata lampiran JSA harus cocok dengan draft, dan hasil checklist dicetak dari immutable snapshot;
+- APD/perlengkapan safety Bagian 5 dipilih secara multi-select oleh PIC HSE pada tahap validasi dan tidak dapat diisi bebas oleh Sponsor; approval permit lama tanpa evidence Bagian 5 diblokir dan diarahkan melalui revisi; input hazards/controls bebas telah dihapus dari UI;
 - paket cetak resmi dirender Worker dari `PrintPackageSnapshot` yang immutable dengan halaman resmi FM-001/002/003-B-002-NR-B220 sebagai template vektor A3 landscape; sistem mengisi Bagian 1-5 dan 7, sedangkan Bagian 6 dan Bagian 8-10 tetap kosong untuk diisi manual di lapangan;
 - kegagalan render tidak membatalkan keputusan penerbitan: status paket menjadi `RETRYING` dengan exponential backoff, lalu `FAILED` setelah batas percobaan, dan Administrator dapat menjadwalkan render ulang secara idempotent;
 - hanya paket berstatus `READY` yang dapat diunduh; setiap unduhan menghasilkan audit event, dan pratinjau draft selalu diberi watermark `DRAFT / TIDAK BERLAKU` serta tidak pernah disimpan.
+- deploy web menjaga `index.html` tetap tervalidasi, tidak mengalihkan chunk JavaScript yang hilang ke SPA shell, dan melakukan satu reload terbatas ketika lazy chunk lama gagal dimuat.
 
-Ruleset resmi, acting assignment v1.7 lengkap, malware scanner produksi, E-SIMI adapter, external contractor scoping, serta master LocationRelease/ConfigurationBundle masih fail-closed atau partial. Pilihan Bagian 1, 4, dan 5 dicetak dari snapshot, tetapi katalog checklist terkontrol masih perlu dipindahkan ke master data effective-dated. Detail dan traceability requirement → komponen → endpoint → migration → test ada di [status implementasi](docs/implementation-status.md).
+Ruleset resmi, acting assignment v1.7 lengkap, malware scanner produksi, E-SIMI adapter, external contractor scoping, serta master LocationRelease/ConfigurationBundle masih fail-closed atau partial. Pilihan Bagian 1, 4, dan 5 dicetak dari snapshot; katalog statis Bagian 4 mengikuti template resmi saat ini, sementara pengelolaan master data effective-dated tetap pekerjaan lanjutan. Detail dan traceability requirement → komponen → endpoint → migration → test ada di [status implementasi](docs/implementation-status.md).
 
 ## Arsitektur
 
@@ -302,7 +305,7 @@ Pratinjau draft (`GET .../print-packages/preview`) merender langsung dari state 
 
 Task command memakai `taskId`, bukan permit ID. Semua transition memerlukan `If-Match` dan `Idempotency-Key`. Tidak ada endpoint generik `setStatus`.
 
-Endpoint baca/create draft, attachment, history, master lokasi, authorization, policy readiness/simulation/UAT, dan health tetap tersedia. OpenAPI hanya diekspos pada Development melalui `/openapi/v1.json`.
+Endpoint baca/create draft, attachment (multipart dengan `supportingDocumentCode` untuk Bagian 4), history, master lokasi, authorization, policy readiness/simulation/UAT, dan health tetap tersedia. Katalog checklist formulir dibaca dari `GET /api/v1/reference-data/work-types`, `/supporting-documents`, dan `/safety-equipment`; nilainya adalah transkripsi formulir terkontrol dan divalidasi ulang di server. OpenAPI hanya diekspos pada Development melalui `/openapi/v1.json`.
 
 ## Menjalankan aplikasi
 

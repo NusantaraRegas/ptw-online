@@ -14,6 +14,60 @@ namespace Ptw.Api.IntegrationTests;
 public sealed class PermitApiTests(PtwApiFactory factory)
 {
     [Fact]
+    public async Task DraftRoundTripsOptionalPlanningReferenceFields()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        var request = Draft(sponsorId, "ORF") with
+        {
+            EquipmentName = " Gas inlet separator ",
+            WorkOrderNumber = " WO-2026-001 ",
+            AdditionalHazardReference = " Akses sisi utara licin saat hujan "
+        };
+
+        using var response = await sponsor.PostAsJsonAsync("/api/v1/permits", request);
+
+        response.EnsureSuccessStatusCode();
+        var permit = Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("Gas inlet separator", permit.Draft.EquipmentName);
+        Assert.Equal("WO-2026-001", permit.Draft.WorkOrderNumber);
+        Assert.Equal("Akses sisi utara licin saat hujan", permit.Draft.AdditionalHazardReference);
+    }
+
+    [Fact]
+    public async Task SupportingDocumentReferenceDataMatchesTemplateAndOnlyRequiresJsa()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/api/v1/reference-data/supporting-documents");
+        response.EnsureSuccessStatusCode();
+        var options = Required(
+            await response.Content.ReadFromJsonAsync<PermitSupportingDocumentOptionResponse[]>());
+
+        Assert.Equal(15, options.Length);
+        var required = Assert.Single(options, option => option.Required);
+        Assert.Equal("JSA", required.Code);
+        Assert.True(required.RequiresMetadata);
+        Assert.Contains(options, option => option.Code == "MSDS" && !option.Required);
+    }
+
+    [Fact]
+    public async Task SponsorCannotAssignHseOwnedSafetyEquipmentInDraft()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        var request = Draft(sponsorId, "ORF") with
+        {
+            SafetyEquipmentCodes = ["SAFETY_FIRE_EXTINGUISHER"]
+        };
+
+        using var response = await sponsor.PostAsJsonAsync("/api/v1/permits", request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("permit.safety_equipment.hse_owned", await ProblemCodeAsync(response));
+    }
+
+    [Fact]
     public async Task WorkTypeReferenceDataMatchesControlledTemplateAndKeepsDuplicateRowsDistinct()
     {
         using var client = Client(Unique("sponsor"), "Sponsor", "ORF");
@@ -26,6 +80,61 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var sandBlasting = hotWork.Options.Where(option => option.Label == "Sand Blasting").ToArray();
         Assert.Equal(2, sandBlasting.Length);
         Assert.Equal(2, sandBlasting.Select(option => option.Code).Distinct().Count());
+        Assert.True(Assert.Single(hotWork.Options, option => option.Code == "HOT_OTHER").RequiresDetail);
+        Assert.False(Assert.Single(hotWork.Options, option => option.Code == "HOT_WELDING").RequiresDetail);
+    }
+
+    [Fact]
+    public async Task DraftRejectsOtherWorkTypeWithoutItsRequiredDescription()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        var request = Draft(sponsorId, "ORF") with { WorkTypeCodes = ["HOT_OTHER"] };
+
+        using var response = await sponsor.PostAsJsonAsync("/api/v1/permits", request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("permit.work_type_other_detail_required", await ProblemCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task SubmitRejectsJsaSelectionWithoutMatchingUploadedEvidence()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        var draft = await CreateAsync(sponsor, sponsorId, "ORF");
+
+        using var response = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{draft.Id}/submit",
+            draft.ETag,
+            ReadyToSubmit()));
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal("permit.supporting_document.evidence_required", await ProblemCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task SubmitAlsoRequiresEvidenceForEachOptionalBagian4Selection()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        using var createResponse = await sponsor.PostAsJsonAsync(
+            "/api/v1/permits",
+            Draft(sponsorId, "ORF") with { RequiredDocumentCodes = ["JSA", "MSDS"] });
+        createResponse.EnsureSuccessStatusCode();
+        var draft = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        draft = await UploadJsaAsync(sponsor, draft);
+
+        using var response = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{draft.Id}/submit",
+            draft.ETag,
+            ReadyToSubmit()));
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal("permit.supporting_document.evidence_required", await ProblemCodeAsync(response));
+        Assert.Contains("MSDS", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -110,7 +219,9 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             HttpMethod.Post,
             $"/api/v1/tasks/{validationTask.Id}/validate",
             submitted.ETag,
-            new ValidateSubmissionRequest("Saya memvalidasi sendiri.")));
+            new ValidateSubmissionRequest(
+                "Saya memvalidasi sendiri.",
+                ["SAFETY_FIRE_EXTINGUISHER"])));
         Assert.Equal(HttpStatusCode.Conflict, selfResponse.StatusCode);
         Assert.Equal("permit.validation.self_validation_forbidden", await ProblemCodeAsync(selfResponse));
 
@@ -119,12 +230,18 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             HttpMethod.Post,
             $"/api/v1/tasks/{validationTask.Id}/validate",
             submitted.ETag,
-            new ValidateSubmissionRequest("JSA dan requirement telah diverifikasi.")));
+            new ValidateSubmissionRequest(
+                "JSA dan requirement telah diverifikasi.",
+                ["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"])));
         validateResponse.EnsureSuccessStatusCode();
         var validated = Required(await validateResponse.Content.ReadFromJsonAsync<PermitResponse>());
         Assert.Equal("AWAITING_AREA_APPROVAL", validated.Status);
         Assert.Equal("HSE", validated.Workflow.Hse.Code);
         Assert.True(validated.Workflow.Hse.Completed);
+        Assert.Equal(
+            ["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"],
+            validated.Workflow.Hse.SafetyEquipmentCodes);
+        Assert.Empty(validated.Draft.SafetyEquipmentCodes ?? []);
 
         var approvalTask = await PendingTaskAsync(submitted.Id, "AREA_APPROVE_AND_ISSUE");
         Assert.Equal(submitted.Version, approvalTask.PermitVersion);
@@ -225,13 +342,13 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             ReadyToSubmit()));
         submitResponse.EnsureSuccessStatusCode();
         var resubmitted = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal(2, resubmitted.Version);
+        Assert.Equal(updated.Version, resubmitted.Version);
 
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
         Assert.Equal("CANCELLED", (await db.PermitTasks.SingleAsync(x => x.Id == areaTask.Id)).Status);
         Assert.Single(await db.PermitTasks.Where(x => x.PermitId == updated.Id
-            && x.PermitVersion == 2
+            && x.PermitVersion == updated.Version
             && x.Type == "HSE_VALIDATION"
             && x.Status == "PENDING").ToListAsync());
     }
@@ -416,7 +533,9 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             HttpMethod.Post,
             $"/api/v1/tasks/{task.Id}/validate",
             submitted.ETag,
-            new ValidateSubmissionRequest("JSA dan requirement telah diverifikasi.")));
+            new ValidateSubmissionRequest(
+                "JSA dan requirement telah diverifikasi.",
+                ["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"])));
         response.EnsureSuccessStatusCode();
         return Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
     }
@@ -427,6 +546,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         string location = "ORF")
     {
         var draft = await CreateAsync(sponsor, sponsorId, location);
+        draft = await UploadJsaAsync(sponsor, draft);
         using var response = await sponsor.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/permits/{draft.Id}/submit",
@@ -434,6 +554,33 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             ReadyToSubmit()));
         response.EnsureSuccessStatusCode();
         return Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
+    }
+
+    private static async Task<PermitResponse> UploadJsaAsync(HttpClient client, PermitResponse permit)
+    {
+        using var content = new MultipartFormDataContent();
+        var file = new ByteArrayContent(Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF\n"));
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        content.Add(file, "file", "jsa.pdf");
+        content.Add(new StringContent("JSA"), "category");
+        content.Add(new StringContent("JSA"), "supportingDocumentCode");
+        content.Add(new StringContent(Required(permit.Draft.JsaDocumentNumber)), "documentNumber");
+        content.Add(new StringContent(Required(permit.Draft.JsaRevision)), "documentRevision");
+        content.Add(new StringContent(permit.Draft.JsaDate!.Value.ToString("O")), "documentDate");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1/permits/{permit.Id}/attachments")
+        {
+            Content = content
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", permit.ETag);
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+
+        using var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        var mutation = Required(
+            await response.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
+        return permit with { ETag = mutation.ETag, Version = mutation.PermitVersion };
     }
 
     private static async Task<PermitResponse> CreateAsync(HttpClient client, string sponsorId, string location)
@@ -501,6 +648,9 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             [],
             [],
             ["JSA"],
+            JsaDocumentNumber: "JSA-TEST-001",
+            JsaRevision: "1",
+            JsaDate: now,
             WorkTypeCodes: ["HOT_WELDING"]);
     }
 

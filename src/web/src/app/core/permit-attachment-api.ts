@@ -15,6 +15,7 @@ export interface PermitAttachment {
   scanEvidenceReference: string | null;
   scannedAt: string | null;
   category: PermitAttachmentCategory;
+  supportingDocumentCode: string | null;
   documentNumber: string | null;
   documentRevision: string | null;
   documentDate: string | null;
@@ -29,6 +30,7 @@ export type PermitAttachmentCategory = 'SUPPORTING' | 'JSA' | 'SIGNED_FIELD_COPY
 
 export interface PermitAttachmentUpload {
   category: PermitAttachmentCategory;
+  supportingDocumentCode?: string | null;
   documentNumber?: string | null;
   documentRevision?: string | null;
   documentDate?: string | null;
@@ -58,6 +60,9 @@ export class PermitAttachmentApi {
     const body = new FormData();
     body.append('file', file, file.name);
     body.append('category', metadata.category);
+    if (metadata.supportingDocumentCode) {
+      body.append('supportingDocumentCode', metadata.supportingDocumentCode);
+    }
     // JSA and signed field copies carry controlled document metadata that the server requires.
     if (metadata.documentNumber) {
       body.append('documentNumber', metadata.documentNumber);

@@ -10,6 +10,8 @@ import {
   Permit,
   PermitApi,
   PermitDraft,
+  PermitSafetyEquipmentOption,
+  PermitSupportingDocumentOption,
   PermitTask,
   PermitWorkTypeOption,
 } from '../../core/permit-api';
@@ -65,6 +67,14 @@ export class PermitDetail {
   protected readonly workTypeCatalog = signal<Record<string, PermitWorkTypeOption[]>>({});
   protected readonly loadingWorkTypes = signal(true);
   protected readonly workTypeError = signal('');
+  protected readonly safetyEquipmentCatalog = signal<Record<string, PermitSafetyEquipmentOption[]>>(
+    {},
+  );
+  protected readonly loadingSafetyEquipment = signal(true);
+  protected readonly safetyEquipmentError = signal('');
+  protected readonly supportingDocumentOptions = signal<PermitSupportingDocumentOption[]>([]);
+  protected readonly loadingSupportingDocuments = signal(true);
+  protected readonly supportingDocumentError = signal('');
   protected readonly roles = this.identityStore.selected().roles;
   protected readonly actorId = this.identityStore.selected().userId;
   protected readonly canEdit = computed(() => {
@@ -119,6 +129,10 @@ export class PermitDetail {
       this.currentTask()?.type === 'AREA_APPROVE_AND_ISSUE' &&
       this.roles.includes('AreaOwnerManager'),
   );
+  protected readonly approvalMissingSafetyEquipment = computed(
+    () =>
+      this.canApprove() && (this.permit()?.workflow.hse.safetyEquipmentCodes?.length ?? 0) === 0,
+  );
   protected readonly canDisposition = computed(() => {
     const task = this.currentTask();
     return (
@@ -169,11 +183,15 @@ export class PermitDetail {
     workTypeCodes: this.fb.nonNullable.control<string[]>([], {
       validators: [Validators.required],
     }),
+    otherWorkTypeDescription: ['', Validators.maxLength(80)],
+    requiredDocumentCodes: this.fb.nonNullable.control<string[]>(['JSA']),
     equipmentTag: [''],
+    equipmentName: ['', Validators.maxLength(100)],
+    workOrderNumber: ['', Validators.maxLength(60)],
+    additionalHazardReference: ['', Validators.maxLength(160)],
     plantArea: ['', Validators.required],
     clsrApplicable: [false],
     simopsDeclaration: [''],
-    safetyEquipmentCodes: [''],
     isolationPrecautionCodes: [''],
     jsaDocumentNumber: ['', Validators.required],
     jsaRevision: ['', Validators.required],
@@ -192,6 +210,9 @@ export class PermitDetail {
     Validators.required,
     Validators.maxLength(1000),
   ]);
+  protected readonly hseSafetyEquipmentCodes = this.fb.nonNullable.control<string[]>([], {
+    validators: [Validators.required],
+  });
   protected readonly renewalForm = this.fb.nonNullable.group({
     validFrom: ['', Validators.required],
     validUntil: ['', Validators.required],
@@ -200,6 +221,8 @@ export class PermitDetail {
   constructor() {
     this.loadLocations();
     this.loadWorkTypes();
+    this.loadSafetyEquipment();
+    this.loadSupportingDocuments();
     this.form.controls.permitClass.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.reconcileWorkTypeSelection());
@@ -211,6 +234,7 @@ export class PermitDetail {
       this.renewalConflict.set(false);
       this.renewalCreatedId.set(null);
       this.permit.set(null);
+      this.hseSafetyEquipmentCodes.reset([]);
 
       if (!this.permitId) {
         this.loading.set(false);
@@ -237,11 +261,17 @@ export class PermitDetail {
       workTypeCodes:
         permit.draft.workTypeCodes ??
         (permit.draft.workTypeCode ? [permit.draft.workTypeCode] : []),
+      otherWorkTypeDescription: permit.draft.otherWorkTypeDescription ?? '',
+      requiredDocumentCodes: permit.draft.requiredDocumentCodes.includes('JSA')
+        ? permit.draft.requiredDocumentCodes
+        : ['JSA', ...permit.draft.requiredDocumentCodes],
       equipmentTag: permit.draft.equipmentTag ?? '',
+      equipmentName: permit.draft.equipmentName ?? '',
+      workOrderNumber: permit.draft.workOrderNumber ?? '',
+      additionalHazardReference: permit.draft.additionalHazardReference ?? '',
       plantArea: permit.draft.plantArea ?? '',
       clsrApplicable: permit.draft.clsrApplicable ?? false,
       simopsDeclaration: permit.draft.simopsDeclaration ?? '',
-      safetyEquipmentCodes: (permit.draft.safetyEquipmentCodes ?? []).join(', '),
       isolationPrecautionCodes: (permit.draft.isolationPrecautionCodes ?? []).join(', '),
       jsaDocumentNumber: permit.draft.jsaDocumentNumber ?? '',
       jsaRevision: permit.draft.jsaRevision ?? '',
@@ -250,6 +280,8 @@ export class PermitDetail {
       validUntil: toLocalInput(permit.draft.validUntil),
       eSimiNumber: permit.draft.eSimiNumber ?? '',
     });
+    this.syncOtherWorkTypeValidation();
+    this.reconcileSupportingDocumentSelection();
     this.error.set('');
     this.success.set('');
     this.conflict.set(false);
@@ -279,12 +311,14 @@ export class PermitDetail {
       eSimiNumber: value.eSimiNumber || null,
       hazards: [],
       controls: [],
-      requiredDocumentCodes: permit.draft.requiredDocumentCodes,
       workTypeCode: null,
-      equipmentTag: value.equipmentTag || null,
-      plantArea: value.plantArea || null,
+      otherWorkTypeDescription: value.otherWorkTypeDescription.trim() || null,
+      equipmentTag: value.equipmentTag.trim() || null,
+      equipmentName: value.equipmentName.trim() || null,
+      workOrderNumber: value.workOrderNumber.trim() || null,
+      additionalHazardReference: value.additionalHazardReference.trim() || null,
+      plantArea: value.plantArea.trim() || null,
       simopsDeclaration: value.simopsDeclaration || null,
-      safetyEquipmentCodes: this.split(value.safetyEquipmentCodes),
       isolationPrecautionCodes: this.split(value.isolationPrecautionCodes),
       jsaDocumentNumber: value.jsaDocumentNumber || null,
       jsaRevision: value.jsaRevision || null,
@@ -340,6 +374,29 @@ export class PermitDetail {
       : current.filter((item) => item !== code);
     this.form.controls.workTypeCodes.setValue(next);
     this.form.controls.workTypeCodes.markAsTouched();
+    this.syncOtherWorkTypeValidation();
+  }
+
+  protected hasOtherWorkTypeSelected(): boolean {
+    const selected = new Set(this.form.controls.workTypeCodes.value);
+    return this.workTypeOptions().some(
+      (option) => option.requiresDetail && selected.has(option.code),
+    );
+  }
+
+  protected isSupportingDocumentSelected(code: string): boolean {
+    return this.form.controls.requiredDocumentCodes.value.includes(code);
+  }
+
+  protected toggleSupportingDocument(option: PermitSupportingDocumentOption, event: Event): void {
+    if (option.required) return;
+    const checked = (event.target as HTMLInputElement).checked;
+    const current = this.form.controls.requiredDocumentCodes.value;
+    this.form.controls.requiredDocumentCodes.setValue(
+      checked
+        ? [...new Set([...current, option.code])]
+        : current.filter((code) => code !== option.code),
+    );
   }
 
   protected workTypeLabels(draft: PermitDraft): string {
@@ -347,9 +404,34 @@ export class PermitDetail {
     const options = this.workTypeCatalog()[draft.permitClass] ?? [];
     return (
       codes
-        .map((code) => options.find((option) => option.code === code)?.label ?? code)
+        .map((code) => {
+          const option = options.find((item) => item.code === code);
+          if (option?.requiresDetail && draft.otherWorkTypeDescription) {
+            return `${option.label.replace(/\s*:\s*$/, '')}: ${draft.otherWorkTypeDescription}`;
+          }
+          return option?.label ?? code;
+        })
         .join(', ') || 'Belum diisi'
     );
+  }
+
+  protected safetyEquipmentOptions(): PermitSafetyEquipmentOption[] {
+    const permitClass = this.permit()?.draft.permitClass ?? '';
+    return this.safetyEquipmentCatalog()[permitClass] ?? [];
+  }
+
+  protected isSafetyEquipmentSelected(code: string): boolean {
+    return this.hseSafetyEquipmentCodes.value.includes(code);
+  }
+
+  protected toggleSafetyEquipment(code: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    const current = this.hseSafetyEquipmentCodes.value;
+    const next = checked
+      ? [...new Set([...current, code])]
+      : current.filter((item) => item !== code);
+    this.hseSafetyEquipmentCodes.setValue(next);
+    this.hseSafetyEquipmentCodes.markAsTouched();
   }
 
   protected applyAttachmentPermitChange(change: PermitAttachmentPermitChange): void {
@@ -443,8 +525,25 @@ export class PermitDetail {
   }
 
   protected validateHse(): void {
-    this.runTaskDecision((task, permit, statement) =>
-      this.api.validate(task.id, permit.eTag, statement),
+    const task = this.currentTask();
+    const permit = this.permit();
+    if (
+      !task ||
+      !permit ||
+      this.decisionStatement.invalid ||
+      this.hseSafetyEquipmentCodes.invalid
+    ) {
+      this.decisionStatement.markAsTouched();
+      this.hseSafetyEquipmentCodes.markAsTouched();
+      return;
+    }
+
+    this.runCommand(
+      this.api.validate(task.id, permit.eTag, {
+        statement: this.decisionStatement.getRawValue(),
+        safetyEquipmentCodes: this.hseSafetyEquipmentCodes.getRawValue(),
+      }),
+      'Validasi PIC HSE tersimpan. APD/perlengkapan safety akan dicentang pada Bagian 5 paket cetak.',
     );
   }
 
@@ -547,6 +646,7 @@ export class PermitDetail {
       .subscribe({
         next: (permit) => {
           this.permit.set(permit);
+          this.hseSafetyEquipmentCodes.setValue(permit.workflow.hse.safetyEquipmentCodes ?? []);
           this.refreshTasks();
           this.loading.set(false);
         },
@@ -611,6 +711,47 @@ export class PermitDetail {
       });
   }
 
+  private loadSafetyEquipment(): void {
+    this.api
+      .listSafetyEquipment()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (catalog) => {
+          this.safetyEquipmentCatalog.set(
+            Object.fromEntries(catalog.map((item) => [item.permitClass, item.options])),
+          );
+          this.loadingSafetyEquipment.set(false);
+        },
+        error: (response) => {
+          this.loadingSafetyEquipment.set(false);
+          this.safetyEquipmentError.set(
+            response?.error?.detail ??
+              'Daftar APD/perlengkapan safety gagal dimuat. Coba muat ulang halaman.',
+          );
+        },
+      });
+  }
+
+  private loadSupportingDocuments(): void {
+    this.api
+      .listSupportingDocuments()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (options) => {
+          this.supportingDocumentOptions.set(options);
+          this.loadingSupportingDocuments.set(false);
+          this.reconcileSupportingDocumentSelection();
+        },
+        error: (response) => {
+          this.loadingSupportingDocuments.set(false);
+          this.supportingDocumentError.set(
+            response?.error?.detail ??
+              'Daftar dokumen pendukung gagal dimuat. Coba muat ulang halaman.',
+          );
+        },
+      });
+  }
+
   private split(value: string): string[] {
     return value
       .split(',')
@@ -625,5 +766,29 @@ export class PermitDetail {
     if (next.length !== current.length) {
       this.form.controls.workTypeCodes.setValue(next);
     }
+    this.syncOtherWorkTypeValidation();
+  }
+
+  private syncOtherWorkTypeValidation(): void {
+    const control = this.form.controls.otherWorkTypeDescription;
+    if (this.hasOtherWorkTypeSelected()) {
+      control.setValidators([Validators.required, Validators.maxLength(80)]);
+    } else {
+      control.clearValidators();
+      control.setValidators([Validators.maxLength(80)]);
+      control.setValue('');
+    }
+    control.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private reconcileSupportingDocumentSelection(): void {
+    const validCodes = new Set(this.supportingDocumentOptions().map((option) => option.code));
+    const requiredCodes = this.supportingDocumentOptions()
+      .filter((option) => option.required)
+      .map((option) => option.code);
+    const current = this.form.controls.requiredDocumentCodes.value.filter((code) =>
+      validCodes.has(code),
+    );
+    this.form.controls.requiredDocumentCodes.setValue([...new Set([...requiredCodes, ...current])]);
   }
 }

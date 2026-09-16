@@ -41,6 +41,7 @@ public sealed class PermitAttachmentService(
         long declaredLength,
         Stream content,
         string category,
+        string? supportingDocumentCode,
         string? documentNumber,
         string? documentRevision,
         DateTimeOffset? documentDate,
@@ -62,10 +63,14 @@ public sealed class PermitAttachmentService(
 
         var normalizedName = NormalizeFileName(fileName);
         var normalizedCategory = NormalizeCategory(category);
+        var normalizedSupportingDocumentCode = NormalizeSupportingDocumentCode(
+            normalizedCategory,
+            supportingDocumentCode);
         EnsureMetadata(normalizedCategory, documentNumber, documentRevision, documentDate, printPackageId);
 
         var storedPermit = await GetOwnedPermitAsync(permitId, cancellationToken);
         EnsurePermitAllowsCategory(storedPermit.Permit, normalizedCategory);
+        EnsureSupportingDocumentWasSelected(storedPermit.Permit, normalizedSupportingDocumentCode);
         var targetPermitVersion = storedPermit.Permit.Version;
         if (printPackageId is Guid packageId)
         {
@@ -90,6 +95,15 @@ public sealed class PermitAttachmentService(
                 throw new InvalidRequestException(
                     "attachment.replacement_category_mismatch",
                     "Lampiran pengganti wajib memiliki kategori yang sama dengan file sebelumnya.");
+            }
+            if (!string.Equals(
+                    previous.SupportingDocumentCode,
+                    normalizedSupportingDocumentCode,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidRequestException(
+                    "attachment.replacement_document_mismatch",
+                    "Lampiran pengganti wajib merujuk jenis dokumen Bagian 4 yang sama.");
             }
         }
 
@@ -120,6 +134,8 @@ public sealed class PermitAttachmentService(
                 storedContent.Sha256
                 ,
                 Category = normalizedCategory
+                ,
+                SupportingDocumentCode = normalizedSupportingDocumentCode
                 ,
                 documentNumber
                 ,
@@ -175,6 +191,7 @@ public sealed class PermitAttachmentService(
                 scan.EvidenceReference,
                 scan.ScannedAt,
                 normalizedCategory,
+                normalizedSupportingDocumentCode,
                 NormalizeOptional(documentNumber),
                 NormalizeOptional(documentRevision),
                 documentDate?.ToUniversalTime(),
@@ -452,6 +469,67 @@ public sealed class PermitAttachmentService(
         }
     }
 
+    private static string? NormalizeSupportingDocumentCode(string category, string? submittedCode)
+    {
+        if (category == "SIGNED_FIELD_COPY")
+        {
+            if (!string.IsNullOrWhiteSpace(submittedCode))
+            {
+                throw new InvalidRequestException(
+                    "attachment.supporting_document_not_allowed",
+                    "Salinan lapangan tidak boleh dikaitkan dengan checklist Bagian 4.");
+            }
+            return null;
+        }
+
+        if (category == "JSA")
+        {
+            if (!string.IsNullOrWhiteSpace(submittedCode)
+                && !string.Equals(
+                    submittedCode.Trim(),
+                    PermitSupportingDocumentCatalog.JsaCode,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidRequestException(
+                    "attachment.jsa_document_code_invalid",
+                    "Kategori JSA hanya boleh menggunakan kode dokumen JSA.");
+            }
+            return PermitSupportingDocumentCatalog.JsaCode;
+        }
+
+        if (string.IsNullOrWhiteSpace(submittedCode))
+        {
+            return null;
+        }
+
+        var option = PermitSupportingDocumentCatalog.Resolve(submittedCode);
+        if (option.Required)
+        {
+            throw new InvalidRequestException(
+                "attachment.jsa_category_required",
+                "Dokumen JSA harus diunggah menggunakan kategori JSA.");
+        }
+        return option.Code;
+    }
+
+    private static void EnsureSupportingDocumentWasSelected(Permit permit, string? documentCode)
+    {
+        if (documentCode is null)
+        {
+            return;
+        }
+
+        var selected = PermitSupportingDocumentCatalog.NormalizeAndValidate(
+            permit.Draft.RequiredDocumentCodes,
+            allowMissingRequired: true);
+        if (!selected.Contains(documentCode, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new InvalidRequestException(
+                "attachment.supporting_document_not_selected",
+                "Pilih dokumen tersebut pada Bagian 4 dan simpan draft sebelum mengunggah file.");
+        }
+    }
+
     private static void EnsurePermitAllowsCategory(Permit permit, string category)
     {
         if (category == "SIGNED_FIELD_COPY")
@@ -516,6 +594,7 @@ public sealed class PermitAttachmentService(
         value.ScanEvidenceReference,
         value.ScannedAt,
         value.Category,
+        value.SupportingDocumentCode,
         value.DocumentNumber,
         value.DocumentRevision,
         value.DocumentDate,

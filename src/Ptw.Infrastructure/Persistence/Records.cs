@@ -151,6 +151,7 @@ public sealed class PermitAttachmentRecord
     public string? ScanEvidenceReference { get; set; }
     public DateTimeOffset? ScannedAt { get; set; }
     public string Category { get; set; } = null!;
+    public string? SupportingDocumentCode { get; set; }
     public string? DocumentNumber { get; set; }
     public string? DocumentRevision { get; set; }
     public DateTimeOffset? DocumentDate { get; set; }

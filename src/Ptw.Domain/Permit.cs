@@ -33,6 +33,7 @@ public sealed class Permit
 
     public static Permit CreateDraft(PermitDraft draft, DateTimeOffset now)
     {
+        EnsureSafetyEquipmentIsAssignedByHse(draft);
         var permit = new Permit(Guid.CreateVersion7(), draft, now);
         permit.Raise("permit_draft_created", new { permit.Version });
         return permit;
@@ -47,6 +48,7 @@ public sealed class Permit
                 "PTW asal wajib tersedia untuk membuat renewal.");
         }
 
+        EnsureSafetyEquipmentIsAssignedByHse(draft);
         var permit = new Permit(Guid.CreateVersion7(), draft, now)
         {
             RenewedFromPermitId = sourcePermitId
@@ -71,7 +73,7 @@ public sealed class Permit
         PermitClosureDecisionEvidence? closureDecision = null,
         Guid? renewedFromPermitId = null,
         Guid? renewalPermitId = null) =>
-        new(id, draft, createdAt)
+        new(id, NormalizeAndValidate(draft, allowLegacyIncompleteDraft: true), createdAt, draftIsNormalized: true)
         {
             PermitNumber = permitNumber,
             Status = status,
@@ -128,6 +130,7 @@ public sealed class Permit
     public void UpdateDraft(PermitDraft draft, DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.Draft, PermitStatus.RevisionRequired);
+        EnsureSafetyEquipmentIsAssignedByHse(draft);
         Draft = NormalizeAndValidate(draft);
         ClearReviewEvidence();
         Version++;
@@ -169,6 +172,8 @@ public sealed class Permit
     public void Submit(string permitNumber, SubmissionReadiness readiness, DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.Draft, PermitStatus.RevisionRequired);
+        EnsureOtherWorkTypeDetailIsComplete(Draft);
+        EnsureSupportingDocumentSelectionIsComplete(Draft);
         if (!readiness.IsReady)
         {
             throw new DomainRuleViolationException(
@@ -186,9 +191,14 @@ public sealed class Permit
         MoveTo(PermitStatus.UnderValidation, "permit_submitted", now);
     }
 
-    public void ValidateSubmission(string actorId, string statement, DateTimeOffset now)
+    public void ValidateSubmission(
+        string actorId,
+        string statement,
+        IReadOnlyList<string> safetyEquipmentCodes,
+        DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.UnderValidation);
+        EnsureOtherWorkTypeDetailIsComplete(Draft);
         EnsureEvidence(actorId, statement);
         if (string.Equals(Draft.SponsorId, actorId.Trim(), StringComparison.OrdinalIgnoreCase))
         {
@@ -197,11 +207,19 @@ public sealed class Permit
                 "Sponsor PTW tidak boleh memvalidasi pengajuannya sendiri.");
         }
 
-        HseValidation = new PermitValidationEvidence(actorId.Trim(), statement.Trim(), now.ToUniversalTime());
+        var selectedSafetyEquipment = PermitSafetyEquipmentCatalog.NormalizeAndValidate(
+            Draft.PermitClass,
+            safetyEquipmentCodes);
+        HseValidation = new PermitValidationEvidence(
+            actorId.Trim(),
+            statement.Trim(),
+            now.ToUniversalTime(),
+            selectedSafetyEquipment);
         MoveTo(PermitStatus.AwaitingAreaApproval, "hse_validation_completed", now, new
         {
             HseValidation.ActorId,
             HseValidation.Statement,
+            HseValidation.SafetyEquipmentCodes,
             PermitVersion = Version
         });
     }
@@ -237,6 +255,7 @@ public sealed class Permit
     public void ApproveAndIssue(PermitApprovalEvidence approval, DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.AwaitingAreaApproval);
+        EnsureOtherWorkTypeDetailIsComplete(Draft);
         EnsureEvidence(approval.ActorId, approval.Statement);
         if (HseValidation is null)
         {
@@ -244,6 +263,15 @@ public sealed class Permit
                 "permit.validation.incomplete",
                 "Validasi HSE wajib selesai sebelum approval penerbitan.");
         }
+
+        if (HseValidation.SafetyEquipmentCodes is not { Count: > 0 })
+        {
+            throw new DomainRuleViolationException(
+                "permit.safety_equipment_required",
+                "Pilihan APD/perlengkapan safety Bagian 5 belum dicatat oleh PIC HSE. Minta revisi sebelum menerbitkan PTW.");
+        }
+
+        PermitSafetyEquipmentCatalog.NormalizeAndValidate(Draft.PermitClass, HseValidation.SafetyEquipmentCodes);
 
         if (string.Equals(Draft.SponsorId, approval.ActorId, StringComparison.OrdinalIgnoreCase)
             || string.Equals(HseValidation.ActorId, approval.ActorId, StringComparison.OrdinalIgnoreCase))
@@ -432,7 +460,19 @@ public sealed class Permit
         return result;
     }
 
-    private static PermitDraft NormalizeAndValidate(PermitDraft value)
+    private Permit(Guid id, PermitDraft draft, DateTimeOffset createdAt, bool draftIsNormalized)
+    {
+        Id = id;
+        Draft = draftIsNormalized ? draft : NormalizeAndValidate(draft);
+        Status = PermitStatus.Draft;
+        Version = 1;
+        CreatedAt = createdAt.ToUniversalTime();
+        UpdatedAt = CreatedAt;
+    }
+
+    private static PermitDraft NormalizeAndValidate(
+        PermitDraft value,
+        bool allowLegacyIncompleteDraft = false)
     {
         if (string.IsNullOrWhiteSpace(value.Title) || string.IsNullOrWhiteSpace(value.Description)
             || string.IsNullOrWhiteSpace(value.LocationId) || string.IsNullOrWhiteSpace(value.SponsorId)
@@ -469,6 +509,14 @@ public sealed class Permit
             value.PermitClass,
             value.WorkTypeCodes,
             value.WorkTypeCode);
+        var otherWorkTypeDescription = NormalizeAndValidateOtherWorkTypeDescription(
+            value.PermitClass,
+            workTypeCodes,
+            value.OtherWorkTypeDescription,
+            allowLegacyIncompleteDraft);
+        var requiredDocumentCodes = PermitSupportingDocumentCatalog.NormalizeAndValidate(
+            value.RequiredDocumentCodes,
+            allowMissingRequired: allowLegacyIncompleteDraft);
 
         return value with
         {
@@ -481,7 +529,24 @@ public sealed class Permit
             SubmitterType = submitterType,
             WorkTypeCode = workTypeCodes[0],
             WorkTypeCodes = workTypeCodes,
+            OtherWorkTypeDescription = otherWorkTypeDescription,
+            RequiredDocumentCodes = requiredDocumentCodes,
             EquipmentTag = NormalizeOptional(value.EquipmentTag),
+            EquipmentName = NormalizeOptionalWithMaxLength(
+                value.EquipmentName,
+                100,
+                "permit.equipment_name_too_long",
+                "Nama equipment maksimum 100 karakter."),
+            WorkOrderNumber = NormalizeOptionalWithMaxLength(
+                value.WorkOrderNumber,
+                60,
+                "permit.work_order_number_too_long",
+                "Nomor work order maksimum 60 karakter."),
+            AdditionalHazardReference = NormalizeOptionalWithMaxLength(
+                value.AdditionalHazardReference,
+                160,
+                "permit.additional_hazard_reference_too_long",
+                "Referensi bahaya tambahan maksimum 160 karakter."),
             PlantArea = NormalizeOptional(value.PlantArea),
             SimopsDeclaration = NormalizeOptional(value.SimopsDeclaration),
             SafetyEquipmentCodes = NormalizeCodes(value.SafetyEquipmentCodes),
@@ -494,8 +559,70 @@ public sealed class Permit
         };
     }
 
+    private static string? NormalizeAndValidateOtherWorkTypeDescription(
+        PermitClass permitClass,
+        IReadOnlyCollection<string> workTypeCodes,
+        string? description,
+        bool allowMissingRequiredDetail = false)
+    {
+        var otherWorkTypeDescription = NormalizeOptional(description);
+        var requiresOtherDetail = PermitWorkTypeCatalog.RequiresDetail(permitClass, workTypeCodes);
+        if (requiresOtherDetail && otherWorkTypeDescription is null && !allowMissingRequiredDetail)
+        {
+            throw new DomainRuleViolationException(
+                "permit.work_type_other_detail_required",
+                "Jelaskan jenis pekerjaan saat pilihan Lain-lain dipilih.");
+        }
+
+        if (!requiresOtherDetail && otherWorkTypeDescription is not null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.work_type_other_detail_without_selection",
+                "Detail jenis pekerjaan Lain-lain hanya boleh diisi ketika pilihannya dipilih.");
+        }
+
+        if (otherWorkTypeDescription?.Length > 80)
+        {
+            throw new DomainRuleViolationException(
+                "permit.work_type_other_detail_too_long",
+                "Detail jenis pekerjaan Lain-lain maksimum 80 karakter agar sesuai ruang pada formulir resmi.");
+        }
+
+        return otherWorkTypeDescription;
+    }
+
+    private static void EnsureOtherWorkTypeDetailIsComplete(PermitDraft draft)
+    {
+        var workTypeCodes = PermitWorkTypeCatalog.NormalizeAndValidate(
+            draft.PermitClass,
+            draft.WorkTypeCodes,
+            draft.WorkTypeCode);
+        _ = NormalizeAndValidateOtherWorkTypeDescription(
+            draft.PermitClass,
+            workTypeCodes,
+            draft.OtherWorkTypeDescription);
+    }
+
+    private static void EnsureSupportingDocumentSelectionIsComplete(PermitDraft draft) =>
+        _ = PermitSupportingDocumentCatalog.NormalizeAndValidate(draft.RequiredDocumentCodes);
+
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? NormalizeOptionalWithMaxLength(
+        string? value,
+        int maxLength,
+        string code,
+        string message)
+    {
+        var normalized = NormalizeOptional(value);
+        if (normalized?.Length > maxLength)
+        {
+            throw new DomainRuleViolationException(code, message);
+        }
+
+        return normalized;
+    }
 
     private static string[] NormalizeCodes(IReadOnlyList<string>? values) =>
         values?.Where(value => !string.IsNullOrWhiteSpace(value))
@@ -504,6 +631,16 @@ public sealed class Permit
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray()
         ?? [];
+
+    private static void EnsureSafetyEquipmentIsAssignedByHse(PermitDraft draft)
+    {
+        if (draft.SafetyEquipmentCodes is { Count: > 0 })
+        {
+            throw new DomainRuleViolationException(
+                "permit.safety_equipment.hse_owned",
+                "APD/perlengkapan safety hanya dapat ditetapkan oleh PIC HSE saat validasi.");
+        }
+    }
 
     private void MoveTo(PermitStatus status, string eventType, DateTimeOffset now, object? payload = null)
     {
@@ -548,5 +685,6 @@ public sealed class Permit
     {
         HseValidation = null;
         Approval = null;
+        Draft = Draft with { SafetyEquipmentCodes = [] };
     }
 }

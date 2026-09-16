@@ -27,11 +27,21 @@ blob-report/
 !.env.example
 appsettings.*.local.json
 secrets/
+*.pfx
+*.p12
+*.pem
+*.key
+*.crt
 
-# IDE / OS
+# IDE / OS / agent tooling
 .vs/
 .idea/
 .vscode/
+.claude/settings.local.json
+.playwright-mcp/
+*.swp
+*.orig
+*.rej
 .DS_Store
 Thumbs.db
 

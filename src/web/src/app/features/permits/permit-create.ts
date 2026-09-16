@@ -4,7 +4,12 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { IdentityApi } from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
-import { PermitApi, PermitDraft, PermitWorkTypeOption } from '../../core/permit-api';
+import {
+  PermitApi,
+  PermitDraft,
+  PermitSupportingDocumentOption,
+  PermitWorkTypeOption,
+} from '../../core/permit-api';
 
 function localDate(hoursFromNow: number): string {
   const date = new Date(Date.now() + hoursFromNow * 3_600_000);
@@ -122,9 +127,52 @@ function localDate(hoursFromNow: number): string {
           @if (form.controls.workTypeCodes.touched && form.controls.workTypeCodes.invalid) {
             <span class="field-error" role="alert">Pilih minimal satu jenis pekerjaan.</span>
           }
+          @if (hasOtherWorkTypeSelected()) {
+            <label class="work-type-other-detail" for="other-work-type-description">
+              Jelaskan jenis pekerjaan lainnya
+              <small>Maksimum 80 karakter; teks ini akan dicetak pada Bagian 1.</small>
+              <input
+                id="other-work-type-description"
+                formControlName="otherWorkTypeDescription"
+                maxlength="80"
+                autocomplete="off"
+                aria-describedby="other-work-type-help other-work-type-error"
+              />
+            </label>
+            <small id="other-work-type-help" class="sr-only">
+              Wajib diisi karena jenis pekerjaan Lain-lain dipilih.
+            </small>
+            @if (
+              form.controls.otherWorkTypeDescription.touched &&
+              form.controls.otherWorkTypeDescription.invalid
+            ) {
+              <span id="other-work-type-error" class="field-error" role="alert">
+                Jelaskan jenis pekerjaan lainnya, maksimum 80 karakter.
+              </span>
+            }
+          }
         </fieldset>
-        <label>Equipment/tag<input formControlName="equipmentTag" /></label>
+        <label>No. equipment/tag<input formControlName="equipmentTag" autocomplete="off" /></label>
+        <label
+          >Nama equipment<input formControlName="equipmentName" maxlength="100" autocomplete="off"
+        /></label>
+        <label
+          >Work Order No.<input formControlName="workOrderNumber" maxlength="60" autocomplete="off"
+        /></label>
         <label>Plant/area<input formControlName="plantArea" /></label>
+        <label class="wide">
+          Referensi bahaya terkait
+          <small>
+            Opsional dan hanya sebagai referensi. Identifikasi bahaya serta pengendalian tetap
+            mengacu pada JSA terlampir.
+          </small>
+          <textarea
+            formControlName="additionalHazardReference"
+            rows="2"
+            maxlength="160"
+            placeholder="Informasi bahaya tambahan yang belum tercantum pada permit"
+          ></textarea>
+        </label>
         <label class="clsr-option">
           <input type="checkbox" formControlName="clsrApplicable" />
           <span>CLSR berlaku</span>
@@ -133,16 +181,43 @@ function localDate(hoursFromNow: number): string {
           >Deklarasi SIMOPS<textarea formControlName="simopsDeclaration" rows="2"></textarea>
         </label>
         <label class="wide"
-          >APD/perlengkapan safety <small>kode dipisahkan koma</small
-          ><input formControlName="safetyEquipmentCodes"
-        /></label>
-        <label class="wide"
           >Isolation/precaution <small>kode dipisahkan koma</small
           ><input formControlName="isolationPrecautionCodes"
         /></label>
         <label>Nomor JSA<input formControlName="jsaDocumentNumber" /></label>
         <label>Revisi JSA<input formControlName="jsaRevision" /></label>
         <label>Tanggal JSA<input type="date" formControlName="jsaDate" /></label>
+        <fieldset class="work-types supporting-documents wide" aria-describedby="supporting-help">
+          <legend>Dokumen pendukung (Bagian 4)</legend>
+          <small id="supporting-help">
+            JSA wajib. Dokumen lain dipilih sesuai kebutuhan dan file diunggah setelah draft
+            disimpan.
+          </small>
+          @if (loadingSupportingDocuments()) {
+            <p class="work-type-state">Memuat daftar dokumen pendukung...</p>
+          } @else if (supportingDocumentError()) {
+            <p class="work-type-state error-text" role="alert">
+              {{ supportingDocumentError() }}
+            </p>
+          } @else {
+            <div class="supporting-document-options">
+              @for (option of supportingDocumentOptions(); track option.code) {
+                <label class="supporting-document-option" [class.required]="option.required">
+                  <input
+                    type="checkbox"
+                    [checked]="isSupportingDocumentSelected(option.code)"
+                    [disabled]="option.required"
+                    (change)="toggleSupportingDocument(option, $event)"
+                  />
+                  <span>
+                    <strong>{{ option.label }}</strong>
+                    <small>{{ option.required ? 'Wajib' : 'Opsional' }}</small>
+                  </span>
+                </label>
+              }
+            </div>
+          }
+        </fieldset>
         <label
           >Nomor E-SIMI<input formControlName="eSimiNumber" placeholder="Akan divalidasi adapter"
         /></label>
@@ -291,6 +366,9 @@ export class PermitCreate {
   protected readonly workTypeCatalog = signal<Record<string, PermitWorkTypeOption[]>>({});
   protected readonly loadingWorkTypes = signal(true);
   protected readonly workTypeError = signal('');
+  protected readonly supportingDocumentOptions = signal<PermitSupportingDocumentOption[]>([]);
+  protected readonly loadingSupportingDocuments = signal(true);
+  protected readonly supportingDocumentError = signal('');
   protected readonly form = this.fb.nonNullable.group({
     title: ['', Validators.required],
     description: ['', Validators.required],
@@ -306,11 +384,15 @@ export class PermitCreate {
     workTypeCodes: this.fb.nonNullable.control<string[]>([], {
       validators: [Validators.required],
     }),
+    otherWorkTypeDescription: ['', Validators.maxLength(80)],
+    requiredDocumentCodes: this.fb.nonNullable.control<string[]>(['JSA']),
     equipmentTag: [''],
+    equipmentName: ['', Validators.maxLength(100)],
+    workOrderNumber: ['', Validators.maxLength(60)],
+    additionalHazardReference: ['', Validators.maxLength(160)],
     plantArea: ['', Validators.required],
     clsrApplicable: [false],
     simopsDeclaration: [''],
-    safetyEquipmentCodes: [''],
     isolationPrecautionCodes: [''],
     jsaDocumentNumber: ['', Validators.required],
     jsaRevision: ['', Validators.required],
@@ -370,6 +452,24 @@ export class PermitCreate {
         },
       });
 
+    this.api
+      .listSupportingDocuments()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (options) => {
+          this.supportingDocumentOptions.set(options);
+          this.loadingSupportingDocuments.set(false);
+          this.reconcileSupportingDocumentSelection();
+        },
+        error: (response) => {
+          this.loadingSupportingDocuments.set(false);
+          this.supportingDocumentError.set(
+            response?.error?.detail ??
+              'Daftar dokumen pendukung gagal dimuat. Coba muat ulang halaman.',
+          );
+        },
+      });
+
     this.form.controls.permitClass.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.reconcileWorkTypeSelection());
@@ -391,6 +491,29 @@ export class PermitCreate {
       : current.filter((item) => item !== code);
     this.form.controls.workTypeCodes.setValue(next);
     this.form.controls.workTypeCodes.markAsTouched();
+    this.syncOtherWorkTypeValidation();
+  }
+
+  protected hasOtherWorkTypeSelected(): boolean {
+    const selected = new Set(this.form.controls.workTypeCodes.value);
+    return this.workTypeOptions().some(
+      (option) => option.requiresDetail && selected.has(option.code),
+    );
+  }
+
+  protected isSupportingDocumentSelected(code: string): boolean {
+    return this.form.controls.requiredDocumentCodes.value.includes(code);
+  }
+
+  protected toggleSupportingDocument(option: PermitSupportingDocumentOption, event: Event): void {
+    if (option.required) return;
+    const checked = (event.target as HTMLInputElement).checked;
+    const current = this.form.controls.requiredDocumentCodes.value;
+    this.form.controls.requiredDocumentCodes.setValue(
+      checked
+        ? [...new Set([...current, option.code])]
+        : current.filter((code) => code !== option.code),
+    );
   }
 
   protected save(): void {
@@ -406,12 +529,14 @@ export class PermitCreate {
       eSimiNumber: value.eSimiNumber || null,
       hazards: [],
       controls: [],
-      requiredDocumentCodes: [],
       workTypeCode: null,
-      equipmentTag: value.equipmentTag || null,
-      plantArea: value.plantArea || null,
+      otherWorkTypeDescription: value.otherWorkTypeDescription.trim() || null,
+      equipmentTag: value.equipmentTag.trim() || null,
+      equipmentName: value.equipmentName.trim() || null,
+      workOrderNumber: value.workOrderNumber.trim() || null,
+      additionalHazardReference: value.additionalHazardReference.trim() || null,
+      plantArea: value.plantArea.trim() || null,
       simopsDeclaration: value.simopsDeclaration || null,
-      safetyEquipmentCodes: this.split(value.safetyEquipmentCodes),
       isolationPrecautionCodes: this.split(value.isolationPrecautionCodes),
       jsaDocumentNumber: value.jsaDocumentNumber || null,
       jsaRevision: value.jsaRevision || null,
@@ -442,5 +567,29 @@ export class PermitCreate {
     if (next.length !== current.length) {
       this.form.controls.workTypeCodes.setValue(next);
     }
+    this.syncOtherWorkTypeValidation();
+  }
+
+  private syncOtherWorkTypeValidation(): void {
+    const control = this.form.controls.otherWorkTypeDescription;
+    if (this.hasOtherWorkTypeSelected()) {
+      control.setValidators([Validators.required, Validators.maxLength(80)]);
+    } else {
+      control.clearValidators();
+      control.setValidators([Validators.maxLength(80)]);
+      control.setValue('');
+    }
+    control.updateValueAndValidity({ emitEvent: false });
+  }
+
+  private reconcileSupportingDocumentSelection(): void {
+    const validCodes = new Set(this.supportingDocumentOptions().map((option) => option.code));
+    const requiredCodes = this.supportingDocumentOptions()
+      .filter((option) => option.required)
+      .map((option) => option.code);
+    const current = this.form.controls.requiredDocumentCodes.value.filter((code) =>
+      validCodes.has(code),
+    );
+    this.form.controls.requiredDocumentCodes.setValue([...new Set([...requiredCodes, ...current])]);
   }
 }

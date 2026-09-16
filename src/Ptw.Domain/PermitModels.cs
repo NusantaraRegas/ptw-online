@@ -18,7 +18,8 @@ public enum RiskLevel
 public sealed record PermitValidationEvidence(
     string ActorId,
     string Statement,
-    DateTimeOffset ValidatedAt);
+    DateTimeOffset ValidatedAt,
+    IReadOnlyList<string>? SafetyEquipmentCodes = null);
 
 public enum ApprovalCapacity
 {
@@ -89,7 +90,11 @@ public sealed record PermitDraft(
     string? JsaDocumentNumber = null,
     string? JsaRevision = null,
     DateTimeOffset? JsaDate = null,
-    IReadOnlyList<string>? WorkTypeCodes = null);
+    IReadOnlyList<string>? WorkTypeCodes = null,
+    string? OtherWorkTypeDescription = null,
+    string? EquipmentName = null,
+    string? WorkOrderNumber = null,
+    string? AdditionalHazardReference = null);
 
 public sealed record SubmissionReadiness(
     bool ESimiEligible,

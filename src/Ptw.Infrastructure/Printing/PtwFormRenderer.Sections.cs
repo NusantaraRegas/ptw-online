@@ -1,4 +1,5 @@
 using Ptw.Application;
+using Ptw.Domain;
 
 namespace Ptw.Infrastructure.Printing;
 
@@ -144,7 +145,7 @@ internal sealed partial class PtwFormRenderer
     {
         canvas.Text(x, y, width, 3.6, "(Diisi oleh HSE)", 4.2, align: TextAlign.Center);
 
-        var selected = snapshot.Permit.SafetyEquipmentCodes;
+        var selected = SelectedSafetyEquipmentLabels(snapshot);
         var cursor = y + 4.2;
         const double rowHeight = 4.6;
         var columnWidth = width / 2;
@@ -419,15 +420,22 @@ internal sealed partial class PtwFormRenderer
     }
 
     /// <summary>
-    /// Bridges the pre-Increment B data model: the JSA reference is a first-class draft field, while other
-    /// supporting documents arrive as free-text requirement codes.
+    /// Resolves stable Bagian 4 codes to the exact controlled-template labels. The JSA metadata fallback
+    /// keeps legacy snapshots readable without changing the immutable package payload.
     /// </summary>
     private static List<string?> BuildDocumentSelection(PrintPackageSnapshotPayload snapshot)
     {
-        var selection = new List<string?>(snapshot.Permit.RequiredDocumentCodes);
-        if (!string.IsNullOrWhiteSpace(snapshot.Permit.JsaDocumentNumber))
+        var selection = snapshot.Permit.RequiredDocumentCodes
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => PermitSupportingDocumentCatalog.Resolve(code).Label)
+            .Cast<string?>()
+            .ToList();
+        if (!string.IsNullOrWhiteSpace(snapshot.Permit.JsaDocumentNumber)
+            && !IsSelected(selection, PermitSupportingDocumentCatalog.Resolve(
+                PermitSupportingDocumentCatalog.JsaCode).Label))
         {
-            selection.Add("Job Safety Analisis (JSA)");
+            selection.Add(PermitSupportingDocumentCatalog.Resolve(
+                PermitSupportingDocumentCatalog.JsaCode).Label);
         }
 
         return selection;

@@ -45,6 +45,7 @@ public sealed record PermitAttachmentEntry(
     string? ScanEvidenceReference,
     DateTimeOffset? ScannedAt,
     string Category,
+    string? SupportingDocumentCode,
     string? DocumentNumber,
     string? DocumentRevision,
     DateTimeOffset? DocumentDate,

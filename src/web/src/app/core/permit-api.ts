@@ -22,7 +22,11 @@ export interface PermitDraft {
   submitterType?: 'CONTRACTOR' | 'USER_SPONSOR';
   workTypeCode?: string | null;
   workTypeCodes?: string[];
+  otherWorkTypeDescription?: string | null;
   equipmentTag?: string | null;
+  equipmentName?: string | null;
+  workOrderNumber?: string | null;
+  additionalHazardReference?: string | null;
   plantArea?: string | null;
   clsrApplicable?: boolean;
   simopsDeclaration?: string | null;
@@ -36,11 +40,31 @@ export interface PermitDraft {
 export interface PermitWorkTypeOption {
   code: string;
   label: string;
+  requiresDetail: boolean;
 }
 
 export interface PermitWorkTypeCatalog {
   permitClass: string;
   options: PermitWorkTypeOption[];
+}
+
+export interface PermitSafetyEquipmentOption {
+  code: string;
+  label: string;
+}
+
+export interface PermitSafetyEquipmentCatalog {
+  permitClass: string;
+  options: PermitSafetyEquipmentOption[];
+}
+
+export interface PermitSupportingDocumentOption {
+  code: string;
+  label: string;
+  templateColumn: number;
+  templateIndex: number;
+  required: boolean;
+  requiresMetadata: boolean;
 }
 
 export interface Permit {
@@ -65,6 +89,7 @@ export interface PermitValidation {
   actorId: string | null;
   statement: string | null;
   completedAt: string | null;
+  safetyEquipmentCodes: string[];
 }
 
 export interface PermitWorkflow {
@@ -117,6 +142,11 @@ export interface SubmitPermitRequest {
   rulesEvaluated: boolean;
   requiredDocumentsSafe: boolean;
   missingRequirements: string[];
+}
+
+export interface ValidateSubmissionRequest {
+  statement: string;
+  safetyEquipmentCodes: string[];
 }
 
 export interface RequestPermitRenewal {
@@ -192,6 +222,16 @@ export class PermitApi {
     return this.http.get<PermitWorkTypeCatalog[]>('/api/v1/reference-data/work-types');
   }
 
+  listSafetyEquipment(): Observable<PermitSafetyEquipmentCatalog[]> {
+    return this.http.get<PermitSafetyEquipmentCatalog[]>('/api/v1/reference-data/safety-equipment');
+  }
+
+  listSupportingDocuments(): Observable<PermitSupportingDocumentOption[]> {
+    return this.http.get<PermitSupportingDocumentOption[]>(
+      '/api/v1/reference-data/supporting-documents',
+    );
+  }
+
   create(draft: PermitDraft): Observable<Permit> {
     return this.http.post<Permit>('/api/v1/permits', draft);
   }
@@ -223,8 +263,8 @@ export class PermitApi {
     });
   }
 
-  validate(taskId: string, eTag: string, statement: string): Observable<Permit> {
-    return this.taskCommand(taskId, 'validate', eTag, { statement });
+  validate(taskId: string, eTag: string, request: ValidateSubmissionRequest): Observable<Permit> {
+    return this.taskCommand(taskId, 'validate', eTag, request);
   }
 
   approveAndIssue(

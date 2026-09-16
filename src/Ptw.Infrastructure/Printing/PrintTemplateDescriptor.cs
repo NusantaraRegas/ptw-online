@@ -28,84 +28,18 @@ internal sealed record PrintTemplateDescriptor(
 internal static class PrintTemplateCatalog
 {
     /// <summary>Bagian 4 left column, identical on all three controlled forms.</summary>
-    private static readonly string[] SupportingDocumentsPrimary =
-    [
-        "Job Safety Analisis (JSA)",
-        "Check List Inspeksi Alat Berat",
-        "Isolation / De-isolation",
-        "Prosedur Pekerjaan",
-        "P & ID, Plot Plan / Lay Out",
-        "Dokumen Perubahan (MOC)",
-        "Clearance Penggalian dari Electrical & Civil Eng.",
-        "Emergency Response Plan",
-        "Sertifikat Training Sea Survival",
-        "Ijin Penon - aktifan Sistem / Alat pengaman",
-        "Sertifikat Peralatan"
-    ];
+    private static readonly string[] SupportingDocumentsPrimary = PermitSupportingDocumentCatalog.Resolve()
+        .Where(option => option.TemplateColumn == 0)
+        .OrderBy(option => option.TemplateIndex)
+        .Select(option => option.Label)
+        .ToArray();
 
     /// <summary>Bagian 4 right column, identical on all three controlled forms.</summary>
-    private static readonly string[] SupportingDocumentsSecondary =
-    [
-        "Sertifikat Pekerjaan",
-        "Lifting Plan",
-        "Penutupan jalan",
-        "MSDS"
-    ];
-
-    /// <summary>Bagian 5 right column, identical on all three controlled forms.</summary>
-    private static readonly string[] SafetyEquipmentSecondary =
-    [
-        "Non-spark tool",
-        "Life jacket / work vest",
-        "Rambu K3",
-        "Face Shield",
-        "Water curtain",
-        "Pressurised Habitat",
-        "Fire Blanket",
-        "Radio Komunikasi",
-        "Bund wall / drip pan",
-        "Barikade",
-        "LOTO"
-    ];
-
-    /// <summary>Bagian 5 left column for HOT and COLD.</summary>
-    private static readonly string[] SafetyEquipmentPrimary =
-    [
-        "Respirator",
-        "Scaffolding",
-        "Body harness",
-        "Life line",
-        "Papan nama CSE (Tally Board)",
-        "Lampu penerangan yg memadai",
-        "APAR",
-        "Breathing Apparatus",
-        "Gas Monitor Portable",
-        "Emergency Response team",
-        "Whipcheck sambungan hose"
-    ];
-
-    /// <summary>CSE replaces the whipcheck entry with a watchman.</summary>
-    private static readonly string[] SafetyEquipmentPrimaryCse =
-    [
-        "Respirator",
-        "Scaffolding",
-        "Body harness",
-        "Life line",
-        "Papan nama CSE (Tally Board)",
-        "Lampu penerangan yg memadai",
-        "APAR",
-        "Breathing Apparatus",
-        "Gas Monitor Portable",
-        "Emergency Response team",
-        "Watch man"
-    ];
-
-    /// <summary>The controlled CSE form adds Ventilator beneath LOTO in the right column.</summary>
-    private static readonly string[] SafetyEquipmentSecondaryCse =
-    [
-        .. SafetyEquipmentSecondary,
-        "Ventilator"
-    ];
+    private static readonly string[] SupportingDocumentsSecondary = PermitSupportingDocumentCatalog.Resolve()
+        .Where(option => option.TemplateColumn == 1)
+        .OrderBy(option => option.TemplateIndex)
+        .Select(option => option.Label)
+        .ToArray();
 
     private static readonly PrintTemplateDescriptor HotWork = new(
         "FM-001-B-002-NR-B220",
@@ -118,8 +52,8 @@ internal static class PrintTemplateCatalog
         PermitWorkTypeCatalog.Resolve(PermitClass.HotWork),
         SupportingDocumentsPrimary,
         SupportingDocumentsSecondary,
-        SafetyEquipmentPrimary,
-        SafetyEquipmentSecondary);
+        SafetyEquipment(PermitClass.HotWork, 0),
+        SafetyEquipment(PermitClass.HotWork, 1));
 
     private static readonly PrintTemplateDescriptor ColdWork = new(
         "FM-002-B-002-NR-B220",
@@ -132,8 +66,8 @@ internal static class PrintTemplateCatalog
         PermitWorkTypeCatalog.Resolve(PermitClass.ColdWork),
         SupportingDocumentsPrimary,
         SupportingDocumentsSecondary,
-        SafetyEquipmentPrimary,
-        SafetyEquipmentSecondary);
+        SafetyEquipment(PermitClass.ColdWork, 0),
+        SafetyEquipment(PermitClass.ColdWork, 1));
 
     private static readonly PrintTemplateDescriptor ConfinedSpaceEntry = new(
         "FM-003-B-002-NR-B220",
@@ -146,8 +80,15 @@ internal static class PrintTemplateCatalog
         PermitWorkTypeCatalog.Resolve(PermitClass.ConfinedSpaceEntry),
         SupportingDocumentsPrimary,
         SupportingDocumentsSecondary,
-        SafetyEquipmentPrimaryCse,
-        SafetyEquipmentSecondaryCse);
+        SafetyEquipment(PermitClass.ConfinedSpaceEntry, 0),
+        SafetyEquipment(PermitClass.ConfinedSpaceEntry, 1));
+
+    private static string[] SafetyEquipment(PermitClass permitClass, int templateColumn) =>
+        PermitSafetyEquipmentCatalog.Resolve(permitClass)
+            .Where(option => option.TemplateColumn == templateColumn)
+            .OrderBy(option => option.TemplateIndex)
+            .Select(option => option.Label)
+            .ToArray();
 
     /// <summary>Bagian 7 isolation and precaution options, identical on all three controlled forms.</summary>
     internal static readonly string[] IsolationOptions =

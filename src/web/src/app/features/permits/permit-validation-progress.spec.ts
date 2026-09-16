@@ -21,6 +21,7 @@ describe('PermitValidationProgress', () => {
         actorId: 'hsse.validator.demo',
         statement: 'Sesuai.',
         completedAt: '2026-09-02T00:00:00Z',
+        safetyEquipmentCodes: ['SAFETY_FIRE_EXTINGUISHER'],
       },
       approval: {
         completed: true,

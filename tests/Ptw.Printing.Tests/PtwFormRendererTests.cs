@@ -42,6 +42,22 @@ public sealed class PtwFormRendererTests
     }
 
     [Fact]
+    public void Bagian5CheckboxesComeFromHseValidationEvidence()
+    {
+        var renderer = new PtwFormRenderer();
+        var selected = Snapshot(PermitClass.HotWork);
+        var withoutSelection = selected with
+        {
+            HseValidation = selected.HseValidation! with { SafetyEquipmentCodes = [] }
+        };
+
+        var selectedDocument = renderer.Render(new(selected, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var emptyDocument = renderer.Render(new(withoutSelection, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+
+        Assert.NotEqual(Canonicalise(selectedDocument.Content), Canonicalise(emptyDocument.Content));
+    }
+
+    [Fact]
     public void DraftPreviewIsWatermarkedAndDiffersFromTheOfficialDocument()
     {
         var renderer = new PtwFormRenderer();
@@ -75,6 +91,35 @@ public sealed class PtwFormRendererTests
         Assert.Contains("Watch man", cse.SafetyEquipmentPrimary);
         Assert.DoesNotContain("Ventilator", cse.SafetyEquipmentPrimary);
         Assert.Contains("Ventilator", cse.SafetyEquipmentSecondary);
+        Assert.Equal(
+            cse.SafetyEquipmentPrimary,
+            PermitSafetyEquipmentCatalog.Resolve(PermitClass.ConfinedSpaceEntry)
+                .Where(option => option.TemplateColumn == 0)
+                .OrderBy(option => option.TemplateIndex)
+                .Select(option => option.Label));
+        Assert.Equal(
+            cse.SupportingDocumentsPrimary,
+            PermitSupportingDocumentCatalog.Resolve()
+                .Where(option => option.TemplateColumn == 0)
+                .OrderBy(option => option.TemplateIndex)
+                .Select(option => option.Label));
+        Assert.Equal(
+            cse.SupportingDocumentsSecondary,
+            PermitSupportingDocumentCatalog.Resolve()
+                .Where(option => option.TemplateColumn == 1)
+                .OrderBy(option => option.TemplateIndex)
+                .Select(option => option.Label));
+    }
+
+    [Fact]
+    public void ColdWorkRestrokesSegmentedSectionDividerAsOneContinuousRule()
+    {
+        var rule = Assert.Single(TemplateOverlayCatalog.StructuralRepairRules(PermitClass.ColdWork));
+
+        Assert.Equal(new PdfPoint(282.25, 349.75), rule.Start);
+        Assert.Equal(new PdfPoint(282.25, 454.25), rule.End);
+        Assert.Empty(TemplateOverlayCatalog.StructuralRepairRules(PermitClass.HotWork));
+        Assert.Empty(TemplateOverlayCatalog.StructuralRepairRules(PermitClass.ConfinedSpaceEntry));
     }
 
     [Fact]
@@ -89,6 +134,49 @@ public sealed class PtwFormRendererTests
         Assert.Equal([4, 17], sandBlasting.Select(option => option.TemplateIndex));
     }
 
+    [Fact]
+    public void OtherWorkTypeDescriptionChangesTheControlledOverlay()
+    {
+        var renderer = new PtwFormRenderer();
+        var snapshot = Snapshot(PermitClass.ColdWork);
+        var withOther = snapshot with
+        {
+            Permit = snapshot.Permit with
+            {
+                WorkTypeCode = "COLD_OTHER",
+                WorkTypeCodes = ["COLD_OTHER"],
+                OtherWorkTypeDescription = "Pembersihan strainer sementara"
+            }
+        };
+
+        var ordinary = renderer.Render(new(snapshot, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var other = renderer.Render(new(withOther, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+
+        Assert.NotEqual(Canonicalise(ordinary.Content), Canonicalise(other.Content));
+        DumpForVisualReview(other.Content, "COLD-OTHER-WORK-TYPE");
+    }
+
+    [Fact]
+    public void PlanningReferenceFieldsChangeTheControlledOverlay()
+    {
+        var renderer = new PtwFormRenderer();
+        var populated = Snapshot(PermitClass.HotWork);
+        var empty = populated with
+        {
+            Permit = populated.Permit with
+            {
+                EquipmentName = null,
+                WorkOrderNumber = null,
+                AdditionalHazardReference = null
+            }
+        };
+
+        var populatedDocument = renderer.Render(new(populated, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var emptyDocument = renderer.Render(new(empty, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+
+        Assert.NotEqual(Canonicalise(populatedDocument.Content), Canonicalise(emptyDocument.Content));
+    }
+
     private static PrintPackageRenderRequest Request(PermitClass permitClass) =>
         new(Snapshot(permitClass), "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false);
 
@@ -98,7 +186,17 @@ public sealed class PtwFormRendererTests
         3,
         "ISSUED",
         Draft(permitClass),
-        new PermitValidationEvidence("hse.validator.demo", "Divalidasi sesuai JSA.", IssuedAt.AddHours(-2)),
+        new PermitValidationEvidence(
+            "hse.validator.demo",
+            "Divalidasi sesuai JSA.",
+            IssuedAt.AddHours(-2),
+            [
+                "SAFETY_RESPIRATOR",
+                "SAFETY_FIRE_EXTINGUISHER",
+                "SAFETY_PORTABLE_GAS_MONITOR",
+                "SAFETY_BARRICADE",
+                "SAFETY_LOTO"
+            ]),
         new PermitApprovalEvidence(
             "manager.orf.demo",
             "Kepala Departemen Distribusi Gas dan Manajemen ORF",
@@ -140,12 +238,16 @@ public sealed class PtwFormRendererTests
         "ORF Muara Karang - Area Metering",
         true,
         "Bersamaan dengan pekerjaan inspeksi rutin di area yang sama.",
-        ["Respirator", "APAR", "Gas Monitor Portable", "Barikade", "LOTO"],
+        [],
         ["Depressurized", "Drained", "Ventilated"],
         "JSA-ORF-2026-018",
         "Rev.2",
         IssuedAt.AddDays(-9),
-        WorkTypeCodes(permitClass));
+        WorkTypeCodes(permitClass),
+        OtherWorkTypeDescription: null,
+        EquipmentName: "Gas inlet separator",
+        WorkOrderNumber: "WO-2026-001",
+        AdditionalHazardReference: "Akses sisi utara licin saat hujan; lihat pengendalian pada JSA.");
 
     private static IReadOnlyList<string> WorkTypeCodes(PermitClass permitClass) => permitClass switch
     {

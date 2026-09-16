@@ -4,7 +4,11 @@ namespace Ptw.Domain;
 /// One selectable item from Bagian 1 of the controlled PTW forms. <see cref="TemplateIndex"/> preserves
 /// the exact checkbox position, including intentional duplicate labels in the source document.
 /// </summary>
-public sealed record PermitWorkTypeOption(string Code, string Label, int TemplateIndex);
+public sealed record PermitWorkTypeOption(
+    string Code,
+    string Label,
+    int TemplateIndex,
+    bool RequiresDetail = false);
 
 /// <summary>
 /// Server-authoritative work-type catalogue transcribed from FM-001/002/003-B-002-NR-B220. Codes are
@@ -23,7 +27,7 @@ public static class PermitWorkTypeCatalog
         new("HOT_VEHICLE_ENTRY", "Kendaraan masuk", 6),
         new("HOT_WELDING", "Mengelas", 7),
         new("HOT_EXPLOSIVE_MATERIAL", "Pekerjaan memakai bahan peledak", 8),
-        new("HOT_OTHER", "Lain - Lain :", 9),
+        new("HOT_OTHER", "Lain - Lain :", 9, RequiresDetail: true),
         new("HOT_NON_EX_EQUIPMENT", "Bekerja dengan peralatan non-Ex", 10),
         new("HOT_POWER_TOOL", "Pemakaian Power Tool", 11),
         new("HOT_GOUGING", "Gauging", 12),
@@ -53,7 +57,7 @@ public static class PermitWorkTypeCatalog
         new("COLD_DIVING", "Diving", 14),
         new("COLD_GRATING", "Bongkar/pasang grating", 15),
         new("COLD_MANUAL_WORK", "Manual Pekerjaan", 16),
-        new("COLD_OTHER", "Lain - Lain :", 17),
+        new("COLD_OTHER", "Lain - Lain :", 17, RequiresDetail: true),
         new("COLD_MANUAL_EXCAVATION", "Penggalian Manual", 18),
         new("COLD_INSTRUMENTATION", "Instrumentasi", 19),
         new("COLD_LAB_SAMPLING", "Lab. Sampling", 20),
@@ -74,7 +78,7 @@ public static class PermitWorkTypeCatalog
         new("CSE_VISUAL_INSPECTION", "Inspeksi Visual", 8),
         new("CSE_PWHT_PREHEATING", "PWHT / Pre-heating", 9),
         new("CSE_POWER_TOOL", "Pemakaian Power Tool", 10),
-        new("CSE_OTHER", "Lainnya", 11),
+        new("CSE_OTHER", "Lainnya", 11, RequiresDetail: true),
         new("CSE_WELDING", "Pengelasan", 12),
         new("CSE_FLAME_CUTTING", "Pemotongan memakai api", 13),
         new("CSE_CLEANING", "Pembersihan", 14),
@@ -135,5 +139,11 @@ public static class PermitWorkTypeCatalog
         }
 
         return options.Where(option => selected.Contains(option.Code)).Select(option => option.Code).ToArray();
+    }
+
+    public static bool RequiresDetail(PermitClass permitClass, IReadOnlyCollection<string> workTypeCodes)
+    {
+        var selected = new HashSet<string>(workTypeCodes, StringComparer.OrdinalIgnoreCase);
+        return Resolve(permitClass).Any(option => option.RequiresDetail && selected.Contains(option.Code));
     }
 }

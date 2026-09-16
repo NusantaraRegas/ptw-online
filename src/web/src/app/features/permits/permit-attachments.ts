@@ -9,6 +9,7 @@ import {
   PermitAttachmentMutation,
   PermitAttachmentUpload,
 } from '../../core/permit-attachment-api';
+import { PermitApi, PermitSupportingDocumentOption } from '../../core/permit-api';
 
 interface PendingUpload {
   id: string;
@@ -32,6 +33,10 @@ export class PermitAttachments {
   readonly permitId = input.required<string>();
   readonly eTag = input.required<string>();
   readonly canManage = input(false);
+  readonly selectedDocumentCodes = input<string[]>([]);
+  readonly jsaDocumentNumber = input('');
+  readonly jsaRevision = input('');
+  readonly jsaDate = input('');
   readonly permitChanged = output<PermitAttachmentPermitChange>();
 
   /** Ready print packages a signed field copy can be reconciled against. */
@@ -42,7 +47,10 @@ export class PermitAttachments {
   protected readonly loading = signal(true);
   protected readonly busy = signal(false);
   protected readonly error = signal('');
-  protected readonly category = signal<PermitAttachmentCategory>('SUPPORTING');
+  protected readonly category = signal<PermitAttachmentCategory>('JSA');
+  protected readonly supportingDocumentCode = signal('JSA');
+  protected readonly supportingDocuments = signal<PermitSupportingDocumentOption[]>([]);
+  protected readonly supportingDocumentError = signal('');
   protected readonly documentNumber = signal('');
   protected readonly documentRevision = signal('');
   protected readonly documentDate = signal('');
@@ -50,17 +58,29 @@ export class PermitAttachments {
   protected readonly hasUnavailableDownloads = computed(() =>
     this.attachments().some((attachment) => attachment.scanStatus !== 'CLEAN'),
   );
+  protected readonly selectedSupportingDocuments = computed(() => {
+    const selected = new Set(this.selectedDocumentCodes());
+    return this.supportingDocuments().filter(
+      (option) => option.required || selected.has(option.code),
+    );
+  });
+  protected readonly selectedOptionalDocuments = computed(() =>
+    this.selectedSupportingDocuments().filter((option) => !option.required),
+  );
 
   private currentETag = '';
 
   constructor(
     private readonly api: PermitAttachmentApi,
+    private readonly permitApi: PermitApi,
     private readonly destroyRef: DestroyRef,
   ) {}
 
   ngOnInit(): void {
     this.currentETag = this.eTag();
+    this.prefillJsaMetadata();
     this.load();
+    this.loadSupportingDocuments();
   }
 
   ngOnChanges(): void {
@@ -126,8 +146,45 @@ export class PermitAttachments {
   }
 
   protected setCategory(value: string): void {
-    this.category.set(value as PermitAttachmentCategory);
+    const category = value as PermitAttachmentCategory;
+    this.category.set(category);
+    if (category === 'JSA') {
+      this.supportingDocumentCode.set('JSA');
+      this.prefillJsaMetadata();
+    } else if (category === 'SIGNED_FIELD_COPY') {
+      this.supportingDocumentCode.set('');
+    } else if (
+      !this.selectedOptionalDocuments().some(
+        (option) => option.code === this.supportingDocumentCode(),
+      )
+    ) {
+      this.supportingDocumentCode.set('');
+    }
     this.error.set('');
+  }
+
+  protected attachmentsFor(documentCode: string): PermitAttachment[] {
+    return this.attachments().filter(
+      (attachment) =>
+        attachment.supportingDocumentCode === documentCode ||
+        (documentCode === 'JSA' && attachment.category === 'JSA'),
+    );
+  }
+
+  protected documentStatus(documentCode: string): string {
+    const evidence = this.attachmentsFor(documentCode);
+    if (evidence.some((attachment) => attachment.scanStatus === 'CLEAN')) return 'Aman';
+    if (evidence.length > 0) return 'Sedang diperiksa';
+    return 'Belum diunggah';
+  }
+
+  protected documentComplete(documentCode: string): boolean {
+    return this.attachmentsFor(documentCode).length > 0;
+  }
+
+  protected documentLabel(attachment: PermitAttachment): string {
+    const code = attachment.supportingDocumentCode ?? (attachment.category === 'JSA' ? 'JSA' : '');
+    return this.supportingDocuments().find((option) => option.code === code)?.label ?? '';
   }
 
   /** The server accepts PDF, JPEG and PNG; the picker must not be stricter than the contract. */
@@ -141,11 +198,20 @@ export class PermitAttachments {
     );
   }
 
+  private prefillJsaMetadata(): void {
+    if (!this.documentNumber()) this.documentNumber.set(this.jsaDocumentNumber());
+    if (!this.documentRevision()) this.documentRevision.set(this.jsaRevision());
+    if (!this.documentDate()) this.documentDate.set(this.jsaDate().slice(0, 10));
+  }
+
   /** Returns null when the chosen category is missing its mandatory document metadata. */
   private uploadMetadata(): PermitAttachmentUpload | null {
     const category = this.category();
     if (category === 'SUPPORTING') {
-      return { category };
+      return {
+        category,
+        supportingDocumentCode: this.supportingDocumentCode() || null,
+      };
     }
 
     const documentNumber = this.documentNumber().trim();
@@ -157,6 +223,7 @@ export class PermitAttachments {
 
     return {
       category,
+      supportingDocumentCode: category === 'JSA' ? 'JSA' : null,
       documentNumber,
       documentRevision,
       documentDate,
@@ -243,6 +310,19 @@ export class PermitAttachments {
         next: (items) => this.attachments.set(items),
         error: (response) =>
           this.error.set(response?.error?.detail ?? 'Daftar lampiran gagal dimuat.'),
+      });
+  }
+
+  private loadSupportingDocuments(): void {
+    this.permitApi
+      .listSupportingDocuments()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (options) => this.supportingDocuments.set(options),
+        error: (response) =>
+          this.supportingDocumentError.set(
+            response?.error?.detail ?? 'Status checklist dokumen pendukung gagal dimuat.',
+          ),
       });
   }
 

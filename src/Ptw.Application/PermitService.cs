@@ -201,7 +201,8 @@ public sealed class PermitService(
         var renewal = Permit.CreateRenewal(sourcePermitId, source.Permit.Draft with
         {
             ValidFrom = request.ValidFrom,
-            ValidUntil = request.ValidUntil
+            ValidUntil = request.ValidUntil,
+            SafetyEquipmentCodes = []
         }, now);
         source.Permit.RequestRenewal(renewal, now);
         var created = await store.AddRenewalAsync(
@@ -253,9 +254,10 @@ public sealed class PermitService(
                 $"Lokasi {stored.Permit.Draft.LocationId} belum memiliki release dan konfigurasi pemilik wilayah yang aktif.");
         }
 
+        var attachments = await attachmentStore.ListActiveAsync(id, cancellationToken);
+        EnsureSupportingDocumentEvidence(stored.Permit, attachments);
         if (attachmentPolicy.Enabled)
         {
-            var attachments = await attachmentStore.ListActiveAsync(id, cancellationToken);
             if (attachmentPolicy.RequireMalwareScan
                 && attachments.Any(x => !string.Equals(x.ScanStatus, "CLEAN", StringComparison.Ordinal)))
             {
@@ -290,6 +292,77 @@ public sealed class PermitService(
             cancellationToken);
     }
 
+    private void EnsureSupportingDocumentEvidence(
+        Permit permit,
+        IReadOnlyList<PermitAttachmentEntry> attachments)
+    {
+        if (!attachmentPolicy.Enabled)
+        {
+            throw new InvalidRequestException(
+                "permit.supporting_document.storage_unavailable",
+                "Pengajuan diblokir karena penyimpanan dokumen pendukung belum tersedia.");
+        }
+
+        var selectedCodes = PermitSupportingDocumentCatalog.NormalizeAndValidate(
+            permit.Draft.RequiredDocumentCodes);
+        foreach (var code in selectedCodes)
+        {
+            var evidence = attachments.Where(attachment =>
+                string.Equals(
+                    EffectiveSupportingDocumentCode(attachment),
+                    code,
+                    StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (evidence.Length == 0)
+            {
+                var label = PermitSupportingDocumentCatalog.Resolve(code).Label;
+                throw new InvalidRequestException(
+                    "permit.supporting_document.evidence_required",
+                    $"Lampiran untuk {label} wajib tersedia sebelum PTW diajukan.");
+            }
+
+            if (attachmentPolicy.RequireMalwareScan
+                && evidence.All(item => !string.Equals(item.ScanStatus, "CLEAN", StringComparison.Ordinal)))
+            {
+                var label = PermitSupportingDocumentCatalog.Resolve(code).Label;
+                throw new InvalidRequestException(
+                    "permit.supporting_document.scan_incomplete",
+                    $"Lampiran untuk {label} belum dinyatakan aman.");
+            }
+        }
+
+        var jsaNumber = permit.Draft.JsaDocumentNumber?.Trim();
+        var jsaRevision = permit.Draft.JsaRevision?.Trim();
+        var jsaDate = permit.Draft.JsaDate?.UtcDateTime.Date;
+        if (string.IsNullOrWhiteSpace(jsaNumber)
+            || string.IsNullOrWhiteSpace(jsaRevision)
+            || jsaDate is null)
+        {
+            throw new InvalidRequestException(
+                "permit.supporting_document.jsa_metadata_required",
+                "Nomor, revisi, dan tanggal JSA wajib lengkap sebelum PTW diajukan.");
+        }
+
+        if (!attachments.Any(attachment =>
+                string.Equals(
+                    EffectiveSupportingDocumentCode(attachment),
+                    PermitSupportingDocumentCatalog.JsaCode,
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(attachment.DocumentNumber?.Trim(), jsaNumber, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(attachment.DocumentRevision?.Trim(), jsaRevision, StringComparison.OrdinalIgnoreCase)
+                && attachment.DocumentDate?.UtcDateTime.Date == jsaDate))
+        {
+            throw new InvalidRequestException(
+                "permit.supporting_document.jsa_metadata_mismatch",
+                "Metadata lampiran JSA harus sama dengan nomor, revisi, dan tanggal JSA pada draft.");
+        }
+    }
+
+    private static string? EffectiveSupportingDocumentCode(PermitAttachmentEntry attachment) =>
+        attachment.SupportingDocumentCode
+        ?? (string.Equals(attachment.Category, "JSA", StringComparison.Ordinal)
+            ? PermitSupportingDocumentCatalog.JsaCode
+            : null);
+
     public Task<PermitResponse> ValidateSubmissionAsync(
         Guid taskId,
         ValidateSubmissionRequest request,
@@ -306,7 +379,11 @@ public sealed class PermitService(
             correlationId,
             PermitPolicyOperations.ValidateSubmission,
             [HseValidatorRole],
-            (permit, actor, now, _) => permit.ValidateSubmission(actor.Id, request.Statement, now),
+            (permit, actor, now, _) => permit.ValidateSubmission(
+                actor.Id,
+                request.Statement,
+                request.SafetyEquipmentCodes,
+                now),
             cancellationToken);
 
     public Task<PermitResponse> EscalateValidationAsync(

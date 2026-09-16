@@ -104,7 +104,8 @@ internal sealed class FormCanvas : IDisposable
         string text,
         double size = 5.2,
         double lineHeight = 3.4,
-        int maxLines = 3)
+        int maxLines = 3,
+        bool bold = false)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -140,7 +141,7 @@ internal sealed class FormCanvas : IDisposable
 
         for (var index = 0; index < lines.Count; index++)
         {
-            Text(x, y + (index * lineHeight), width, lineHeight, lines[index], size);
+            Text(x, y + (index * lineHeight), width, lineHeight, lines[index], size, bold);
         }
 
         return lines.Count * lineHeight;
