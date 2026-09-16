@@ -13,6 +13,7 @@ import {
 import { PermitAttachmentPermitChange, PermitAttachments } from './permit-attachments';
 import { PermitDetail } from './permit-detail';
 import { PermitHistory } from './permit-history';
+import { PermitPrintPackages } from './permit-print-packages';
 import { PermitValidationProgress } from './permit-validation-progress';
 
 @Component({ selector: 'app-permit-attachments', template: '' })
@@ -20,7 +21,16 @@ class PermitAttachmentsStub {
   readonly permitId = input.required<string>();
   readonly eTag = input.required<string>();
   readonly canManage = input(false);
+  readonly printPackages = input<{ id: string; permitVersion: number }[]>([]);
   readonly permitChanged = output<PermitAttachmentPermitChange>();
+}
+
+@Component({ selector: 'app-permit-print-packages', template: '' })
+class PermitPrintPackagesStub {
+  readonly permitId = input.required<string>();
+  readonly canRetry = input(false);
+  readonly canPreview = input(false);
+  readonly readyPackages = output<{ id: string; permitVersion: number }[]>();
 }
 
 @Component({ selector: 'app-permit-history', template: '' })
@@ -65,6 +75,7 @@ const permit: Permit = {
     hazards: ['Bahaya'],
     controls: ['Kontrol'],
     requiredDocumentCodes: [],
+    workTypeCodes: ['COLD_MECHANICAL'],
   },
   workflow: {
     hse: validation('HSE', 'PIC HSE'),
@@ -121,6 +132,13 @@ describe('PermitDetail', () => {
         return of({ ...permit, id, permitNumber: `PTW-${id}` });
       },
       listTasks: () => of({ items: [], count: 0 }),
+      listWorkTypes: () =>
+        of([
+          {
+            permitClass: 'ColdWork',
+            options: [{ code: 'COLD_MECHANICAL', label: 'Mekanikal' }],
+          },
+        ]),
       requestRenewal: (
         _id: string,
         _eTag: string,
@@ -145,9 +163,21 @@ describe('PermitDetail', () => {
       ],
     })
       .overrideComponent(PermitDetail, {
-        remove: { imports: [PermitAttachments, PermitHistory, PermitValidationProgress] },
+        remove: {
+          imports: [
+            PermitAttachments,
+            PermitHistory,
+            PermitPrintPackages,
+            PermitValidationProgress,
+          ],
+        },
         add: {
-          imports: [PermitAttachmentsStub, PermitHistoryStub, PermitValidationProgressStub],
+          imports: [
+            PermitAttachmentsStub,
+            PermitHistoryStub,
+            PermitPrintPackagesStub,
+            PermitValidationProgressStub,
+          ],
         },
       })
       .compileComponents();
@@ -155,6 +185,17 @@ describe('PermitDetail', () => {
 
   afterEach(() => {
     sessionStorage.removeItem('ptw.development-identity');
+  });
+
+  it('keeps the page-level hardcopy safety warning visible', () => {
+    const fixture = TestBed.createComponent(PermitDetail);
+    fixture.detectChanges();
+
+    const safetyNote = fixture.nativeElement.querySelector('.safety-note') as HTMLElement | null;
+    expect(safetyNote?.textContent).toContain(
+      'DITERBITKAN belum otomatis mengizinkan pekerjaan dimulai',
+    );
+    expect(safetyNote?.textContent).toContain('tanda tangan lapangan tetap wajib pada hardcopy');
   });
 
   it('shows a renewal failure beside the renewal form instead of at the top', () => {

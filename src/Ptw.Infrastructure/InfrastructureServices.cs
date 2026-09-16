@@ -59,6 +59,36 @@ public static class InfrastructureServices
                 ? new LocalAttachmentStorage(provider.GetRequiredService<AttachmentSettings>())
                 : new DisabledAttachmentStorage());
         services.AddSingleton<IMalwareScanner, UnavailableMalwareScanner>();
+
+        var generatedDocumentSettings = new GeneratedDocumentSettings
+        {
+            Enabled = bool.TryParse(configuration["GeneratedDocuments:Enabled"], out var documentsEnabled)
+                && documentsEnabled,
+            StoragePath = configuration["GeneratedDocuments:StoragePath"] ?? string.Empty,
+            MaxRenderAttempts = int.TryParse(
+                configuration["GeneratedDocuments:MaxRenderAttempts"],
+                out var maxRenderAttempts) && maxRenderAttempts > 0
+                ? maxRenderAttempts
+                : 5
+        };
+        if (generatedDocumentSettings.Enabled && string.IsNullOrWhiteSpace(generatedDocumentSettings.StoragePath))
+        {
+            throw new InvalidOperationException(
+                "GeneratedDocuments yang aktif memerlukan StoragePath yang valid.");
+        }
+
+        services.AddSingleton(generatedDocumentSettings);
+        services.AddScoped<IPrintPackageStore, PrintPackageStore>();
+        services.AddSingleton<IGeneratedDocumentStorage>(provider =>
+            generatedDocumentSettings.Enabled
+                ? new LocalGeneratedDocumentStorage(provider.GetRequiredService<GeneratedDocumentSettings>())
+                : new DisabledGeneratedDocumentStorage());
+        // Fail-closed by default: without an approved template binding no official document is produced.
+        services.AddSingleton<IPrintPackageRenderer>(_ =>
+            generatedDocumentSettings.Enabled
+                ? new Printing.PtwFormRenderer()
+                : new UnavailablePrintPackageRenderer());
+        services.AddScoped<PrintPackageRenderExecutor>();
         return services;
     }
 }

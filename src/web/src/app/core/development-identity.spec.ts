@@ -53,6 +53,16 @@ describe('developmentIdentityInterceptor', () => {
     const areaOwner = DEVELOPMENT_IDENTITIES.find((item) => item.key === 'area-owner-orf');
 
     expect(areaOwner?.roles).toEqual(['AreaOwnerManager']);
-    expect(areaOwner?.locationScopes).toEqual(['ORF', 'SITE-OFFICE']);
+    expect(areaOwner?.locationScopes).toEqual(['ORF']);
+
+    const siteOfficeOwner = DEVELOPMENT_IDENTITIES.find(
+      (item) => item.key === 'area-owner-site-office',
+    );
+    expect(siteOfficeOwner?.locationScopes).toEqual(['SITE_OFFICE']);
+
+    const waterBasedOwner = DEVELOPMENT_IDENTITIES.find(
+      (item) => item.key === 'area-owner-water-based',
+    );
+    expect(waterBasedOwner?.locationScopes).toEqual(['WATER_BASED']);
   });
 });

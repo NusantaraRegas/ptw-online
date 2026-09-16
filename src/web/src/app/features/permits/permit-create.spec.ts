@@ -29,6 +29,15 @@ describe('PermitCreate', () => {
       ],
       count: 2,
     });
+    httpTesting.expectOne('/api/v1/reference-data/work-types').flush([
+      {
+        permitClass: 'HotWork',
+        options: [
+          { code: 'HOT_GRINDING', label: 'Menggerinda' },
+          { code: 'HOT_WELDING', label: 'Mengelas' },
+        ],
+      },
+    ]);
     fixture.detectChanges();
 
     const options = Array.from(
@@ -59,8 +68,50 @@ describe('PermitCreate', () => {
       isDevelopmentIdentity: true,
     });
     httpTesting.expectOne('/api/v1/locations').flush({ items: [], count: 0 });
+    httpTesting.expectOne('/api/v1/reference-data/work-types').flush([]);
 
     const form = (fixture.componentInstance as unknown as { form: FormGroup }).form;
     expect(form.controls['sponsorId'].value).toBe('sponsor.only.demo');
+  });
+
+  it('allows multiple controlled work types to be selected', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PermitCreate],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PermitCreate);
+    fixture.detectChanges();
+    const httpTesting = TestBed.inject(HttpTestingController);
+
+    httpTesting.expectOne('/api/v1/me').flush({
+      userId: 'sponsor.only.demo',
+      displayName: 'Sponsor Only Demo',
+      roles: ['Sponsor'],
+      locationScopes: ['*'],
+      competencyCodes: [],
+      isDevelopmentIdentity: true,
+    });
+    httpTesting.expectOne('/api/v1/locations').flush({ items: [], count: 0 });
+    httpTesting.expectOne('/api/v1/reference-data/work-types').flush([
+      {
+        permitClass: 'HotWork',
+        options: [
+          { code: 'HOT_GRINDING', label: 'Menggerinda' },
+          { code: 'HOT_WELDING', label: 'Mengelas' },
+        ],
+      },
+    ]);
+    fixture.detectChanges();
+
+    const checkboxes = Array.from<HTMLInputElement>(
+      fixture.nativeElement.querySelectorAll('.work-type-option input'),
+    );
+    checkboxes.forEach((checkbox) => {
+      checkbox.checked = true;
+      checkbox.dispatchEvent(new Event('change'));
+    });
+
+    const form = (fixture.componentInstance as unknown as { form: FormGroup }).form;
+    expect(form.controls['workTypeCodes'].value).toEqual(['HOT_GRINDING', 'HOT_WELDING']);
   });
 });

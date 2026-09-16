@@ -406,7 +406,14 @@ public sealed class OperationalPolicyApiTests(PtwApiFactory factory)
             PermitDraft("UNCONFIGURED-LOCATION", "sponsor.demo"));
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        Assert.Equal("policy.activation_not_ready", await ProblemCodeAsync(response));
+        using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(
+            "policy.activation_not_ready",
+            problem.RootElement.GetProperty("code").GetString());
+        Assert.Contains(
+            "Master authorization diaktifkan",
+            problem.RootElement.GetProperty("detail").GetString(),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private static OperationalPolicySettings PolicyConfiguration(
@@ -551,7 +558,8 @@ public sealed class OperationalPolicyApiTests(PtwApiFactory factory)
         null,
         ["Energi tersimpan"],
         ["Isolasi energi"],
-        []);
+        [],
+        WorkTypeCodes: ["COLD_MECHANICAL"]);
 
     private static PolicyUatSuiteDraftRequest UatDraft(
         string suiteKey,

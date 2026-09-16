@@ -215,7 +215,8 @@ public sealed class PermitStateMachineTests
         var permit = Permit.CreateDraft(ValidDraft() with
         {
             SubmitterType = " contractor ",
-            WorkTypeCode = "  WELDING ",
+            WorkTypeCode = null,
+            WorkTypeCodes = [" hot_welding ", "HOT_GRINDING", "HOT_WELDING"],
             EquipmentTag = " P-101 ",
             PlantArea = " Process Area ",
             SimopsDeclaration = " Tidak ada SIMOPS ",
@@ -227,7 +228,8 @@ public sealed class PermitStateMachineTests
         }, Now);
 
         Assert.Equal("CONTRACTOR", permit.Draft.SubmitterType);
-        Assert.Equal("WELDING", permit.Draft.WorkTypeCode);
+        Assert.Equal("HOT_GRINDING", permit.Draft.WorkTypeCode);
+        Assert.Equal(["HOT_GRINDING", "HOT_WELDING"], permit.Draft.WorkTypeCodes);
         Assert.Equal(["APAR", "FIRE_WATCH"], permit.Draft.SafetyEquipmentCodes);
         Assert.Equal("JSA-001", permit.Draft.JsaDocumentNumber);
     }
@@ -239,6 +241,24 @@ public sealed class PermitStateMachineTests
             Permit.CreateDraft(ValidDraft() with { SubmitterType = "INTERNAL_VENDOR" }, Now));
 
         Assert.Equal("permit.submitter_type_invalid", error.Code);
+    }
+
+    [Fact]
+    public void DraftRejectsWorkTypeFromAnotherPermitClass()
+    {
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            Permit.CreateDraft(ValidDraft() with { WorkTypeCodes = ["COLD_PAINTING"] }, Now));
+
+        Assert.Equal("permit.work_type_invalid", error.Code);
+    }
+
+    [Fact]
+    public void DraftRequiresAtLeastOneControlledWorkType()
+    {
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            Permit.CreateDraft(ValidDraft() with { WorkTypeCode = null, WorkTypeCodes = [] }, Now));
+
+        Assert.Equal("permit.work_type_required", error.Code);
     }
 
     private static Permit CreatePermit() => Permit.CreateDraft(ValidDraft(), Now);
@@ -295,5 +315,6 @@ public sealed class PermitStateMachineTests
         "ESM-2026-00123",
         [],
         [],
-        ["JSA"]);
+        ["JSA"],
+        WorkTypeCodes: ["HOT_WELDING"]);
 }

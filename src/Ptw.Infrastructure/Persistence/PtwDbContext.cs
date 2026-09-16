@@ -159,6 +159,7 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         generatedDocument.Property(x => x.Sha256).HasMaxLength(64).IsFixedLength();
         generatedDocument.Property(x => x.RenderStatus).HasMaxLength(20);
         generatedDocument.Property(x => x.LastError).HasMaxLength(2000);
+        generatedDocument.Property(x => x.RendererVersion).HasMaxLength(100);
         generatedDocument.Property(x => x.RowVersion).IsRowVersion();
         generatedDocument.HasIndex(x => x.PrintPackageSnapshotId).IsUnique();
         generatedDocument.HasIndex(x => new { x.RenderStatus, x.NextAttemptAt });

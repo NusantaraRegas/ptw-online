@@ -28,7 +28,14 @@ public sealed record PermitDraftRequest(
     IReadOnlyList<string>? IsolationPrecautionCodes = null,
     string? JsaDocumentNumber = null,
     string? JsaRevision = null,
-    DateTimeOffset? JsaDate = null);
+    DateTimeOffset? JsaDate = null,
+    IReadOnlyList<string>? WorkTypeCodes = null);
+
+public sealed record PermitWorkTypeOptionResponse(string Code, string Label);
+
+public sealed record PermitWorkTypeCatalogResponse(
+    string PermitClass,
+    IReadOnlyList<PermitWorkTypeOptionResponse> Options);
 
 public sealed record SubmitPermitRequest(
     bool ESimiEligible,

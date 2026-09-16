@@ -21,6 +21,7 @@ export interface PermitDraft {
   requiredDocumentCodes: string[];
   submitterType?: 'CONTRACTOR' | 'USER_SPONSOR';
   workTypeCode?: string | null;
+  workTypeCodes?: string[];
   equipmentTag?: string | null;
   plantArea?: string | null;
   clsrApplicable?: boolean;
@@ -30,6 +31,16 @@ export interface PermitDraft {
   jsaDocumentNumber?: string | null;
   jsaRevision?: string | null;
   jsaDate?: string | null;
+}
+
+export interface PermitWorkTypeOption {
+  code: string;
+  label: string;
+}
+
+export interface PermitWorkTypeCatalog {
+  permitClass: string;
+  options: PermitWorkTypeOption[];
 }
 
 export interface Permit {
@@ -176,6 +187,11 @@ export class PermitApi {
   listTasks(): Observable<PagedPermitTasks> {
     return this.http.get<PagedPermitTasks>('/api/v1/tasks');
   }
+
+  listWorkTypes(): Observable<PermitWorkTypeCatalog[]> {
+    return this.http.get<PermitWorkTypeCatalog[]>('/api/v1/reference-data/work-types');
+  }
+
   create(draft: PermitDraft): Observable<Permit> {
     return this.http.post<Permit>('/api/v1/permits', draft);
   }

@@ -1,11 +1,13 @@
 import { DatePipe } from '@angular/common';
-import { Component, DestroyRef, input, output, signal } from '@angular/core';
+import { Component, computed, DestroyRef, input, output, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { catchError, concatMap, defer, EMPTY, finalize, from, tap } from 'rxjs';
 import {
   PermitAttachment,
   PermitAttachmentApi,
+  PermitAttachmentCategory,
   PermitAttachmentMutation,
+  PermitAttachmentUpload,
 } from '../../core/permit-attachment-api';
 
 interface PendingUpload {
@@ -32,11 +34,22 @@ export class PermitAttachments {
   readonly canManage = input(false);
   readonly permitChanged = output<PermitAttachmentPermitChange>();
 
+  /** Ready print packages a signed field copy can be reconciled against. */
+  readonly printPackages = input<{ id: string; permitVersion: number }[]>([]);
+
   protected readonly attachments = signal<PermitAttachment[]>([]);
   protected readonly pending = signal<PendingUpload[]>([]);
   protected readonly loading = signal(true);
   protected readonly busy = signal(false);
   protected readonly error = signal('');
+  protected readonly category = signal<PermitAttachmentCategory>('SUPPORTING');
+  protected readonly documentNumber = signal('');
+  protected readonly documentRevision = signal('');
+  protected readonly documentDate = signal('');
+  protected readonly printPackageId = signal('');
+  protected readonly hasUnavailableDownloads = computed(() =>
+    this.attachments().some((attachment) => attachment.scanStatus !== 'CLEAN'),
+  );
 
   private currentETag = '';
 
@@ -60,15 +73,26 @@ export class PermitAttachments {
     input.value = '';
     if (files.length === 0 || this.busy()) return;
 
-    const invalid = files.filter(
-      (file) =>
-        (file.type !== '' && file.type !== 'application/pdf') ||
-        !file.name.toLocaleLowerCase().endsWith('.pdf'),
-    );
+    const invalid = files.filter((file) => !PermitAttachments.isAcceptedType(file));
     if (invalid.length > 0) {
       this.error.set(
-        `Hanya PDF yang dapat diunggah: ${invalid.map((file) => file.name).join(', ')}`,
+        `Hanya PDF, JPEG, atau PNG yang dapat diunggah: ${invalid
+          .map((file) => file.name)
+          .join(', ')}`,
       );
+      return;
+    }
+
+    const metadata = this.uploadMetadata();
+    if (metadata === null) {
+      this.error.set(
+        'Kategori JSA dan Salinan Lapangan Bertanda Tangan memerlukan nomor, revisi, dan tanggal dokumen.',
+      );
+      return;
+    }
+
+    if (metadata.category === 'SIGNED_FIELD_COPY' && !metadata.printPackageId) {
+      this.error.set('Salinan lapangan wajib dikaitkan dengan paket cetak resmi yang dicetak.');
       return;
     }
 
@@ -81,7 +105,7 @@ export class PermitAttachments {
         concatMap(({ id, file }) =>
           defer(() => {
             this.updatePending(id, 'mengunggah');
-            return this.api.upload(this.permitId(), this.currentETag, file);
+            return this.api.upload(this.permitId(), this.currentETag, file, metadata);
           }).pipe(
             tap((result) => {
               this.applyMutation(result);
@@ -99,6 +123,45 @@ export class PermitAttachments {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe();
+  }
+
+  protected setCategory(value: string): void {
+    this.category.set(value as PermitAttachmentCategory);
+    this.error.set('');
+  }
+
+  /** The server accepts PDF, JPEG and PNG; the picker must not be stricter than the contract. */
+  private static isAcceptedType(file: File): boolean {
+    const accepted = ['application/pdf', 'image/jpeg', 'image/png'];
+    const extensions = ['.pdf', '.jpg', '.jpeg', '.png'];
+    const name = file.name.toLocaleLowerCase();
+    return (
+      (file.type === '' || accepted.includes(file.type)) &&
+      extensions.some((extension) => name.endsWith(extension))
+    );
+  }
+
+  /** Returns null when the chosen category is missing its mandatory document metadata. */
+  private uploadMetadata(): PermitAttachmentUpload | null {
+    const category = this.category();
+    if (category === 'SUPPORTING') {
+      return { category };
+    }
+
+    const documentNumber = this.documentNumber().trim();
+    const documentRevision = this.documentRevision().trim();
+    const documentDate = this.documentDate();
+    if (!documentNumber || !documentRevision || !documentDate) {
+      return null;
+    }
+
+    return {
+      category,
+      documentNumber,
+      documentRevision,
+      documentDate,
+      printPackageId: category === 'SIGNED_FIELD_COPY' ? this.printPackageId() || null : null,
+    };
   }
 
   protected remove(attachment: PermitAttachment): void {
@@ -142,6 +205,30 @@ export class PermitAttachments {
     return bytes < 1024 * 1024
       ? `${Math.ceil(bytes / 1024)} KB`
       : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  protected categoryLabel(category: PermitAttachmentCategory): string {
+    switch (category) {
+      case 'JSA':
+        return 'JSA';
+      case 'SIGNED_FIELD_COPY':
+        return 'Salinan lapangan';
+      default:
+        return 'Dokumen pendukung';
+    }
+  }
+
+  protected scanLabel(status: string): string {
+    switch (status) {
+      case 'CLEAN':
+        return 'Aman';
+      case 'INFECTED':
+        return 'Diblokir';
+      case 'FAILED':
+        return 'Pemeriksaan gagal';
+      default:
+        return 'Sedang diperiksa';
+    }
   }
 
   private load(): void {

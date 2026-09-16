@@ -1,9 +1,18 @@
 <section class="attachments" aria-labelledby="attachments-title">
-  <header>
-    <div>
-      <h3 id="attachments-title">Lampiran PTW</h3>
-      <p>Dokumen PDF, JPEG, atau PNG pendukung dalam penyimpanan privat.</p>
+  <header class="attachments-header">
+    <div class="attachments-heading">
+      <span class="heading-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 17V4m0 0L7.5 8.5M12 4l4.5 4.5" />
+          <path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+        </svg>
+      </span>
+      <div>
+        <h3 id="attachments-title">Lampiran PTW</h3>
+        <p>Tambahkan dokumen pendukung dalam format PDF, JPEG, atau PNG.</p>
+      </div>
     </div>
+
     @if (canManage()) {
       <label class="upload-button" [class.disabled]="busy()">
         <input
@@ -13,20 +22,107 @@
           [disabled]="busy()"
           (change)="selectFiles($event)"
         />
-        {{ busy() ? 'Mengunggah…' : 'Tambah file' }}
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          @if (busy()) {
+            <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+          } @else {
+            <path d="M12 5v14M5 12h14" />
+          }
+        </svg>
+        {{ busy() ? 'Mengunggah…' : 'Tambah lampiran' }}
       </label>
     }
   </header>
 
+  @if (canManage()) {
+    <fieldset class="upload-metadata">
+      <legend>Detail dokumen yang akan diunggah</legend>
+      <div class="metadata-grid">
+        <label class="field category-field">
+          <span>Kategori lampiran</span>
+          <select
+            [value]="category()"
+            [disabled]="busy()"
+            aria-describedby="category-help"
+            (change)="setCategory($any($event.target).value)"
+          >
+            <option value="SUPPORTING">Dokumen pendukung</option>
+            <option value="JSA">JSA</option>
+            <option value="SIGNED_FIELD_COPY">Salinan lapangan bertanda tangan</option>
+          </select>
+        </label>
+
+        @if (category() !== 'SUPPORTING') {
+          <label class="field">
+            <span>Nomor dokumen</span>
+            <input
+              [value]="documentNumber()"
+              [disabled]="busy()"
+              (input)="documentNumber.set($any($event.target).value)"
+            />
+          </label>
+          <label class="field">
+            <span>Revisi</span>
+            <input
+              [value]="documentRevision()"
+              [disabled]="busy()"
+              (input)="documentRevision.set($any($event.target).value)"
+            />
+          </label>
+          <label class="field">
+            <span>Tanggal dokumen</span>
+            <input
+              type="date"
+              [value]="documentDate()"
+              [disabled]="busy()"
+              (input)="documentDate.set($any($event.target).value)"
+            />
+          </label>
+        }
+        @if (category() === 'SIGNED_FIELD_COPY') {
+          <label class="field print-package-field">
+            <span>Paket cetak sumber</span>
+            <select
+              [value]="printPackageId()"
+              [disabled]="busy()"
+              (change)="printPackageId.set($any($event.target).value)"
+            >
+              <option value="">Pilih paket cetak…</option>
+              @for (option of printPackages(); track option.id) {
+                <option [value]="option.id">Versi {{ option.permitVersion }}</option>
+              }
+            </select>
+          </label>
+        }
+      </div>
+
+      <p id="category-help" class="metadata-note">
+        @if (category() === 'SIGNED_FIELD_COPY') {
+          Salinan lapangan harus dikaitkan dengan paket cetak resmi yang digunakan di lapangan.
+        } @else if (category() === 'JSA') {
+          Nomor, revisi, dan tanggal diperlukan untuk menjaga keterlacakan dokumen JSA.
+        } @else {
+          Gunakan kategori ini untuk foto, gambar, atau dokumen pendukung lainnya.
+        }
+      </p>
+    </fieldset>
+  }
+
   @if (error()) {
-    <p class="attachment-error" role="alert">{{ error() }}</p>
+    <p class="attachment-error" role="alert">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v5m0 3h.01" />
+      </svg>
+      <span>{{ error() }}</span>
+    </p>
   }
 
   @if (pending().length > 0) {
-    <ul class="pending-list" aria-live="polite">
+    <ul class="pending-list" aria-live="polite" aria-label="Progres unggah lampiran">
       @for (item of pending(); track item.id) {
         <li>
-          <span>{{ item.name }}</span>
+          <span class="pending-name">{{ item.name }}</span>
           <strong [class.failed]="item.status === 'gagal'">{{ item.status }}</strong>
           @if (item.error) {
             <small>{{ item.error }}</small>
@@ -37,19 +133,56 @@
   }
 
   @if (loading()) {
-    <p class="empty">Memuat lampiran…</p>
+    <div class="loading-state" role="status">
+      <span>Memuat lampiran…</span>
+    </div>
   } @else if (attachments().length === 0) {
-    <p class="empty">Belum ada lampiran.</p>
+    <div class="empty-state" role="status">
+      <span class="empty-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M7 3h7l4 4v14H7z" />
+          <path d="M14 3v5h5M9.5 13h5M9.5 16h5" />
+        </svg>
+      </span>
+      <div>
+        <h4>Belum ada lampiran</h4>
+        <p>
+          {{
+            canManage()
+              ? 'Pilih kategori, lalu gunakan tombol “Tambah lampiran” untuk mengunggah dokumen.'
+              : 'Dokumen pendukung untuk PTW ini belum tersedia.'
+          }}
+        </p>
+      </div>
+    </div>
   } @else {
+    <div class="attachment-list-heading">
+      <h4>Dokumen terlampir</h4>
+      <span>{{ attachments().length }} file</span>
+    </div>
     <ul class="attachment-list">
       @for (attachment of attachments(); track attachment.id) {
         <li>
-          <div class="file-icon" aria-hidden="true">FILE</div>
+          <span class="file-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M7 3h7l4 4v14H7z" />
+              <path d="M14 3v5h5" />
+            </svg>
+          </span>
           <div class="file-info">
-            <strong>{{ attachment.fileName }}</strong>
-            <span>
-              {{ attachment.category }} · scan {{ attachment.scanStatus }} ·
-              {{ formatSize(attachment.sizeBytes) }} · diunggah {{ attachment.uploadedBy }} ·
+            <strong [title]="attachment.fileName">{{ attachment.fileName }}</strong>
+            <div class="file-badges">
+              <span class="category-badge">{{ categoryLabel(attachment.category) }}</span>
+              <span
+                class="scan-badge"
+                [class.clean]="attachment.scanStatus === 'CLEAN'"
+                [class.blocked]="attachment.scanStatus === 'INFECTED'"
+              >
+                {{ scanLabel(attachment.scanStatus) }}
+              </span>
+            </div>
+            <span class="file-meta">
+              {{ formatSize(attachment.sizeBytes) }} • diunggah oleh {{ attachment.uploadedBy }} •
               {{ attachment.uploadedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
             </span>
           </div>
@@ -63,6 +196,9 @@
               "
               (click)="download(attachment)"
             >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 4v11m0 0l-4-4m4 4 4-4M5 20h14" />
+              </svg>
               Unduh
             </button>
             @if (canManage()) {
@@ -74,8 +210,10 @@
         </li>
       }
     </ul>
-    <p id="scan-download-note" class="empty">
-      File hanya dapat diunduh setelah malware scanner menyatakan status CLEAN.
-    </p>
+    @if (hasUnavailableDownloads()) {
+      <p id="scan-download-note" class="scan-note">
+        File dapat diunduh setelah pemeriksaan keamanan selesai dan statusnya aman.
+      </p>
+    }
   }
 </section>

@@ -95,7 +95,7 @@
           </div>
           <div>
             <dt>Jenis pekerjaan</dt>
-            <dd>{{ permit()!.draft.workTypeCode || 'Belum diisi' }}</dd>
+            <dd>{{ workTypeLabels(permit()!.draft) }}</dd>
           </div>
           <div>
             <dt>Equipment/tag</dt>
@@ -142,6 +142,7 @@
           [permitId]="permit()!.id"
           [eTag]="permit()!.eTag"
           [canManage]="canManageAttachments()"
+          [printPackages]="readyPrintPackages()"
           (permitChanged)="applyAttachmentPermitChange($event)"
         />
       </article>
@@ -185,6 +186,13 @@
           </dl>
         </section>
         <app-permit-validation-progress [workflow]="permit()!.workflow" />
+
+        <app-permit-print-packages
+          [permitId]="permit()!.id"
+          [canRetry]="canRetryPrintPackage()"
+          [canPreview]="canManageAttachments()"
+          (readyPackages)="readyPrintPackages.set($event)"
+        />
 
         @if (permit()!.workflow.suspension.suspended) {
           <section class="card evidence-card suspension-evidence">
@@ -419,12 +427,39 @@
             <option value="ConfinedSpaceEntry">Memasuki Ruang Terbatas</option>
           </select></label
         >
-        <label>Jenis pekerjaan<input formControlName="workTypeCode" /></label>
+        <fieldset class="work-types wide" aria-describedby="edit-work-type-help">
+          <legend>Jenis pekerjaan</legend>
+          <small id="edit-work-type-help">
+            Pilih satu atau lebih jenis pekerjaan sesuai Bagian 1 formulir PTW.
+          </small>
+          @if (loadingWorkTypes()) {
+            <p class="work-type-state">Memuat daftar jenis pekerjaan...</p>
+          } @else if (workTypeError()) {
+            <p class="work-type-state error-text" role="alert">{{ workTypeError() }}</p>
+          } @else {
+            <div class="work-type-options">
+              @for (option of workTypeOptions(); track option.code) {
+                <label class="work-type-option">
+                  <input
+                    type="checkbox"
+                    [checked]="isWorkTypeSelected(option.code)"
+                    (change)="toggleWorkType(option.code, $event)"
+                  />
+                  <span>{{ option.label }}</span>
+                </label>
+              }
+            </div>
+          }
+          @if (form.controls.workTypeCodes.touched && form.controls.workTypeCodes.invalid) {
+            <span class="field-error" role="alert">Pilih minimal satu jenis pekerjaan.</span>
+          }
+        </fieldset>
         <label>Equipment/tag<input formControlName="equipmentTag" /></label>
         <label>Plant/area<input formControlName="plantArea" /></label>
-        <label class="check"
-          ><input type="checkbox" formControlName="clsrApplicable" /> CLSR berlaku</label
-        >
+        <label class="clsr-option">
+          <input type="checkbox" formControlName="clsrApplicable" />
+          <span>CLSR berlaku</span>
+        </label>
         <label class="wide"
           >Deklarasi SIMOPS<textarea formControlName="simopsDeclaration" rows="2"></textarea>
         </label>

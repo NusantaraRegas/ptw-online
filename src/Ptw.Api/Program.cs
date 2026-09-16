@@ -19,6 +19,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IActorContext, HttpActorContext>();
 builder.Services.AddScoped<PermitService>();
 builder.Services.AddScoped<PermitAttachmentService>();
+builder.Services.AddScoped<PrintPackageService>();
 builder.Services.AddScoped<LocationMasterService>();
 builder.Services.AddScoped<LocationLookupService>();
 builder.Services.AddScoped<UserAuthorizationService>();
@@ -29,6 +30,9 @@ builder.Services.AddScoped<IOperationalPolicyGate, OperationalPolicyGate>();
 builder.Services.AddSingleton(
     builder.Configuration.GetSection("OperationalPolicy").Get<OperationalPolicySettings>()
     ?? new OperationalPolicySettings());
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection("LocationRelease").Get<LocationReleaseSettings>()
+    ?? new LocationReleaseSettings());
 builder.Services.AddSingleton(
     builder.Configuration.GetSection("IssuancePolicy").Get<IssuancePolicySettings>()
     ?? new IssuancePolicySettings());

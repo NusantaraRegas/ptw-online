@@ -4,7 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { IdentityApi } from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
-import { PermitApi, PermitDraft } from '../../core/permit-api';
+import { PermitApi, PermitDraft, PermitWorkTypeOption } from '../../core/permit-api';
 
 function localDate(hoursFromNow: number): string {
   const date = new Date(Date.now() + hoursFromNow * 3_600_000);
@@ -96,12 +96,39 @@ function localDate(hoursFromNow: number): string {
             <option value="Extreme">Ekstrem</option>
           </select></label
         >
-        <label>Jenis pekerjaan<input formControlName="workTypeCode" /></label>
+        <fieldset class="work-types wide" aria-describedby="work-type-help">
+          <legend>Jenis pekerjaan</legend>
+          <small id="work-type-help">
+            Pilih satu atau lebih jenis pekerjaan sesuai Bagian 1 formulir PTW.
+          </small>
+          @if (loadingWorkTypes()) {
+            <p class="work-type-state">Memuat daftar jenis pekerjaan...</p>
+          } @else if (workTypeError()) {
+            <p class="work-type-state error-text" role="alert">{{ workTypeError() }}</p>
+          } @else {
+            <div class="work-type-options">
+              @for (option of workTypeOptions(); track option.code) {
+                <label class="work-type-option">
+                  <input
+                    type="checkbox"
+                    [checked]="isWorkTypeSelected(option.code)"
+                    (change)="toggleWorkType(option.code, $event)"
+                  />
+                  <span>{{ option.label }}</span>
+                </label>
+              }
+            </div>
+          }
+          @if (form.controls.workTypeCodes.touched && form.controls.workTypeCodes.invalid) {
+            <span class="field-error" role="alert">Pilih minimal satu jenis pekerjaan.</span>
+          }
+        </fieldset>
         <label>Equipment/tag<input formControlName="equipmentTag" /></label>
         <label>Plant/area<input formControlName="plantArea" /></label>
-        <label class="check"
-          ><input type="checkbox" formControlName="clsrApplicable" /> CLSR berlaku</label
-        >
+        <label class="clsr-option">
+          <input type="checkbox" formControlName="clsrApplicable" />
+          <span>CLSR berlaku</span>
+        </label>
         <label class="wide"
           >Deklarasi SIMOPS<textarea formControlName="simopsDeclaration" rows="2"></textarea>
         </label>
@@ -261,6 +288,9 @@ export class PermitCreate {
   protected readonly locations = signal<LocationOption[]>([]);
   protected readonly loadingLocations = signal(true);
   protected readonly locationError = signal('');
+  protected readonly workTypeCatalog = signal<Record<string, PermitWorkTypeOption[]>>({});
+  protected readonly loadingWorkTypes = signal(true);
+  protected readonly workTypeError = signal('');
   protected readonly form = this.fb.nonNullable.group({
     title: ['', Validators.required],
     description: ['', Validators.required],
@@ -273,7 +303,9 @@ export class PermitCreate {
     }),
     permitClass: ['HotWork', Validators.required],
     riskLevel: ['High', Validators.required],
-    workTypeCode: ['', Validators.required],
+    workTypeCodes: this.fb.nonNullable.control<string[]>([], {
+      validators: [Validators.required],
+    }),
     equipmentTag: [''],
     plantArea: ['', Validators.required],
     clsrApplicable: [false],
@@ -317,6 +349,48 @@ export class PermitCreate {
           );
         },
       });
+
+    this.api
+      .listWorkTypes()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (catalog) => {
+          this.workTypeCatalog.set(
+            Object.fromEntries(catalog.map((item) => [item.permitClass, item.options])),
+          );
+          this.loadingWorkTypes.set(false);
+          this.reconcileWorkTypeSelection();
+        },
+        error: (response) => {
+          this.loadingWorkTypes.set(false);
+          this.workTypeError.set(
+            response?.error?.detail ??
+              'Daftar jenis pekerjaan gagal dimuat. Coba muat ulang halaman.',
+          );
+        },
+      });
+
+    this.form.controls.permitClass.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.reconcileWorkTypeSelection());
+  }
+
+  protected workTypeOptions(): PermitWorkTypeOption[] {
+    return this.workTypeCatalog()[this.form.controls.permitClass.value] ?? [];
+  }
+
+  protected isWorkTypeSelected(code: string): boolean {
+    return this.form.controls.workTypeCodes.value.includes(code);
+  }
+
+  protected toggleWorkType(code: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    const current = this.form.controls.workTypeCodes.value;
+    const next = checked
+      ? [...new Set([...current, code])]
+      : current.filter((item) => item !== code);
+    this.form.controls.workTypeCodes.setValue(next);
+    this.form.controls.workTypeCodes.markAsTouched();
   }
 
   protected save(): void {
@@ -333,7 +407,7 @@ export class PermitCreate {
       hazards: [],
       controls: [],
       requiredDocumentCodes: [],
-      workTypeCode: value.workTypeCode || null,
+      workTypeCode: null,
       equipmentTag: value.equipmentTag || null,
       plantArea: value.plantArea || null,
       simopsDeclaration: value.simopsDeclaration || null,
@@ -359,5 +433,14 @@ export class PermitCreate {
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
+  }
+
+  private reconcileWorkTypeSelection(): void {
+    const validCodes = new Set(this.workTypeOptions().map((option) => option.code));
+    const current = this.form.controls.workTypeCodes.value;
+    const next = current.filter((code) => validCodes.has(code));
+    if (next.length !== current.length) {
+      this.form.controls.workTypeCodes.setValue(next);
+    }
   }
 }

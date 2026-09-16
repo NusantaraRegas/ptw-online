@@ -39,6 +39,8 @@ Thumbs.db
 attachments/
 quarantine/
 generated-documents/
+output/
+tmp/
 sql-data/
 logs/
 *.log

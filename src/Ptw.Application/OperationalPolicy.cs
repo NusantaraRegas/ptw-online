@@ -52,6 +52,27 @@ public sealed class OperationalPolicySettings
         new(StringComparer.OrdinalIgnoreCase);
 }
 
+public sealed class LocationReleaseSettings
+{
+    public Dictionary<string, string> AreaOwnerDepartments { get; init; } = [];
+
+    public bool TryGetAreaOwnerDepartment(string locationCode, out string department)
+    {
+        foreach (var route in AreaOwnerDepartments)
+        {
+            if (string.Equals(route.Key, locationCode, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(route.Value))
+            {
+                department = route.Value.Trim();
+                return true;
+            }
+        }
+
+        department = string.Empty;
+        return false;
+    }
+}
+
 public sealed class IssuancePolicySettings
 {
     public bool Approved { get; init; }

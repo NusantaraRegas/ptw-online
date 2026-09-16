@@ -6,9 +6,16 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Observable } from 'rxjs';
 import { DevelopmentIdentityStore } from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
-import { Permit, PermitApi, PermitDraft, PermitTask } from '../../core/permit-api';
+import {
+  Permit,
+  PermitApi,
+  PermitDraft,
+  PermitTask,
+  PermitWorkTypeOption,
+} from '../../core/permit-api';
 import { PermitAttachmentPermitChange, PermitAttachments } from './permit-attachments';
 import { PermitHistory } from './permit-history';
+import { PermitPrintPackages } from './permit-print-packages';
 import { PermitValidationProgress } from './permit-validation-progress';
 
 function toLocalInput(value: string): string {
@@ -25,6 +32,7 @@ function toLocalInput(value: string): string {
     RouterLink,
     PermitAttachments,
     PermitHistory,
+    PermitPrintPackages,
     PermitValidationProgress,
   ],
   templateUrl: './permit-detail.html',
@@ -54,12 +62,20 @@ export class PermitDetail {
   protected readonly locations = signal<LocationOption[]>([]);
   protected readonly loadingLocations = signal(true);
   protected readonly locationError = signal('');
+  protected readonly workTypeCatalog = signal<Record<string, PermitWorkTypeOption[]>>({});
+  protected readonly loadingWorkTypes = signal(true);
+  protected readonly workTypeError = signal('');
   protected readonly roles = this.identityStore.selected().roles;
   protected readonly actorId = this.identityStore.selected().userId;
   protected readonly canEdit = computed(() => {
     const status = this.permit()?.status;
     return status === 'DRAFT' || status === 'REVISION_REQUIRED';
   });
+  /** Ready print packages, used to bind a signed field copy to the sheet actually used in the field. */
+  protected readonly readyPrintPackages = signal<{ id: string; permitVersion: number }[]>([]);
+
+  protected readonly canRetryPrintPackage = computed(() => this.roles.includes('Administrator'));
+
   protected readonly canManageAttachments = computed(
     () =>
       this.canEdit() &&
@@ -150,7 +166,9 @@ export class PermitDetail {
     }),
     permitClass: ['HotWork', Validators.required],
     riskLevel: ['High', Validators.required],
-    workTypeCode: ['', Validators.required],
+    workTypeCodes: this.fb.nonNullable.control<string[]>([], {
+      validators: [Validators.required],
+    }),
     equipmentTag: [''],
     plantArea: ['', Validators.required],
     clsrApplicable: [false],
@@ -181,6 +199,10 @@ export class PermitDetail {
 
   constructor() {
     this.loadLocations();
+    this.loadWorkTypes();
+    this.form.controls.permitClass.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.reconcileWorkTypeSelection());
     this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       this.permitId = params.get('id') ?? '';
       this.editing.set(false);
@@ -212,7 +234,9 @@ export class PermitDetail {
       submitterType: permit.draft.submitterType ?? 'USER_SPONSOR',
       permitClass: permit.draft.permitClass,
       riskLevel: permit.draft.riskLevel,
-      workTypeCode: permit.draft.workTypeCode ?? '',
+      workTypeCodes:
+        permit.draft.workTypeCodes ??
+        (permit.draft.workTypeCode ? [permit.draft.workTypeCode] : []),
       equipmentTag: permit.draft.equipmentTag ?? '',
       plantArea: permit.draft.plantArea ?? '',
       clsrApplicable: permit.draft.clsrApplicable ?? false,
@@ -256,7 +280,7 @@ export class PermitDetail {
       hazards: [],
       controls: [],
       requiredDocumentCodes: permit.draft.requiredDocumentCodes,
-      workTypeCode: value.workTypeCode || null,
+      workTypeCode: null,
       equipmentTag: value.equipmentTag || null,
       plantArea: value.plantArea || null,
       simopsDeclaration: value.simopsDeclaration || null,
@@ -298,6 +322,34 @@ export class PermitDetail {
     this.renewalError.set('');
     this.renewalConflict.set(false);
     this.load();
+  }
+
+  protected workTypeOptions(): PermitWorkTypeOption[] {
+    return this.workTypeCatalog()[this.form.controls.permitClass.value] ?? [];
+  }
+
+  protected isWorkTypeSelected(code: string): boolean {
+    return this.form.controls.workTypeCodes.value.includes(code);
+  }
+
+  protected toggleWorkType(code: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    const current = this.form.controls.workTypeCodes.value;
+    const next = checked
+      ? [...new Set([...current, code])]
+      : current.filter((item) => item !== code);
+    this.form.controls.workTypeCodes.setValue(next);
+    this.form.controls.workTypeCodes.markAsTouched();
+  }
+
+  protected workTypeLabels(draft: PermitDraft): string {
+    const codes = draft.workTypeCodes ?? (draft.workTypeCode ? [draft.workTypeCode] : []);
+    const options = this.workTypeCatalog()[draft.permitClass] ?? [];
+    return (
+      codes
+        .map((code) => options.find((option) => option.code === code)?.label ?? code)
+        .join(', ') || 'Belum diisi'
+    );
   }
 
   protected applyAttachmentPermitChange(change: PermitAttachmentPermitChange): void {
@@ -537,10 +589,41 @@ export class PermitDetail {
       });
   }
 
+  private loadWorkTypes(): void {
+    this.api
+      .listWorkTypes()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (catalog) => {
+          this.workTypeCatalog.set(
+            Object.fromEntries(catalog.map((item) => [item.permitClass, item.options])),
+          );
+          this.loadingWorkTypes.set(false);
+          this.reconcileWorkTypeSelection();
+        },
+        error: (response) => {
+          this.loadingWorkTypes.set(false);
+          this.workTypeError.set(
+            response?.error?.detail ??
+              'Daftar jenis pekerjaan gagal dimuat. Coba muat ulang halaman.',
+          );
+        },
+      });
+  }
+
   private split(value: string): string[] {
     return value
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
+  }
+
+  private reconcileWorkTypeSelection(): void {
+    const validCodes = new Set(this.workTypeOptions().map((option) => option.code));
+    const current = this.form.controls.workTypeCodes.value;
+    const next = current.filter((code) => validCodes.has(code));
+    if (next.length !== current.length) {
+      this.form.controls.workTypeCodes.setValue(next);
+    }
   }
 }

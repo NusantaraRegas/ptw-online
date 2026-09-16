@@ -1,0 +1,368 @@
+using PdfSharp.Drawing;
+using Ptw.Application;
+using Ptw.Domain;
+
+namespace Ptw.Infrastructure.Printing;
+
+/// <summary>
+/// Populates the official controlled PDF background. Coordinates are measured in PDF points from the
+/// uploaded FM-001/002/003-B-002-NR-B220 pages. The template owns all labels, rules and blank field-work
+/// areas; this overlay writes only approved snapshot data and selection marks.
+/// </summary>
+internal sealed partial class PtwFormRenderer
+{
+    private const double PointToMillimetre = 25.4 / 72.0;
+
+    private static void DrawControlledTemplateOverlay(
+        FormCanvas canvas,
+        PrintTemplateDescriptor descriptor,
+        PrintPackageSnapshotPayload snapshot,
+        string snapshotHash)
+    {
+        var layout = TemplateOverlayCatalog.Resolve(descriptor.PermitClass);
+        var draft = snapshot.Permit;
+
+        OverlayText(canvas, layout.PermitNumber, snapshot.PermitNumber, 4.4, bold: true);
+        OverlayText(canvas, layout.PermitDate, FormCanvas.Wib(snapshot.CreatedAt, "dd/MM/yy"), 4.4, bold: true);
+
+        DrawSelection(
+            canvas,
+            descriptor.WorkTypes,
+            PermitWorkTypeCatalog.NormalizeAndValidate(
+                draft.PermitClass,
+                draft.WorkTypeCodes,
+                draft.WorkTypeCode),
+            layout.WorkTypeCheckXs,
+            layout.WorkTypeCheckYs);
+
+        OverlayText(canvas, layout.AppliedDate, FormCanvas.Wib(snapshot.CreatedAt, "dd/MM/yy"), 4.2, bold: true);
+        OverlayText(canvas, layout.PlannedStart, FormCanvas.Wib(draft.ValidFrom, "dd/MM/yy HH:mm"), 4.2, bold: true);
+        OverlayText(canvas, layout.EquipmentTag, draft.EquipmentTag, 4.2, bold: true);
+        OverlayText(canvas, layout.PlantArea, draft.PlantArea, 4.2, bold: true);
+
+        var description = string.IsNullOrWhiteSpace(draft.Description)
+            ? draft.Title
+            : $"{draft.Title} - {draft.Description}";
+        OverlayParagraph(canvas, layout.Description, description, 4.1, 3.0, 2);
+
+        OverlayText(canvas, layout.SponsorName, draft.SponsorId, 4.2, bold: true, clearBackground: true);
+        OverlayText(canvas, layout.Company, draft.Company, 4.2, bold: true, clearBackground: true);
+        OverlayText(canvas, layout.PerformingAuthority, draft.PerformingAuthority, 4.0, bold: true, clearBackground: true);
+        OverlayText(canvas, layout.SponsorRole, draft.SponsorId, 4.0, clearBackground: true);
+
+        var selectedDocuments = BuildDocumentSelection(snapshot);
+        DrawChecklistSelection(
+            canvas,
+            descriptor.SupportingDocumentsPrimary,
+            selectedDocuments,
+            layout.SupportingPrimaryX,
+            layout.ChecklistYs);
+        DrawChecklistSelection(
+            canvas,
+            descriptor.SupportingDocumentsSecondary,
+            selectedDocuments,
+            layout.SupportingSecondaryX,
+            layout.ChecklistYs);
+        DrawChecklistSelection(
+            canvas,
+            descriptor.SafetyEquipmentPrimary,
+            draft.SafetyEquipmentCodes,
+            layout.SafetyPrimaryX,
+            layout.ChecklistYs);
+        DrawChecklistSelection(
+            canvas,
+            descriptor.SafetyEquipmentSecondary,
+            draft.SafetyEquipmentCodes,
+            layout.SafetySecondaryX,
+            layout.ChecklistYs);
+
+        for (var index = 0; index < PrintTemplateCatalog.IsolationOptions.Length; index++)
+        {
+            if (IsSelected(draft.IsolationPrecautionCodes, PrintTemplateCatalog.IsolationOptions[index]))
+            {
+                DrawTick(canvas, layout.IsolationChecks[index]);
+            }
+        }
+
+        OverlayText(canvas, layout.ValidFromDate, FormCanvas.Wib(draft.ValidFrom, "dd/MM/yy"), 4.0, bold: true, TextAlign.Center);
+        OverlayText(canvas, layout.ValidFromTime, FormCanvas.Wib(draft.ValidFrom, "HH:mm"), 4.0, bold: true, TextAlign.Center);
+        OverlayText(canvas, layout.ValidUntilDate, FormCanvas.Wib(draft.ValidUntil, "dd/MM/yy"), 4.0, bold: true, TextAlign.Center);
+        OverlayText(canvas, layout.ValidUntilTime, FormCanvas.Wib(draft.ValidUntil, "HH:mm"), 4.0, bold: true, TextAlign.Center);
+
+        DrawApprovalEvidence(canvas, layout, snapshot.Approval);
+
+        var reference = snapshotHash.Length >= 12 ? snapshotHash[..12] : snapshotHash;
+        OverlayText(
+            canvas,
+            layout.ReconciliationReference,
+            $"Ref: {snapshot.PermitNumber ?? "-"} | v{snapshot.PermitVersion} | {reference} | Bukti persetujuan elektronik, bukan tanda tangan tersertifikasi",
+            4.0,
+            align: TextAlign.Right);
+    }
+
+    private static void DrawSelection(
+        FormCanvas canvas,
+        IReadOnlyList<PermitWorkTypeOption> options,
+        IReadOnlyCollection<string?>? selected,
+        IReadOnlyList<double> checkXs,
+        IReadOnlyList<double> checkYs)
+    {
+        var columns = checkXs.Count;
+        foreach (var option in options)
+        {
+            if (!IsSelected(selected, option.Code))
+            {
+                continue;
+            }
+
+            var column = option.TemplateIndex % columns;
+            var row = option.TemplateIndex / columns;
+            if (row < checkYs.Count)
+            {
+                DrawTick(canvas, new PdfPoint(checkXs[column], checkYs[row]));
+            }
+        }
+    }
+
+    private static void DrawChecklistSelection(
+        FormCanvas canvas,
+        IReadOnlyList<string> labels,
+        IReadOnlyCollection<string?>? selected,
+        double checkX,
+        IReadOnlyList<double> checkYs)
+    {
+        for (var index = 0; index < labels.Count && index < checkYs.Count; index++)
+        {
+            if (IsSelected(selected, labels[index]))
+            {
+                DrawTick(canvas, new PdfPoint(checkX, checkYs[index]));
+            }
+        }
+    }
+
+    private static void DrawApprovalEvidence(
+        FormCanvas canvas,
+        TemplateOverlayLayout layout,
+        PermitApprovalEvidence? approval)
+    {
+        if (approval is null)
+        {
+            return;
+        }
+
+        var row = -1;
+        for (var index = 0; index < PrintTemplateCatalog.OperationsAuthorityPositions.Length; index++)
+        {
+            if (PositionMatches(approval.ActorPosition, PrintTemplateCatalog.OperationsAuthorityPositions[index]))
+            {
+                row = index;
+                break;
+            }
+        }
+
+        if (row < 0 || row >= layout.ApprovalRows.Count)
+        {
+            return;
+        }
+
+        var target = layout.ApprovalRows[row];
+        OverlayText(canvas, target.Name, approval.ActorId, 3.8, bold: true, TextAlign.Center);
+        OverlayText(canvas, target.Signature, "Disetujui elektronik", 3.6, bold: true, TextAlign.Center);
+        OverlayText(
+            canvas,
+            target.Date,
+            FormCanvas.Wib(approval.ApprovedAt, "dd/MM/yy HH:mm"),
+            3.6,
+            align: TextAlign.Center);
+    }
+
+    private static void DrawTick(FormCanvas canvas, PdfPoint point) =>
+        canvas.CheckMark(Pt(point.X + 0.45), Pt(point.Y + 4.8), Pt(4.2));
+
+    private static void OverlayText(
+        FormCanvas canvas,
+        PdfRect rect,
+        string? text,
+        double size,
+        bool bold = false,
+        TextAlign align = TextAlign.Left,
+        bool clearBackground = false)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        if (clearBackground)
+        {
+            canvas.Fill(Pt(rect.X - 5.5), Pt(rect.Y + 0.8), Pt(rect.Width + 6.5), Pt(rect.Height - 1.6), XColors.White);
+        }
+
+        canvas.Text(Pt(rect.X), Pt(rect.Y), Pt(rect.Width), Pt(rect.Height), text, size, bold, align);
+    }
+
+    private static void OverlayParagraph(
+        FormCanvas canvas,
+        PdfRect rect,
+        string? text,
+        double size,
+        double lineHeightMm,
+        int maxLines)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        canvas.Paragraph(Pt(rect.X), Pt(rect.Y), Pt(rect.Width), text, size, lineHeightMm, maxLines);
+    }
+
+    private static double Pt(double points) => points * PointToMillimetre;
+}
+
+internal readonly record struct PdfPoint(double X, double Y);
+
+internal readonly record struct PdfRect(double X, double Y, double Width, double Height);
+
+internal sealed record ApprovalOverlayRow(PdfRect Name, PdfRect Signature, PdfRect Date);
+
+internal sealed record TemplateOverlayLayout(
+    int PageNumber,
+    PdfRect PermitNumber,
+    PdfRect PermitDate,
+    PdfRect AppliedDate,
+    PdfRect PlannedStart,
+    PdfRect EquipmentTag,
+    PdfRect PlantArea,
+    PdfRect Description,
+    PdfRect SponsorName,
+    PdfRect Company,
+    PdfRect PerformingAuthority,
+    PdfRect SponsorRole,
+    IReadOnlyList<double> WorkTypeCheckXs,
+    IReadOnlyList<double> WorkTypeCheckYs,
+    double SupportingPrimaryX,
+    double SupportingSecondaryX,
+    double SafetyPrimaryX,
+    double SafetySecondaryX,
+    IReadOnlyList<double> ChecklistYs,
+    IReadOnlyList<PdfPoint> IsolationChecks,
+    PdfRect ValidFromDate,
+    PdfRect ValidFromTime,
+    PdfRect ValidUntilDate,
+    PdfRect ValidUntilTime,
+    IReadOnlyList<ApprovalOverlayRow> ApprovalRows,
+    PdfRect ReconciliationReference);
+
+internal static class TemplateOverlayCatalog
+{
+    private static readonly TemplateOverlayLayout HotWork = new(
+        1,
+        new(514, 198, 258, 7),
+        new(514, 207, 258, 7),
+        new(130, 287, 185, 7),
+        new(421, 287, 302, 7),
+        new(111, 295, 160, 7),
+        new(511, 295, 261, 7),
+        new(125, 302, 645, 18),
+        new(116, 354, 177, 7),
+        new(162, 372, 131, 7),
+        new(123, 412, 169, 7),
+        new(119, 450, 174, 7),
+        [87.3, 217.6, 309.6, 383.4, 462.9],
+        [231.8, 244.2, 256.2, 267.5],
+        309.6,
+        462.9,
+        549.4,
+        661.7,
+        [350.4, 358.9, 367.9, 377.3, 386.6, 396.1, 406.8, 417.2, 426.6, 436.1, 445.7, 454.5],
+        [
+            new(383.4, 516.5), new(383.4, 528.2), new(504.4, 528.2),
+            new(383.4, 539.8), new(504.4, 539.8), new(383.4, 551.3)
+        ],
+        new(480, 575, 55, 7),
+        new(571, 575, 76, 7),
+        new(480, 582, 55, 7),
+        new(571, 582, 76, 7),
+        [
+            new(new(373, 628, 78, 14), new(543, 628, 89, 14), new(634, 628, 138, 14)),
+            new(new(373, 643, 78, 14), new(543, 643, 89, 14), new(634, 643, 138, 14))
+        ],
+        new(782, 672, 393, 8));
+
+    private static readonly TemplateOverlayLayout ColdWork = new(
+        2,
+        new(530, 196, 214, 7),
+        new(530, 205, 214, 7),
+        new(115, 285, 192, 7),
+        new(415, 285, 283, 7),
+        new(96, 292, 162, 7),
+        new(526, 292, 218, 7),
+        new(110, 300, 634, 18),
+        new(100, 352, 195, 7),
+        new(146, 370, 149, 7),
+        new(107, 410, 188, 7),
+        new(103, 448, 192, 7),
+        [71.4, 201.7, 300.6, 381.5, 475.9, 556.5],
+        [229.4, 241.8, 253.8, 265.1],
+        300.6,
+        475.9,
+        556.5,
+        668.3,
+        [348.0, 356.5, 365.5, 374.9, 384.2, 393.7, 404.4, 414.8, 424.2, 433.7, 443.3, 452.0],
+        [
+            new(381.5, 509.8), new(381.5, 521.5), new(515.8, 521.5),
+            new(381.5, 533.0), new(515.8, 533.0), new(381.5, 544.6)
+        ],
+        new(490, 573, 61, 7),
+        new(570, 573, 70, 7),
+        new(490, 584, 61, 7),
+        new(570, 584, 70, 7),
+        [
+            new(new(367, 630, 84, 14), new(544, 630, 88, 14), new(634, 630, 110, 14)),
+            new(new(367, 645, 84, 14), new(544, 645, 88, 14), new(634, 645, 110, 14))
+        ],
+        new(764, 674, 394, 8));
+
+    private static readonly TemplateOverlayLayout ConfinedSpaceEntry = new(
+        3,
+        new(497, 196, 262, 7),
+        new(497, 205, 262, 7),
+        new(80, 284, 189, 7),
+        new(372, 284, 346, 7),
+        new(63, 291, 155, 7),
+        new(493, 291, 266, 7),
+        new(76, 298, 682, 18),
+        new(67, 346, 187, 7),
+        new(108, 364, 146, 7),
+        new(74, 401, 180, 7),
+        new(70, 436, 184, 7),
+        [41.5, 163.8, 256.7, 340.6, 440.2, 526.3],
+        [227.5, 239.2, 250.5, 263.2],
+        256.7,
+        440.2,
+        526.3,
+        647.4,
+        [342.7, 350.7, 359.2, 367.9, 376.7, 385.6, 395.5, 405.4, 414.1, 423.0, 432.0, 440.8],
+        [
+            new(340.6, 515.5), new(340.6, 526.3), new(484.7, 526.3),
+            new(340.6, 537.3), new(484.7, 537.3), new(340.6, 548.1)
+        ],
+        new(452, 570, 69, 7),
+        new(543, 570, 73, 7),
+        new(452, 581, 69, 7),
+        new(543, 581, 73, 7),
+        [
+            new(new(329, 634, 86, 14), new(527, 634, 88, 14), new(618, 634, 141, 14)),
+            new(new(329, 648, 86, 14), new(527, 648, 88, 14), new(618, 648, 141, 14))
+        ],
+        new(774, 674, 371, 8));
+
+    internal static TemplateOverlayLayout Resolve(PermitClass permitClass) => permitClass switch
+    {
+        PermitClass.HotWork => HotWork,
+        PermitClass.ColdWork => ColdWork,
+        PermitClass.ConfinedSpaceEntry => ConfinedSpaceEntry,
+        _ => throw new ArgumentOutOfRangeException(nameof(permitClass), permitClass, "Template overlay PTW tidak tersedia.")
+    };
+}

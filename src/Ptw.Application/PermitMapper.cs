@@ -43,7 +43,8 @@ internal static class PermitMapper
             request.IsolationPrecautionCodes,
             request.JsaDocumentNumber,
             request.JsaRevision,
-            request.JsaDate);
+            request.JsaDate,
+            request.WorkTypeCodes);
     }
 
     public static PermitResponse ToResponse(this StoredPermit stored)
@@ -117,31 +118,39 @@ internal static class PermitMapper
             index > 0 && char.IsUpper(character) ? $"_{character}" : character.ToString()))
         .ToUpperInvariant();
 
-    public static PermitDraftRequest ToRequest(this PermitDraft draft) => new(
-        draft.Title,
-        draft.Description,
-        draft.LocationId,
-        draft.SponsorId,
-        draft.PerformingAuthority,
-        draft.Company,
-        draft.PermitClass.ToString(),
-        draft.RiskLevel.ToString(),
-        draft.ValidFrom,
-        draft.ValidUntil,
-        draft.ESimiExternalId,
-        draft.ESimiNumber,
-        draft.Hazards,
-        draft.Controls,
-        draft.RequiredDocumentCodes,
-        draft.SubmitterType,
-        draft.WorkTypeCode,
-        draft.EquipmentTag,
-        draft.PlantArea,
-        draft.ClsrApplicable,
-        draft.SimopsDeclaration,
-        draft.SafetyEquipmentCodes,
-        draft.IsolationPrecautionCodes,
-        draft.JsaDocumentNumber,
-        draft.JsaRevision,
-        draft.JsaDate);
+    public static PermitDraftRequest ToRequest(this PermitDraft draft)
+    {
+        var workTypeCodes = PermitWorkTypeCatalog.NormalizeAndValidate(
+            draft.PermitClass,
+            draft.WorkTypeCodes,
+            draft.WorkTypeCode);
+        return new PermitDraftRequest(
+            draft.Title,
+            draft.Description,
+            draft.LocationId,
+            draft.SponsorId,
+            draft.PerformingAuthority,
+            draft.Company,
+            draft.PermitClass.ToString(),
+            draft.RiskLevel.ToString(),
+            draft.ValidFrom,
+            draft.ValidUntil,
+            draft.ESimiExternalId,
+            draft.ESimiNumber,
+            draft.Hazards,
+            draft.Controls,
+            draft.RequiredDocumentCodes,
+            draft.SubmitterType,
+            workTypeCodes[0],
+            draft.EquipmentTag,
+            draft.PlantArea,
+            draft.ClsrApplicable,
+            draft.SimopsDeclaration,
+            draft.SafetyEquipmentCodes,
+            draft.IsolationPrecautionCodes,
+            draft.JsaDocumentNumber,
+            draft.JsaRevision,
+            draft.JsaDate,
+            workTypeCodes);
+    }
 }

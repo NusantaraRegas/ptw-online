@@ -465,6 +465,11 @@ public sealed class Permit
                 "Masa berlaku PTW maksimum tujuh hari.");
         }
 
+        var workTypeCodes = PermitWorkTypeCatalog.NormalizeAndValidate(
+            value.PermitClass,
+            value.WorkTypeCodes,
+            value.WorkTypeCode);
+
         return value with
         {
             Title = value.Title.Trim(),
@@ -474,7 +479,8 @@ public sealed class Permit
             PerformingAuthority = value.PerformingAuthority.Trim(),
             Company = value.Company.Trim(),
             SubmitterType = submitterType,
-            WorkTypeCode = NormalizeOptional(value.WorkTypeCode),
+            WorkTypeCode = workTypeCodes[0],
+            WorkTypeCodes = workTypeCodes,
             EquipmentTag = NormalizeOptional(value.EquipmentTag),
             PlantArea = NormalizeOptional(value.PlantArea),
             SimopsDeclaration = NormalizeOptional(value.SimopsDeclaration),

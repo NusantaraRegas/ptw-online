@@ -14,7 +14,7 @@ export interface PermitAttachment {
   scanStatus: string;
   scanEvidenceReference: string | null;
   scannedAt: string | null;
-  category: 'SUPPORTING' | 'JSA' | 'SIGNED_FIELD_COPY';
+  category: PermitAttachmentCategory;
   documentNumber: string | null;
   documentRevision: string | null;
   documentDate: string | null;
@@ -23,6 +23,16 @@ export interface PermitAttachment {
   supersedesAttachmentId: string | null;
   uploadedBy: string;
   uploadedAt: string;
+}
+
+export type PermitAttachmentCategory = 'SUPPORTING' | 'JSA' | 'SIGNED_FIELD_COPY';
+
+export interface PermitAttachmentUpload {
+  category: PermitAttachmentCategory;
+  documentNumber?: string | null;
+  documentRevision?: string | null;
+  documentDate?: string | null;
+  printPackageId?: string | null;
 }
 
 export interface PermitAttachmentMutation {
@@ -39,10 +49,28 @@ export class PermitAttachmentApi {
     return this.http.get<PermitAttachment[]>(`/api/v1/permits/${permitId}/attachments`);
   }
 
-  upload(permitId: string, eTag: string, file: File): Observable<PermitAttachmentMutation> {
+  upload(
+    permitId: string,
+    eTag: string,
+    file: File,
+    metadata: PermitAttachmentUpload = { category: 'SUPPORTING' },
+  ): Observable<PermitAttachmentMutation> {
     const body = new FormData();
     body.append('file', file, file.name);
-    body.append('category', 'SUPPORTING');
+    body.append('category', metadata.category);
+    // JSA and signed field copies carry controlled document metadata that the server requires.
+    if (metadata.documentNumber) {
+      body.append('documentNumber', metadata.documentNumber);
+    }
+    if (metadata.documentRevision) {
+      body.append('documentRevision', metadata.documentRevision);
+    }
+    if (metadata.documentDate) {
+      body.append('documentDate', new Date(metadata.documentDate).toISOString());
+    }
+    if (metadata.printPackageId) {
+      body.append('printPackageId', metadata.printPackageId);
+    }
     return this.http.post<PermitAttachmentMutation>(
       `/api/v1/permits/${permitId}/attachments`,
       body,

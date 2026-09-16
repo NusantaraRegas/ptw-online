@@ -294,3 +294,104 @@ h3 {
   font-size: 11px;
   font-weight: 800;
 }
+
+/* Shared controlled Bagian 1 work-type selector used by create and edit permit forms. */
+.work-types {
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #d7e0e2;
+  border-radius: 9px;
+}
+.work-types legend {
+  padding: 0 6px;
+  color: #516970;
+  font-size: 11px;
+  font-weight: 700;
+}
+.work-types > small {
+  display: block;
+  margin-bottom: 12px;
+  color: #87979c;
+  font-size: 10px;
+}
+.work-type-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+.work-types .work-type-option {
+  min-width: 0;
+  padding: 8px 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid #e4eaec;
+  border-radius: 7px;
+  color: #38535c;
+  background: #fbfcfc;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.work-types .work-type-option:has(input:checked) {
+  border-color: #91bdca;
+  background: #eef8fa;
+}
+.work-types .work-type-option input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  accent-color: var(--nr-blue);
+}
+.work-type-state {
+  margin: 0;
+  color: #87979c;
+  font-size: 10px;
+}
+.error-text,
+.field-error {
+  color: var(--nr-red-dark);
+}
+.field-error {
+  display: block;
+  margin-top: 9px;
+  font-size: 10px;
+}
+@media (max-width: 650px) {
+  .work-type-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Keep the CLSR control and its label together instead of inheriting full-width text-input styles. */
+form label.clsr-option {
+  min-height: 42px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  align-self: end;
+  gap: 9px;
+  border: 1px solid #d7e0e2;
+  border-radius: 8px;
+  color: #38535c;
+  background: #fbfcfc;
+  cursor: pointer;
+}
+form label.clsr-option:has(input:checked) {
+  border-color: #91bdca;
+  background: #eef8fa;
+}
+form label.clsr-option > input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  accent-color: var(--nr-blue);
+}
+form label.clsr-option > span {
+  line-height: 1.35;
+}

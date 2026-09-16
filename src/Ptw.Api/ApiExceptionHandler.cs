@@ -31,7 +31,10 @@ internal sealed class ApiExceptionHandler(IProblemDetailsService problemDetailsS
             _ => (StatusCodes.Status500InternalServerError, "server.unexpected", "Terjadi kesalahan pada server")
         };
 
-        if (status >= 500)
+        // Activation failures are expected fail-closed configuration outcomes. Their messages are
+        // deliberately operator-safe and tell the user why an otherwise valid command is blocked.
+        var expectedConfigurationFailure = exception is PolicyActivationException;
+        if (status >= 500 && !expectedConfigurationFailure)
         {
             LogUnexpected(logger, httpContext.TraceIdentifier, exception);
         }
@@ -48,7 +51,9 @@ internal sealed class ApiExceptionHandler(IProblemDetailsService problemDetailsS
             {
                 Status = status,
                 Title = title,
-                Detail = status >= 500 ? "Gunakan traceId untuk menghubungi support." : exception.Message,
+                Detail = status >= 500 && !expectedConfigurationFailure
+                    ? "Gunakan traceId untuk menghubungi support."
+                    : exception.Message,
                 Extensions =
                 {
                     ["code"] = code,

@@ -4,7 +4,7 @@ import { PermitAttachmentApi } from '../../core/permit-attachment-api';
 import { PermitAttachments } from './permit-attachments';
 
 describe('PermitAttachments', () => {
-  it('shows category and pending malware status for each file', async () => {
+  it('shows a readable category and pending security status for each file', async () => {
     await TestBed.configureTestingModule({
       imports: [PermitAttachments],
       providers: [
@@ -47,9 +47,32 @@ describe('PermitAttachments', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('risk-treatment.pdf');
-    expect(fixture.nativeElement.textContent).toContain('SUPPORTING · scan PENDING');
+    expect(fixture.nativeElement.textContent).toContain('Dokumen pendukung');
+    expect(fixture.nativeElement.textContent).toContain('Sedang diperiksa');
     expect((fixture.nativeElement.querySelector('.download') as HTMLButtonElement).disabled).toBe(
       true,
     );
+  });
+
+  it('shows a helpful empty state and upload action to users who can manage attachments', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PermitAttachments],
+      providers: [
+        {
+          provide: PermitAttachmentApi,
+          useValue: { list: () => of([]) },
+        },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(PermitAttachments);
+    fixture.componentRef.setInput('permitId', 'permit-id');
+    fixture.componentRef.setInput('eTag', '"etag-value"');
+    fixture.componentRef.setInput('canManage', true);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.empty-state')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Belum ada lampiran');
+    expect(fixture.nativeElement.textContent).toContain('Tambah lampiran');
   });
 });

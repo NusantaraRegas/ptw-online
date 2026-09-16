@@ -131,6 +131,8 @@ public sealed class GeneratedDocumentRecord
     public DateTimeOffset? NextAttemptAt { get; set; }
     public DateTimeOffset? GeneratedAt { get; set; }
     public string? LastError { get; set; }
+    /// <summary>Renderer build that produced the file, so a non-deterministic retry stays explainable.</summary>
+    public string? RendererVersion { get; set; }
     public byte[] RowVersion { get; set; } = [];
 }
 

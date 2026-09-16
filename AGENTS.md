@@ -81,7 +81,7 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 
 ## Kontrak flow MVP saat ini
 
-- Pilot hanya mengizinkan submit untuk lokasi ORF; lokasi lain harus fail-closed sampai LocationRelease dan ConfigurationBundle disahkan.
+- Pilot operasional/produksi hanya mengizinkan submit untuk lokasi ORF; lokasi lain harus fail-closed sampai LocationRelease dan ConfigurationBundle disahkan. Konfigurasi `Development` boleh mengaktifkan rute nonproduksi secara eksplisit untuk pengujian routing, tetapi tidak boleh diperlakukan sebagai pengesahan rollout atau dibawa ke konfigurasi produksi.
 - Setelah Sponsor submit, sistem membuat tepat satu task `HSE_VALIDATION` pada PermitVersion yang sama. Distribusi Gas bukan validator.
 - PIC HSE dapat memvalidasi, meminta revisi, menolak, atau mengeskalasi dengan catatan; Sponsor tidak boleh memvalidasi PTW miliknya sendiri.
 - Setelah validasi HSE, sistem membuat tepat satu task `AREA_APPROVE_AND_ISSUE`. Manager pemilik area atau pengganti resmi yang valid menjalankan satu command atomik approval dan penerbitan.

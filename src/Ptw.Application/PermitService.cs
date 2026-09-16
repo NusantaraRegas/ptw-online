@@ -13,6 +13,7 @@ public sealed class PermitService(
     IOperationalPolicyGate operationalPolicyGate,
     IPermitAttachmentStore attachmentStore,
     AttachmentPolicy attachmentPolicy,
+    LocationReleaseSettings locationRelease,
     IssuancePolicySettings issuancePolicy)
 {
     private const string HseValidatorRole = "HSEValidator";
@@ -243,11 +244,13 @@ public sealed class PermitService(
 
         var stored = await GetStoredAsync(id, cancellationToken);
         EnsureSponsorOwnership(actor, stored.Permit);
-        if (!string.Equals(stored.Permit.Draft.LocationId, "ORF", StringComparison.OrdinalIgnoreCase))
+        if (!locationRelease.TryGetAreaOwnerDepartment(
+                stored.Permit.Draft.LocationId,
+                out _))
         {
             throw new InvalidRequestException(
                 "permit.location.not_released",
-                "Pilot PTW hanya aktif untuk lokasi ORF. Lokasi lain belum memiliki release dan configuration bundle yang disahkan.");
+                $"Lokasi {stored.Permit.Draft.LocationId} belum memiliki release dan konfigurasi pemilik wilayah yang aktif.");
         }
 
         if (attachmentPolicy.Enabled)

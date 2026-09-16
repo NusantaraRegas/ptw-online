@@ -21,6 +21,7 @@ describe('PermitApi', () => {
     hazards: ['Energi tersimpan'],
     controls: ['Isolasi energi'],
     requiredDocumentCodes: [],
+    workTypeCodes: ['COLD_MECHANICAL'],
   };
 
   beforeEach(() => {
@@ -45,6 +46,13 @@ describe('PermitApi', () => {
     const request = http.expectOne('/api/v1/tasks');
     expect(request.request.method).toBe('GET');
     request.flush({ items: [], count: 0 });
+  });
+
+  it('loads the controlled work types used by the form and PDF', () => {
+    api.listWorkTypes().subscribe();
+    const request = http.expectOne('/api/v1/reference-data/work-types');
+    expect(request.request.method).toBe('GET');
+    request.flush([]);
   });
 
   it('sends If-Match when updating a draft', () => {

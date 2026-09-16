@@ -1,0 +1,86 @@
+<section class="card print-packages" aria-labelledby="print-packages-title">
+  <header class="pack-header">
+    <div class="pack-heading">
+      <span class="pack-kicker">Dokumen resmi</span>
+      <h2 id="print-packages-title">Paket Cetak</h2>
+    </div>
+    @if (canPreview()) {
+      <button type="button" class="secondary" [disabled]="busy()" (click)="preview()">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 8V4h16v4" />
+          <rect x="7" y="14" width="10" height="6" rx="1" />
+          <path d="M20 17h1a1 1 0 0 0 1-1v-5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v5a1 1 0 0 0 1 1h1" />
+        </svg>
+        Pratinjau draft
+      </button>
+    }
+    <p>Dokumen resmi berdasarkan versi PTW yang telah disetujui.</p>
+  </header>
+
+  @if (error()) {
+    <p class="attachment-error" role="alert">{{ error() }}</p>
+  }
+
+  @if (loading()) {
+    <p class="empty">Memuat paket cetak…</p>
+  } @else if (packages().length === 0) {
+    <p class="empty placeholder">Paket cetak dibuat otomatis setelah PTW diterbitkan.</p>
+  } @else {
+    <ul class="package-list">
+      @for (item of packages(); track item.id) {
+        <li [attr.data-status]="item.renderStatus">
+          <div class="package-info">
+            <div class="package-title">
+              <span class="package-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
+                  <path d="M14 3v5h5" />
+                </svg>
+              </span>
+              <span>
+                <strong>PTW Versi {{ item.permitVersion }}</strong>
+                <code class="package-reference">Ref. {{ item.reference }}</code>
+              </span>
+            </div>
+            <span class="status" [attr.data-status]="item.renderStatus">
+              <span class="status-mark" aria-hidden="true"></span>
+              {{ statusLabel(item.renderStatus) }}
+            </span>
+            <span class="package-meta">
+              @if (item.generatedAt) {
+                Dibuat {{ item.generatedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
+              }
+              @if (item.attempts > 1) {
+                &middot; percobaan {{ item.attempts }}
+              }
+            </span>
+            @if (item.lastError && item.renderStatus !== 'READY') {
+              <small class="failure">{{ item.lastError }}</small>
+            }
+          </div>
+          <div class="package-actions">
+            <button
+              type="button"
+              class="download"
+              [disabled]="!item.downloadable || busy()"
+              [attr.aria-label]="'Unduh PDF PTW versi ' + item.permitVersion"
+              (click)="download(item)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 4v11" />
+                <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
+                <path d="M4.5 19.5h15" />
+              </svg>
+              Unduh PDF
+            </button>
+            @if (canRetry() && item.renderStatus !== 'READY') {
+              <button type="button" class="remove" [disabled]="busy()" (click)="retry(item)">
+                Render ulang
+              </button>
+            }
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>

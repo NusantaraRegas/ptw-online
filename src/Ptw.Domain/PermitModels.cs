@@ -88,7 +88,8 @@ public sealed record PermitDraft(
     IReadOnlyList<string>? IsolationPrecautionCodes = null,
     string? JsaDocumentNumber = null,
     string? JsaRevision = null,
-    DateTimeOffset? JsaDate = null);
+    DateTimeOffset? JsaDate = null,
+    IReadOnlyList<string>? WorkTypeCodes = null);
 
 public sealed record SubmissionReadiness(
     bool ESimiEligible,

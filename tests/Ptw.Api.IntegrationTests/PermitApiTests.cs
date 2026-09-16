@@ -14,7 +14,22 @@ namespace Ptw.Api.IntegrationTests;
 public sealed class PermitApiTests(PtwApiFactory factory)
 {
     [Fact]
-    public async Task PilotRejectsSubmissionOutsideOrf()
+    public async Task WorkTypeReferenceDataMatchesControlledTemplateAndKeepsDuplicateRowsDistinct()
+    {
+        using var client = Client(Unique("sponsor"), "Sponsor", "ORF");
+
+        var catalog = Required(await client.GetFromJsonAsync<PermitWorkTypeCatalogResponse[]>(
+            "/api/v1/reference-data/work-types"));
+
+        var hotWork = Assert.Single(catalog, item => item.PermitClass == "HotWork");
+        Assert.Contains(hotWork.Options, option => option.Code == "HOT_WELDING" && option.Label == "Mengelas");
+        var sandBlasting = hotWork.Options.Where(option => option.Label == "Sand Blasting").ToArray();
+        Assert.Equal(2, sandBlasting.Length);
+        Assert.Equal(2, sandBlasting.Select(option => option.Code).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task SubmissionRejectsLocationOutsideTheReleasedRoutes()
     {
         var sponsorId = Unique("sponsor");
         using var sponsor = Client(sponsorId, "Sponsor", "*");
@@ -28,6 +43,40 @@ public sealed class PermitApiTests(PtwApiFactory factory)
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal("permit.location.not_released", await ProblemCodeAsync(response));
+    }
+
+    [Theory]
+    [InlineData("ORF", "SITE_OFFICE")]
+    [InlineData("SITE_OFFICE", "ORF")]
+    [InlineData("WATER_BASED", "ORF")]
+    public async Task ReleasedLocationRoutesApprovalToManagerWithMatchingScope(
+        string location,
+        string wrongManagerScope)
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", location);
+        using var validator = Client(Unique("hse"), "HSEValidator", "*");
+        using var wrongManager = Client(Unique("wrong-manager"), "AreaOwnerManager", wrongManagerScope);
+        using var correctManager = Client(Unique("correct-manager"), "AreaOwnerManager", location);
+        var validated = await CreateAndValidateAsync(sponsor, validator, sponsorId, location);
+        var approvalTask = await PendingTaskAsync(validated.Id, "AREA_APPROVE_AND_ISSUE");
+        var request = new ApproveAndIssuePermitRequest("Disetujui oleh pemilik wilayah.", null);
+
+        using var wrongResponse = await wrongManager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{approvalTask.Id}/approve-and-issue",
+            validated.ETag,
+            request));
+        Assert.Equal(HttpStatusCode.Forbidden, wrongResponse.StatusCode);
+
+        using var correctResponse = await correctManager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{approvalTask.Id}/approve-and-issue",
+            validated.ETag,
+            request));
+        correctResponse.EnsureSuccessStatusCode();
+        var issued = Required(await correctResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("ISSUED", issued.Status);
     }
 
     [Fact]
@@ -358,9 +407,10 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     private async Task<PermitResponse> CreateAndValidateAsync(
         HttpClient sponsor,
         HttpClient validator,
-        string sponsorId)
+        string sponsorId,
+        string location = "ORF")
     {
-        var submitted = await CreateAndSubmitAsync(sponsor, sponsorId);
+        var submitted = await CreateAndSubmitAsync(sponsor, sponsorId, location);
         var task = await PendingTaskAsync(submitted.Id, "HSE_VALIDATION");
         using var response = await validator.SendAsync(Command(
             HttpMethod.Post,
@@ -371,9 +421,12 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         return Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
     }
 
-    private static async Task<PermitResponse> CreateAndSubmitAsync(HttpClient sponsor, string sponsorId)
+    private static async Task<PermitResponse> CreateAndSubmitAsync(
+        HttpClient sponsor,
+        string sponsorId,
+        string location = "ORF")
     {
-        var draft = await CreateAsync(sponsor, sponsorId, "ORF");
+        var draft = await CreateAsync(sponsor, sponsorId, location);
         using var response = await sponsor.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/permits/{draft.Id}/submit",
@@ -447,7 +500,8 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             $"ESM-{Guid.NewGuid():N}",
             [],
             [],
-            ["JSA"]);
+            ["JSA"],
+            WorkTypeCodes: ["HOT_WELDING"]);
     }
 
     private static async Task<string?> ProblemCodeAsync(HttpResponseMessage response)

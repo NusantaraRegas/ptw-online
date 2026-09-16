@@ -7,3 +7,5 @@
 .env
 attachments
 sql-data
+tmp
+output

@@ -13,14 +13,17 @@ Increment P0 lifecycle v1.6 telah tersedia:
 - submit membuat tepat satu task `HSE_VALIDATION`; tidak ada validator Distribusi Gas;
 - Sponsor yang juga PIC HSE tidak dapat memvalidasi PTW miliknya sendiri;
 - satu task `AREA_APPROVE_AND_ISSUE` dan satu command atomik menyimpan decision, status `ISSUED`, audit, outbox, `PrintPackageSnapshot`, serta placeholder `GeneratedDocument` dalam satu `SaveChanges` transaction;
-- pilot submit dibatasi ke ORF dan lokasi lain ditolak fail-closed;
+- release lokasi dikonfigurasi server-side; Development mengaktifkan ORF, Site-Office, dan Water-Based Activity, sedangkan lokasi lain ditolak fail-closed;
 - suspend berlaku langsung, resolve kembali ke `ISSUED`, dan renewal membuat permit baru tanpa overlap;
 - closure memakai task pemilik area dan memerlukan signed field copy yang `CLEAN`, bermetadata lengkap, tidak superseded, serta cocok dengan exact PermitVersion dan PrintPackage;
 - lampiran privat mengenali signature PDF/JPEG/PNG, menyimpan SHA-256, kategori, metadata dokumen, target version, PrintPackage, replacement lineage, serta evidence malware scan; file selain `CLEAN` tidak dapat diunduh;
 - form draft memuat tipe pengaju, work type, equipment/tag, plant/area, CLSR, SIMOPS, safety equipment, isolation/precaution, serta nomor/revisi/tanggal JSA; input hazards/controls bebas telah dihapus dari UI;
-- seluruh transition memakai command eksplisit, `If-Match`, `Idempotency-Key`, scope/role server-side, audit, dan outbox.
+- seluruh transition memakai command eksplisit, `If-Match`, `Idempotency-Key`, scope/role server-side, audit, dan outbox;
+- paket cetak resmi dirender Worker dari `PrintPackageSnapshot` yang immutable dengan halaman resmi FM-001/002/003-B-002-NR-B220 sebagai template vektor A3 landscape; sistem mengisi data dan pilihan snapshot pada Bagian 1-5 dan 7, sedangkan Bagian 6 dan Bagian 8-10 tetap kosong untuk diisi manual di lapangan;
+- kegagalan render tidak membatalkan keputusan penerbitan: status paket menjadi `RETRYING` dengan exponential backoff, lalu `FAILED` setelah batas percobaan, dan Administrator dapat menjadwalkan render ulang secara idempotent;
+- hanya paket berstatus `READY` yang merupakan dokumen resmi dan dapat diunduh; setiap unduhan menghasilkan audit event, dan pratinjau draft selalu diberi watermark `DRAFT / TIDAK BERLAKU` serta tidak pernah disimpan.
 
-Ruleset resmi, acting assignment v1.6 lengkap, renderer PDF, malware scanner produksi, E-SIMI adapter, external contractor scoping, serta master LocationRelease/ConfigurationBundle masih fail-closed atau partial. Detail dan traceability ada di [status implementasi](docs/implementation-status.md).
+Ruleset resmi, acting assignment v1.6 lengkap, malware scanner produksi, E-SIMI adapter, external contractor scoping, serta master LocationRelease/ConfigurationBundle masih fail-closed atau partial. Pilihan Bagian 1, 4, dan 5 dicetak dari snapshot, tetapi katalog checklist terkontrol masih perlu dipindahkan ke master data effective-dated. Detail dan traceability ada di [status implementasi](docs/implementation-status.md).
 
 ## Stack
 
@@ -94,6 +97,10 @@ Development identity hanya aktif pada environment `Development`. Profil yang rel
 | `POST` | `/api/v1/closure-tasks/{taskId}/close` | `ClosePermit` |
 | `POST` | `/api/v1/permits/{id}/cancel` | `CancelPermit` |
 | `POST` | `/api/v1/permits/{id}/expire` | `ExpirePermit` |
+| `GET` | `/api/v1/permits/{id}/print-packages` | daftar paket cetak dan status render |
+| `GET` | `/api/v1/permits/{id}/print-packages/{pid}/content` | unduh dokumen resmi `READY` dengan audit |
+| `GET` | `/api/v1/permits/{id}/print-packages/preview` | pratinjau draft ber-watermark, tidak disimpan |
+| `POST` | `/api/v1/permits/{id}/print-packages/{pid}/retry` | render ulang oleh Administrator, idempotent |
 
 Task command memakai `taskId`, bukan permit ID. Semua transition memerlukan `If-Match` dan `Idempotency-Key`. Tidak ada endpoint generik `setStatus`.
 

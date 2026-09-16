@@ -24,6 +24,10 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         Path.GetTempPath(),
         "ptw-online-tests",
         Guid.NewGuid().ToString("N"));
+    private readonly string _generatedDocumentPath = Path.Combine(
+        Path.GetTempPath(),
+        "ptw-online-tests-documents",
+        Guid.NewGuid().ToString("N"));
     private string _connectionString;
 
     public PtwApiFactory()
@@ -52,19 +56,35 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
                 ["IssuancePolicy:Approved"] = "true",
                 ["IssuancePolicy:RuleVersion"] = "integration-rules-v1",
                 ["IssuancePolicy:PrintTemplateVersion"] = "integration-print-v1",
-                ["IssuancePolicy:CampaignAssetVersion"] = "integration-campaign-v1"
+                ["IssuancePolicy:CampaignAssetVersion"] = "integration-campaign-v1",
+                ["LocationRelease:AreaOwnerDepartments:ORF"] = "Departemen Distribusi Gas dan Pengelolaan ORF",
+                ["LocationRelease:AreaOwnerDepartments:SITE_OFFICE"] = "Departemen General Affair",
+                ["LocationRelease:AreaOwnerDepartments:WATER_BASED"] = "Departemen Transport & Operasi FSRU",
+                ["GeneratedDocuments:Enabled"] = "true",
+                ["GeneratedDocuments:StoragePath"] = _generatedDocumentPath,
+                ["GeneratedDocuments:MaxRenderAttempts"] = "3"
             }));
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<PtwDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<PtwDbContext>>();
             services.RemoveAll<IssuancePolicySettings>();
+            services.RemoveAll<LocationReleaseSettings>();
             services.AddSingleton(new IssuancePolicySettings
             {
                 Approved = true,
                 RuleVersion = "integration-rules-v1",
                 PrintTemplateVersion = "integration-print-v1",
                 CampaignAssetVersion = "integration-campaign-v1"
+            });
+            services.AddSingleton(new LocationReleaseSettings
+            {
+                AreaOwnerDepartments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ORF"] = "Departemen Distribusi Gas dan Pengelolaan ORF",
+                    ["SITE_OFFICE"] = "Departemen General Affair",
+                    ["WATER_BASED"] = "Departemen Transport & Operasi FSRU"
+                }
             });
             services.AddDbContext<PtwDbContext>(options => options.UseSqlServer(_connectionString));
         });
@@ -91,6 +111,10 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         if (Directory.Exists(_attachmentPath))
         {
             Directory.Delete(_attachmentPath, recursive: true);
+        }
+        if (Directory.Exists(_generatedDocumentPath))
+        {
+            Directory.Delete(_generatedDocumentPath, recursive: true);
         }
         Dispose();
     }
