@@ -7,11 +7,11 @@ import { LocationApi } from '../../core/location-api';
 import {
   Permit,
   PermitApi,
-  PermitRenewalResult,
   PermitTask,
   RequestPermitRenewal,
   ValidateSubmissionRequest,
 } from '../../core/permit-api';
+import { PermitAttachmentApi } from '../../core/permit-attachment-api';
 import { PermitAttachmentPermitChange, PermitAttachments } from './permit-attachments';
 import { PermitDetail } from './permit-detail';
 import { PermitHistory } from './permit-history';
@@ -23,6 +23,7 @@ class PermitAttachmentsStub {
   readonly permitId = input.required<string>();
   readonly eTag = input.required<string>();
   readonly canManage = input(false);
+  readonly fieldCopyOnly = input(false);
   readonly selectedDocumentCodes = input<string[]>([]);
   readonly jsaDocumentNumber = input('');
   readonly jsaRevision = input('');
@@ -116,6 +117,17 @@ describe('PermitDetail HSE validation', () => {
             options: [{ code: 'COLD_MECHANICAL', label: 'Mekanikal' }],
           },
         ]),
+      listHeaderClassifications: () =>
+        of([
+          {
+            permitClass: 'ColdWork',
+            selectionMode: 'SINGLE',
+            options: [
+              { code: 'COLD_LOW_RISK', label: 'Low Risk' },
+              { code: 'COLD_HIGH_RISK', label: 'High Risk' },
+            ],
+          },
+        ]),
       listSafetyEquipment: () =>
         of([
           {
@@ -137,6 +149,7 @@ describe('PermitDetail HSE validation', () => {
             requiresMetadata: true,
           },
         ]),
+      listMandatoryDocuments: () => of([]),
       validate: (_taskId: string, _eTag: string, request: ValidateSubmissionRequest) => {
         validationRequest = request;
         return of({
@@ -152,6 +165,7 @@ describe('PermitDetail HSE validation', () => {
       providers: [
         provideRouter([]),
         { provide: PermitApi, useValue: permitApi },
+        { provide: PermitAttachmentApi, useValue: { list: () => of([]) } },
         { provide: LocationApi, useValue: { list: () => of({ items: [], count: 0 }) } },
         {
           provide: ActivatedRoute,
@@ -241,6 +255,7 @@ const permit: Permit = {
     controls: ['Kontrol'],
     requiredDocumentCodes: [],
     workTypeCodes: ['COLD_MECHANICAL'],
+    headerClassificationCodes: ['COLD_LOW_RISK'],
   },
   workflow: {
     hse: validation('HSE', 'PIC HSE'),
@@ -308,6 +323,17 @@ describe('PermitDetail', () => {
             options: [{ code: 'COLD_MECHANICAL', label: 'Mekanikal' }],
           },
         ]),
+      listHeaderClassifications: () =>
+        of([
+          {
+            permitClass: 'ColdWork',
+            selectionMode: 'SINGLE',
+            options: [
+              { code: 'COLD_LOW_RISK', label: 'Low Risk' },
+              { code: 'COLD_HIGH_RISK', label: 'High Risk' },
+            ],
+          },
+        ]),
       listSafetyEquipment: () => of([]),
       listSupportingDocuments: () =>
         of([
@@ -320,11 +346,12 @@ describe('PermitDetail', () => {
             requiresMetadata: true,
           },
         ]),
+      listMandatoryDocuments: () => of([]),
       requestRenewal: (
         _id: string,
         _eTag: string,
         _request: RequestPermitRenewal,
-      ): Observable<PermitRenewalResult> =>
+      ): Observable<Permit> =>
         throwError(() => ({
           status: 422,
           error: { detail: 'PTW asal sudah melewati masa berlaku.' },
@@ -336,6 +363,7 @@ describe('PermitDetail', () => {
       providers: [
         provideRouter([]),
         { provide: PermitApi, useValue: permitApi },
+        { provide: PermitAttachmentApi, useValue: { list: () => of([]) } },
         { provide: LocationApi, useValue: { list: () => of({ items: [], count: 0 }) } },
         {
           provide: ActivatedRoute,
@@ -456,6 +484,11 @@ describe('PermitDetail', () => {
     renewalForm.setValue({
       validFrom: '2026-09-04T19:00',
       validUntil: '2026-09-05T19:00',
+      printPackageId: 'package-id',
+      signedFieldCopyAttachmentId: 'attachment-id',
+      continuationStatement: 'Pekerjaan perlu dilanjutkan.',
+      allPagesReviewed: true,
+      readableAndCompleteAcknowledged: true,
     });
     fixture.detectChanges();
 

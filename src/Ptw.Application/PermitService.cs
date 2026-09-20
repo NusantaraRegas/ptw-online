@@ -166,7 +166,7 @@ public sealed class PermitService(
             cancellationToken)).ToResponse();
     }
 
-    public async Task<PermitRenewalResponse> RequestRenewalAsync(
+    public async Task<PermitResponse> RequestRenewalAsync(
         Guid sourcePermitId,
         RequestPermitRenewalRequest request,
         string expectedETag,
@@ -174,37 +174,142 @@ public sealed class PermitService(
         string correlationId,
         CancellationToken cancellationToken)
     {
+        if (!request.AllPagesReviewed || !request.ReadableAndCompleteAcknowledged)
+        {
+            throw new InvalidRequestException(
+                "permit.renewal.acknowledgement_required",
+                "Sponsor wajib meninjau semua halaman dan mengakui hardcopy hasil verifikasi lapangan terbaca serta lengkap.");
+        }
+
+        await EnsureSignedFieldCopyEvidenceAsync(
+            sourcePermitId,
+            request.PrintPackageId,
+            request.SignedFieldCopyAttachmentIds,
+            cancellationToken);
+
+        return await ExecuteOwnedSponsorCommandAsync(
+            sourcePermitId,
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.RequestRenewal,
+            (permit, actor, now) => permit.RequestRenewal(
+                request.PrintPackageId,
+                request.SignedFieldCopyAttachmentIds,
+                actor.Id,
+                request.ContinuationStatement,
+                request.ValidFrom,
+                request.ValidUntil,
+                now),
+            cancellationToken);
+    }
+
+    public Task<PermitResponse> RequestRenewalEvidenceReplacementAsync(
+        Guid taskId,
+        PermitReasonRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken) =>
+        ExecuteTaskCommandAsync(
+            taskId,
+            "AREA_RENEWAL_REVIEW",
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.RequestRenewalEvidenceReplacement,
+            [AreaOwnerManagerRole],
+            (permit, actor, now, _) => permit.RequestRenewalEvidenceReplacement(actor.Id, request.Reason, now),
+            cancellationToken);
+
+    public Task<PermitResponse> RejectRenewalAsync(
+        Guid taskId,
+        PermitReasonRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken) =>
+        ExecuteTaskCommandAsync(
+            taskId,
+            "AREA_RENEWAL_REVIEW",
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.RejectRenewal,
+            [AreaOwnerManagerRole],
+            (permit, actor, now, _) => permit.RejectRenewal(actor.Id, request.Reason, now),
+            cancellationToken);
+
+    public async Task<PermitRenewalResponse> ApproveRenewalAsync(
+        Guid taskId,
+        ApproveRenewalRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        if (!request.FieldVerificationConfirmed || !request.EvidenceReadable)
+        {
+            throw new InvalidRequestException(
+                "permit.renewal.verification_incomplete",
+                "Verifikasi lapangan dan keterbacaan hardcopy wajib dikonfirmasi sebelum perpanjangan disetujui.");
+        }
+
         EnsureIdempotencyKey(idempotencyKey);
         var actor = actorContext.Current;
-        EnsureSponsorOrAdmin(actor);
-        var requestHash = Hash(new { SourcePermitId = sourcePermitId, Request = request });
+        EnsureAnyRole(actor, [AreaOwnerManagerRole]);
+        var requestHash = Hash(new { TaskId = taskId, Request = request });
         var prior = await store.FindIdempotentResultAsync(
             actor.Id,
-            PermitPolicyOperations.RequestRenewal,
+            PermitPolicyOperations.ApproveRenewal,
             idempotencyKey,
             requestHash,
             cancellationToken);
         if (prior is not null)
         {
-            var priorSource = await GetStoredAsync(sourcePermitId, cancellationToken);
+            var sourceId = prior.Permit.RenewedFromPermitId
+                ?? throw new InvalidOperationException("Hasil idempoten approval renewal tidak memiliki PTW asal.");
+            var priorSource = await GetStoredAsync(sourceId, cancellationToken);
             return new PermitRenewalResponse(priorSource.Permit.Version, priorSource.ETag, prior.ToResponse());
         }
 
-        var source = await GetStoredAsync(sourcePermitId, cancellationToken);
-        EnsureSponsorOwnership(actor, source.Permit);
+        var task = await GetPendingTaskAsync(taskId, cancellationToken);
+        if (!string.Equals(task.Type, "AREA_RENEWAL_REVIEW", StringComparison.Ordinal)
+            || !string.Equals(task.RequiredRole, AreaOwnerManagerRole, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidRequestException("task.type.invalid", "Task tidak sesuai dengan command approval perpanjangan.");
+        }
+
+        var source = await GetStoredAsync(task.PermitId, cancellationToken);
+        EnsureLocationScope(actor, source.Permit.Draft.LocationId);
+        if (task.PermitVersion != source.Permit.Version)
+        {
+            throw new ConcurrencyConflictException();
+        }
+
+        var evidence = source.Permit.RenewalRequest
+            ?? throw new InvalidRequestException("permit.renewal.request_missing", "Permintaan perpanjangan tidak tersedia.");
+        await EnsureSignedFieldCopyEvidenceAsync(
+            source.Permit.Id,
+            evidence.PrintPackageId,
+            evidence.AttachmentIds,
+            cancellationToken);
         var authorization = await operationalPolicyGate.AuthorizePermitCommandAsync(
             actor,
-            PermitPolicyOperations.RequestRenewal,
+            PermitPolicyOperations.ApproveRenewal,
             source.Permit.Draft.LocationId,
             cancellationToken);
         var now = clock.UtcNow;
-        var renewal = Permit.CreateRenewal(sourcePermitId, source.Permit.Draft with
+        var renewal = Permit.CreateRenewal(source.Permit.Id, source.Permit.Draft with
         {
-            ValidFrom = request.ValidFrom,
-            ValidUntil = request.ValidUntil,
+            ValidFrom = evidence.ValidFrom,
+            ValidUntil = evidence.ValidUntil,
             SafetyEquipmentCodes = []
         }, now);
-        source.Permit.RequestRenewal(renewal, now);
+        source.Permit.ApproveRenewal(renewal, actor.Id, request.Statement, now);
         var created = await store.AddRenewalAsync(
             source.Permit,
             renewal,
@@ -213,12 +318,15 @@ public sealed class PermitService(
             correlationId,
             new IdempotencyContext(
                 actor.Id,
-                PermitPolicyOperations.RequestRenewal,
+                PermitPolicyOperations.ApproveRenewal,
                 idempotencyKey,
                 requestHash),
             authorization,
             cancellationToken);
-        return new PermitRenewalResponse(created.Source.Permit.Version, created.Source.ETag, created.Renewal.ToResponse());
+        return new PermitRenewalResponse(
+            created.Source.Permit.Version,
+            created.Source.ETag,
+            created.Renewal.ToResponse());
     }
 
     public async Task<PermitResponse> SubmitAsync(
@@ -303,31 +411,30 @@ public sealed class PermitService(
                 "Pengajuan diblokir karena penyimpanan dokumen pendukung belum tersedia.");
         }
 
+        var mandatoryDocuments = PermitMandatoryDocumentCatalog.Resolve();
+        foreach (var document in mandatoryDocuments)
+        {
+            EnsureDocumentEvidence(
+                attachments,
+                document.Code,
+                document.Label,
+                "permit.mandatory_document.evidence_required",
+                "permit.mandatory_document.scan_incomplete");
+        }
+
+        var mandatoryCodes = mandatoryDocuments
+            .Select(document => document.Code)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var selectedCodes = PermitSupportingDocumentCatalog.NormalizeAndValidate(
             permit.Draft.RequiredDocumentCodes);
-        foreach (var code in selectedCodes)
+        foreach (var code in selectedCodes.Where(code => !mandatoryCodes.Contains(code)))
         {
-            var evidence = attachments.Where(attachment =>
-                string.Equals(
-                    EffectiveSupportingDocumentCode(attachment),
-                    code,
-                    StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (evidence.Length == 0)
-            {
-                var label = PermitSupportingDocumentCatalog.Resolve(code).Label;
-                throw new InvalidRequestException(
-                    "permit.supporting_document.evidence_required",
-                    $"Lampiran untuk {label} wajib tersedia sebelum PTW diajukan.");
-            }
-
-            if (attachmentPolicy.RequireMalwareScan
-                && evidence.All(item => !string.Equals(item.ScanStatus, "CLEAN", StringComparison.Ordinal)))
-            {
-                var label = PermitSupportingDocumentCatalog.Resolve(code).Label;
-                throw new InvalidRequestException(
-                    "permit.supporting_document.scan_incomplete",
-                    $"Lampiran untuk {label} belum dinyatakan aman.");
-            }
+            EnsureDocumentEvidence(
+                attachments,
+                code,
+                PermitSupportingDocumentCatalog.Resolve(code).Label,
+                "permit.supporting_document.evidence_required",
+                "permit.supporting_document.scan_incomplete");
         }
 
         var jsaNumber = permit.Draft.JsaDocumentNumber?.Trim();
@@ -354,6 +461,34 @@ public sealed class PermitService(
             throw new InvalidRequestException(
                 "permit.supporting_document.jsa_metadata_mismatch",
                 "Metadata lampiran JSA harus sama dengan nomor, revisi, dan tanggal JSA pada draft.");
+        }
+    }
+
+    private void EnsureDocumentEvidence(
+        IReadOnlyList<PermitAttachmentEntry> attachments,
+        string code,
+        string label,
+        string evidenceRequiredCode,
+        string scanIncompleteCode)
+    {
+        var evidence = attachments.Where(attachment =>
+            string.Equals(
+                EffectiveSupportingDocumentCode(attachment),
+                code,
+                StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (evidence.Length == 0)
+        {
+            throw new InvalidRequestException(
+                evidenceRequiredCode,
+                $"Lampiran untuk {label} wajib tersedia sebelum PTW diajukan.");
+        }
+
+        if (attachmentPolicy.RequireMalwareScan
+            && evidence.All(item => !string.Equals(item.ScanStatus, "CLEAN", StringComparison.Ordinal)))
+        {
+            throw new InvalidRequestException(
+                scanIncompleteCode,
+                $"Lampiran untuk {label} belum dinyatakan aman.");
         }
     }
 
@@ -691,6 +826,47 @@ public sealed class PermitService(
             ["Administrator"],
             (permit, _, now) => permit.Expire(now),
             cancellationToken);
+
+    private async Task EnsureSignedFieldCopyEvidenceAsync(
+        Guid permitId,
+        Guid printPackageId,
+        IReadOnlyList<Guid> attachmentIds,
+        CancellationToken cancellationToken)
+    {
+        var printPackage = await store.FindPrintPackageAsync(printPackageId, cancellationToken);
+        if (printPackage is null
+            || printPackage.PermitId != permitId
+            || !string.Equals(printPackage.RenderStatus, "READY", StringComparison.Ordinal))
+        {
+            throw new InvalidRequestException(
+                "permit.renewal.print_package_invalid",
+                "PrintPackage resmi harus READY dan berasal dari PTW yang sama.");
+        }
+
+        if (attachmentIds.Count == 0 || attachmentIds.Count != attachmentIds.Distinct().Count())
+        {
+            throw new InvalidRequestException(
+                "permit.renewal.evidence_required",
+                "Sedikitnya satu SIGNED_FIELD_COPY unik wajib dipilih.");
+        }
+
+        var attachments = await attachmentStore.ListActiveAsync(permitId, cancellationToken);
+        var selected = attachments.Where(x => attachmentIds.Contains(x.Id)).ToArray();
+        if (selected.Length != attachmentIds.Count
+            || selected.Any(x => !string.Equals(x.Category, "SIGNED_FIELD_COPY", StringComparison.Ordinal)
+                || !string.Equals(x.ScanStatus, "CLEAN", StringComparison.Ordinal)
+                || x.TargetPermitVersion != printPackage.PermitVersion
+                || x.PrintPackageId != printPackage.Id
+                || string.IsNullOrWhiteSpace(x.DocumentNumber)
+                || string.IsNullOrWhiteSpace(x.DocumentRevision)
+                || x.DocumentDate is null)
+            || selected.Any(x => attachments.Any(candidate => candidate.SupersedesAttachmentId == x.Id)))
+        {
+            throw new InvalidRequestException(
+                "permit.renewal.evidence_invalid",
+                "SIGNED_FIELD_COPY harus CLEAN, aktif, tidak superseded, bermetadata lengkap, dan cocok dengan PermitVersion serta PrintPackage.");
+        }
+    }
 
     private async Task<PermitResponse> ExecuteDispositionAsync(
         Guid taskId,

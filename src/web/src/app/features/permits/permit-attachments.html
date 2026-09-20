@@ -34,38 +34,77 @@
     }
   </header>
 
-  <section class="document-readiness" aria-labelledby="document-readiness-title">
-    <div class="document-readiness-head">
-      <div>
-        <h4 id="document-readiness-title">Checklist Bagian 4</h4>
-        <p>JSA wajib; dokumen lain mengikuti pilihan pada draft PTW.</p>
+  @if (!fieldCopyOnly()) {
+    <section class="document-readiness" aria-labelledby="mandatory-document-readiness-title">
+      <div class="document-readiness-head">
+        <div>
+          <h4 id="mandatory-document-readiness-title">Dokumen dasar wajib</h4>
+          <p>Semua dokumen berikut harus diunggah sebelum PTW dapat diajukan.</p>
+        </div>
+        <span>{{ mandatoryDocuments().length }} wajib</span>
       </div>
-      <span>{{ selectedSupportingDocuments().length }} dipilih</span>
-    </div>
-    @if (supportingDocumentError()) {
-      <p class="attachment-error" role="alert">{{ supportingDocumentError() }}</p>
-    } @else {
-      <ul class="document-readiness-list">
-        @for (document of selectedSupportingDocuments(); track document.code) {
-          <li>
-            <span class="document-check" [class.complete]="documentComplete(document.code)">
-              {{ documentComplete(document.code) ? '✓' : '○' }}
-            </span>
-            <div>
-              <strong>{{ document.label }}</strong>
-              <small>{{ document.required ? 'Wajib' : 'Opsional' }}</small>
-              @for (attachment of attachmentsFor(document.code); track attachment.id) {
-                <span class="document-file">{{ attachment.fileName }}</span>
-              }
-            </div>
-            <span class="document-status" [class.complete]="documentComplete(document.code)">
-              {{ documentStatus(document.code) }}
-            </span>
-          </li>
-        }
-      </ul>
-    }
-  </section>
+      @if (mandatoryDocumentError()) {
+        <p class="attachment-error" role="alert">{{ mandatoryDocumentError() }}</p>
+      } @else {
+        <ul class="document-readiness-list">
+          @for (document of mandatoryDocuments(); track document.code) {
+            <li>
+              <span class="document-check" [class.complete]="documentComplete(document.code)">
+                {{ documentComplete(document.code) ? '✓' : '○' }}
+              </span>
+              <div>
+                <strong>{{ document.label }}</strong>
+                <small>Wajib</small>
+                @for (attachment of attachmentsFor(document.code); track attachment.id) {
+                  <span class="document-file">{{ attachment.fileName }}</span>
+                }
+              </div>
+              <span class="document-status" [class.complete]="documentComplete(document.code)">
+                {{ documentStatus(document.code) }}
+              </span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+
+  @if (
+    !fieldCopyOnly() && (selectedSupportingDocuments().length > 0 || supportingDocumentError())
+  ) {
+    <section class="document-readiness" aria-labelledby="bagian4-readiness-title">
+      <div class="document-readiness-head">
+        <div>
+          <h4 id="bagian4-readiness-title">Dokumen tambahan Bagian 4</h4>
+          <p>Dokumen ini wajib tersedia karena dipilih pada draft PTW.</p>
+        </div>
+        <span>{{ selectedSupportingDocuments().length }} dipilih</span>
+      </div>
+      @if (supportingDocumentError()) {
+        <p class="attachment-error" role="alert">{{ supportingDocumentError() }}</p>
+      } @else {
+        <ul class="document-readiness-list">
+          @for (document of selectedSupportingDocuments(); track document.code) {
+            <li>
+              <span class="document-check" [class.complete]="documentComplete(document.code)">
+                {{ documentComplete(document.code) ? '✓' : '○' }}
+              </span>
+              <div>
+                <strong>{{ document.label }}</strong>
+                <small>Wajib karena dipilih</small>
+                @for (attachment of attachmentsFor(document.code); track attachment.id) {
+                  <span class="document-file">{{ attachment.fileName }}</span>
+                }
+              </div>
+              <span class="document-status" [class.complete]="documentComplete(document.code)">
+                {{ documentStatus(document.code) }}
+              </span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
 
   @if (canManage()) {
     <fieldset class="upload-metadata">
@@ -75,7 +114,7 @@
           <span>Kategori lampiran</span>
           <select
             [value]="category()"
-            [disabled]="busy()"
+            [disabled]="busy() || fieldCopyOnly()"
             aria-describedby="category-help"
             (change)="setCategory($any($event.target).value)"
           >
@@ -87,14 +126,14 @@
 
         @if (category() === 'SUPPORTING') {
           <label class="field category-field">
-            <span>Jenis dokumen Bagian 4</span>
+            <span>Jenis dokumen</span>
             <select
               [value]="supportingDocumentCode()"
               [disabled]="busy()"
               (change)="supportingDocumentCode.set($any($event.target).value)"
             >
               <option value="">Lampiran pendukung umum</option>
-              @for (option of selectedOptionalDocuments(); track option.code) {
+              @for (option of uploadDocumentOptions(); track option.code) {
                 <option [value]="option.code">{{ option.label }}</option>
               }
             </select>
@@ -151,8 +190,8 @@
         } @else if (category() === 'JSA') {
           Nomor, revisi, dan tanggal diperlukan untuk menjaga keterlacakan dokumen JSA.
         } @else {
-          Pilih jenis Bagian 4 untuk menghubungkan file dengan checklist, atau gunakan lampiran umum
-          untuk foto dan drawing tambahan.
+          Pilih jenis dokumen wajib atau Bagian 4 untuk menghubungkan file, atau gunakan lampiran
+          umum untuk foto dan drawing tambahan.
         }
       </p>
     </fieldset>
@@ -226,13 +265,6 @@
               @if (documentLabel(attachment); as supportingLabel) {
                 <span class="category-badge document-code-badge">{{ supportingLabel }}</span>
               }
-              <span
-                class="scan-badge"
-                [class.clean]="attachment.scanStatus === 'CLEAN'"
-                [class.blocked]="attachment.scanStatus === 'INFECTED'"
-              >
-                {{ scanLabel(attachment.scanStatus) }}
-              </span>
             </div>
             <span class="file-meta">
               {{ formatSize(attachment.sizeBytes) }} • diunggah oleh {{ attachment.uploadedBy }} •
@@ -254,7 +286,7 @@
               </svg>
               Unduh
             </button>
-            @if (canManage()) {
+            @if (canManage() && !fieldCopyOnly()) {
               <button type="button" class="remove" [disabled]="busy()" (click)="remove(attachment)">
                 Hapus
               </button>
@@ -265,7 +297,7 @@
     </ul>
     @if (hasUnavailableDownloads()) {
       <p id="scan-download-note" class="scan-note">
-        File dapat diunduh setelah pemeriksaan keamanan selesai dan statusnya aman.
+        File ini belum tersedia untuk diunduh. Silakan coba kembali beberapa saat lagi.
       </p>
     }
   }

@@ -15,8 +15,31 @@ const supportingDocuments = [
   },
 ];
 
+const mandatoryDocuments = [
+  {
+    code: 'JSA',
+    label: 'Job Safety Analisis (JSA)',
+    uploadCategory: 'JSA',
+    requiresMetadata: true,
+  },
+  { code: 'ID', label: 'ID', uploadCategory: 'SUPPORTING', requiresMetadata: false },
+  {
+    code: 'BPJS_TK',
+    label: 'BPJS TK',
+    uploadCategory: 'SUPPORTING',
+    requiresMetadata: false,
+  },
+  { code: 'FTW', label: 'FTW', uploadCategory: 'SUPPORTING', requiresMetadata: false },
+  {
+    code: 'ESIMI',
+    label: 'E-SIMI',
+    uploadCategory: 'SUPPORTING',
+    requiresMetadata: false,
+  },
+];
+
 describe('PermitAttachments', () => {
-  it('shows a readable category and pending security status for each file', async () => {
+  it('shows a readable category without exposing the internal scan status', async () => {
     await TestBed.configureTestingModule({
       imports: [PermitAttachments],
       providers: [
@@ -52,7 +75,10 @@ describe('PermitAttachments', () => {
         },
         {
           provide: PermitApi,
-          useValue: { listSupportingDocuments: () => of(supportingDocuments) },
+          useValue: {
+            listSupportingDocuments: () => of(supportingDocuments),
+            listMandatoryDocuments: () => of(mandatoryDocuments),
+          },
         },
       ],
     }).compileComponents();
@@ -63,8 +89,11 @@ describe('PermitAttachments', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('risk-treatment.pdf');
+    expect(fixture.nativeElement.textContent).toContain('Dokumen dasar wajib');
+    expect(fixture.nativeElement.textContent).toContain('BPJS TK');
     expect(fixture.nativeElement.textContent).toContain('Dokumen pendukung');
-    expect(fixture.nativeElement.textContent).toContain('Sedang diperiksa');
+    expect(fixture.nativeElement.textContent).not.toContain('Sedang diperiksa');
+    expect(fixture.nativeElement.textContent).toContain('belum tersedia untuk diunduh');
     expect((fixture.nativeElement.querySelector('.download') as HTMLButtonElement).disabled).toBe(
       true,
     );
@@ -80,7 +109,10 @@ describe('PermitAttachments', () => {
         },
         {
           provide: PermitApi,
-          useValue: { listSupportingDocuments: () => of(supportingDocuments) },
+          useValue: {
+            listSupportingDocuments: () => of(supportingDocuments),
+            listMandatoryDocuments: () => of(mandatoryDocuments),
+          },
         },
       ],
     }).compileComponents();

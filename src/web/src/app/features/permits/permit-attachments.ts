@@ -9,7 +9,11 @@ import {
   PermitAttachmentMutation,
   PermitAttachmentUpload,
 } from '../../core/permit-attachment-api';
-import { PermitApi, PermitSupportingDocumentOption } from '../../core/permit-api';
+import {
+  PermitApi,
+  PermitMandatoryDocumentOption,
+  PermitSupportingDocumentOption,
+} from '../../core/permit-api';
 
 interface PendingUpload {
   id: string;
@@ -33,6 +37,7 @@ export class PermitAttachments {
   readonly permitId = input.required<string>();
   readonly eTag = input.required<string>();
   readonly canManage = input(false);
+  readonly fieldCopyOnly = input(false);
   readonly selectedDocumentCodes = input<string[]>([]);
   readonly jsaDocumentNumber = input('');
   readonly jsaRevision = input('');
@@ -49,6 +54,8 @@ export class PermitAttachments {
   protected readonly error = signal('');
   protected readonly category = signal<PermitAttachmentCategory>('JSA');
   protected readonly supportingDocumentCode = signal('JSA');
+  protected readonly mandatoryDocuments = signal<PermitMandatoryDocumentOption[]>([]);
+  protected readonly mandatoryDocumentError = signal('');
   protected readonly supportingDocuments = signal<PermitSupportingDocumentOption[]>([]);
   protected readonly supportingDocumentError = signal('');
   protected readonly documentNumber = signal('');
@@ -61,11 +68,17 @@ export class PermitAttachments {
   protected readonly selectedSupportingDocuments = computed(() => {
     const selected = new Set(this.selectedDocumentCodes());
     return this.supportingDocuments().filter(
-      (option) => option.required || selected.has(option.code),
+      (option) => !option.required && selected.has(option.code),
     );
   });
-  protected readonly selectedOptionalDocuments = computed(() =>
-    this.selectedSupportingDocuments().filter((option) => !option.required),
+  protected readonly uploadDocumentOptions = computed(() =>
+    [
+      ...this.mandatoryDocuments().filter((option) => option.uploadCategory === 'SUPPORTING'),
+      ...this.selectedSupportingDocuments(),
+    ].filter(
+      (option, index, items) =>
+        items.findIndex((candidate) => candidate.code === option.code) === index,
+    ),
   );
 
   private currentETag = '';
@@ -78,8 +91,13 @@ export class PermitAttachments {
 
   ngOnInit(): void {
     this.currentETag = this.eTag();
+    if (this.fieldCopyOnly()) {
+      this.category.set('SIGNED_FIELD_COPY');
+      this.supportingDocumentCode.set('');
+    }
     this.prefillJsaMetadata();
     this.load();
+    this.loadMandatoryDocuments();
     this.loadSupportingDocuments();
   }
 
@@ -146,7 +164,9 @@ export class PermitAttachments {
   }
 
   protected setCategory(value: string): void {
-    const category = value as PermitAttachmentCategory;
+    const category = this.fieldCopyOnly()
+      ? 'SIGNED_FIELD_COPY'
+      : (value as PermitAttachmentCategory);
     this.category.set(category);
     if (category === 'JSA') {
       this.supportingDocumentCode.set('JSA');
@@ -154,9 +174,7 @@ export class PermitAttachments {
     } else if (category === 'SIGNED_FIELD_COPY') {
       this.supportingDocumentCode.set('');
     } else if (
-      !this.selectedOptionalDocuments().some(
-        (option) => option.code === this.supportingDocumentCode(),
-      )
+      !this.uploadDocumentOptions().some((option) => option.code === this.supportingDocumentCode())
     ) {
       this.supportingDocumentCode.set('');
     }
@@ -173,8 +191,7 @@ export class PermitAttachments {
 
   protected documentStatus(documentCode: string): string {
     const evidence = this.attachmentsFor(documentCode);
-    if (evidence.some((attachment) => attachment.scanStatus === 'CLEAN')) return 'Aman';
-    if (evidence.length > 0) return 'Sedang diperiksa';
+    if (evidence.length > 0) return 'Terunggah';
     return 'Belum diunggah';
   }
 
@@ -184,7 +201,11 @@ export class PermitAttachments {
 
   protected documentLabel(attachment: PermitAttachment): string {
     const code = attachment.supportingDocumentCode ?? (attachment.category === 'JSA' ? 'JSA' : '');
-    return this.supportingDocuments().find((option) => option.code === code)?.label ?? '';
+    return (
+      this.mandatoryDocuments().find((option) => option.code === code)?.label ??
+      this.supportingDocuments().find((option) => option.code === code)?.label ??
+      ''
+    );
   }
 
   /** The server accepts PDF, JPEG and PNG; the picker must not be stricter than the contract. */
@@ -285,19 +306,6 @@ export class PermitAttachments {
     }
   }
 
-  protected scanLabel(status: string): string {
-    switch (status) {
-      case 'CLEAN':
-        return 'Aman';
-      case 'INFECTED':
-        return 'Diblokir';
-      case 'FAILED':
-        return 'Pemeriksaan gagal';
-      default:
-        return 'Sedang diperiksa';
-    }
-  }
-
   private load(): void {
     this.loading.set(true);
     this.api
@@ -322,6 +330,19 @@ export class PermitAttachments {
         error: (response) =>
           this.supportingDocumentError.set(
             response?.error?.detail ?? 'Status checklist dokumen pendukung gagal dimuat.',
+          ),
+      });
+  }
+
+  private loadMandatoryDocuments(): void {
+    this.permitApi
+      .listMandatoryDocuments()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (options) => this.mandatoryDocuments.set(options),
+        error: (response) =>
+          this.mandatoryDocumentError.set(
+            response?.error?.detail ?? 'Status dokumen wajib gagal dimuat.',
           ),
       });
   }

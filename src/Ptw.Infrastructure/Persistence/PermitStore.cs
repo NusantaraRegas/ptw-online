@@ -71,6 +71,10 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         PolicyAuthorizationEvidence? authorizationEvidence,
         CancellationToken cancellationToken)
     {
+        var persistedSourceVersion = await dbContext.Permits.AsNoTracking()
+            .Where(x => x.Id == source.Id)
+            .Select(x => x.Version)
+            .SingleAsync(cancellationToken);
         var sourceRecord = ToRecord(source);
         sourceRecord.RowVersion = DecodeETag(expectedSourceETag);
         dbContext.Permits.Attach(sourceRecord);
@@ -79,10 +83,15 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
 
         var renewalRecord = ToRecord(renewal);
         dbContext.Permits.Add(renewalRecord);
-        AddVersion(source, actor.Id);
+        if (source.Version > persistedSourceVersion)
+        {
+            AddVersion(source, actor.Id);
+        }
         AddVersion(renewal, actor.Id);
-        AddEvents(source.DequeueEvents(), actor.Id, correlationId);
+        var sourceEvents = source.DequeueEvents();
+        AddEvents(sourceEvents, actor.Id, correlationId);
         AddEvents(renewal.DequeueEvents(), actor.Id, correlationId);
+        await ApplyWorkflowTasksAsync(source, sourceEvents, actor.Id, cancellationToken);
         AddAuthorizationEvidence(source.Id, actor.Id, correlationId, authorizationEvidence);
         dbContext.IdempotencyRecords.Add(new IdempotencyRecord
         {
@@ -372,6 +381,25 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                         "AreaOwnerManager",
                         domainEvent.OccurredAt);
                     break;
+                case "permit_renewal_requested":
+                    AddTask(
+                        permit,
+                        "AREA_RENEWAL_REVIEW",
+                        "Review perpanjangan PTW",
+                        "AreaOwnerManager",
+                        domainEvent.OccurredAt);
+                    break;
+                case "renewal_evidence_replacement_requested":
+                case "renewal_rejected":
+                case "renewal_approved":
+                    await CompleteTaskAsync(
+                        permit.Id,
+                        permit.Version,
+                        "AREA_RENEWAL_REVIEW",
+                        actorId,
+                        domainEvent.OccurredAt,
+                        cancellationToken);
+                    break;
                 case "permit_closed":
                     await CompleteTaskAsync(
                         permit.Id,
@@ -623,7 +651,8 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                 permit.Approval,
                 permit.Suspension,
                 permit.ClosureRequest,
-                permit.ClosureDecision),
+                permit.ClosureDecision,
+                permit.RenewalRequest),
             JsonOptions)
     };
 
@@ -632,7 +661,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         var draft = JsonSerializer.Deserialize<PermitDraft>(record.DraftJson, JsonOptions)
             ?? throw new InvalidOperationException("Snapshot draft PTW tidak valid.");
         var workflow = string.IsNullOrWhiteSpace(record.WorkflowEvidenceJson)
-            ? new PermitWorkflowSnapshot(null, null, null, null, null)
+            ? new PermitWorkflowSnapshot(null, null, null, null, null, null)
             : JsonSerializer.Deserialize<PermitWorkflowSnapshot>(record.WorkflowEvidenceJson, JsonOptions)
                 ?? throw new InvalidOperationException("Bukti workflow PTW tidak valid.");
         var permit = Permit.Rehydrate(
@@ -649,6 +678,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             workflow.Suspension,
             workflow.ClosureRequest,
             workflow.ClosureDecision,
+            workflow.RenewalRequest,
             record.RenewedFromPermitId,
             renewalPermitId);
         return new StoredPermit(permit, EncodeETag(record.RowVersion));
@@ -659,7 +689,8 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         PermitApprovalEvidence? Approval,
         PermitSuspensionEvidence? Suspension = null,
         PermitClosureEvidence? ClosureRequest = null,
-        PermitClosureDecisionEvidence? ClosureDecision = null);
+        PermitClosureDecisionEvidence? ClosureDecision = null,
+        PermitRenewalRequestEvidence? RenewalRequest = null);
 
     private static string EncodeETag(byte[] rowVersion) => $"\"{Convert.ToBase64String(rowVersion)}\"";
 

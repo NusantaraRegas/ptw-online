@@ -36,7 +36,7 @@ builder.Services.AddSingleton(
 builder.Services.AddSingleton(
     builder.Configuration.GetSection("IssuancePolicy").Get<IssuancePolicySettings>()
     ?? new IssuancePolicySettings());
-builder.Services.AddPtwInfrastructure(builder.Configuration);
+builder.Services.AddPtwInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
 var attachmentMaxFileBytes = builder.Configuration.GetValue<long>("Attachments:MaxFileBytes");
 if (attachmentMaxFileBytes > 0)
 {

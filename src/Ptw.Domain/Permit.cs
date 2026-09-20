@@ -29,6 +29,7 @@ public sealed class Permit
     public PermitSuspensionEvidence? Suspension { get; private set; }
     public PermitClosureEvidence? ClosureRequest { get; private set; }
     public PermitClosureDecisionEvidence? ClosureDecision { get; private set; }
+    public PermitRenewalRequestEvidence? RenewalRequest { get; private set; }
     public IReadOnlyList<DomainEvent> Events => _events;
 
     public static Permit CreateDraft(PermitDraft draft, DateTimeOffset now)
@@ -71,6 +72,7 @@ public sealed class Permit
         PermitSuspensionEvidence? suspension = null,
         PermitClosureEvidence? closureRequest = null,
         PermitClosureDecisionEvidence? closureDecision = null,
+        PermitRenewalRequestEvidence? renewalRequest = null,
         Guid? renewedFromPermitId = null,
         Guid? renewalPermitId = null) =>
         new(id, NormalizeAndValidate(draft, allowLegacyIncompleteDraft: true), createdAt, draftIsNormalized: true)
@@ -85,13 +87,36 @@ public sealed class Permit
             Suspension = suspension,
             ClosureRequest = closureRequest,
             ClosureDecision = closureDecision,
+            RenewalRequest = renewalRequest,
             RenewedFromPermitId = renewedFromPermitId,
             RenewalPermitId = renewalPermitId
         };
 
-    public void RequestRenewal(Permit renewal, DateTimeOffset now)
+    public void RequestRenewal(
+        Guid printPackageId,
+        IReadOnlyList<Guid> attachmentIds,
+        string actorId,
+        string continuationStatement,
+        DateTimeOffset validFrom,
+        DateTimeOffset validUntil,
+        DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.Issued, PermitStatus.Expired);
+        EnsureEvidence(actorId, continuationStatement);
+        if (!string.Equals(Draft.SponsorId, actorId.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.sponsor_mismatch",
+                "Hanya Sponsor PTW yang dapat mengajukan perpanjangan.");
+        }
+
+        if (ClosureRequest is not null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.closure_conflict",
+                "Perpanjangan tidak dapat diajukan setelah proses penutupan dimulai.");
+        }
+
         if (RenewalPermitId is not null)
         {
             throw new DomainRuleViolationException(
@@ -99,6 +124,119 @@ public sealed class Permit
                 "Renewal untuk PTW ini sudah pernah diajukan.");
         }
 
+        if (RenewalRequest?.Status == PermitRenewalReviewStatus.Pending)
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.review_pending",
+                "Permintaan perpanjangan masih menunggu keputusan Pemilik Wilayah.");
+        }
+
+        if (RenewalRequest?.Status == PermitRenewalReviewStatus.RevisionRequired
+            && RenewalRequest.AttachmentIds.ToHashSet().SetEquals(attachmentIds))
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.evidence_not_replaced",
+                "Evidence perpanjangan harus diganti dengan hardcopy hasil verifikasi lapangan yang baru.");
+        }
+
+        if (printPackageId == Guid.Empty || attachmentIds.Count == 0 || attachmentIds.Any(x => x == Guid.Empty))
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.evidence_required",
+                "Paket cetak dan hardcopy hasil verifikasi lapangan wajib dipilih sebelum mengajukan perpanjangan.");
+        }
+
+        var normalizedFrom = validFrom.ToUniversalTime();
+        var normalizedUntil = validUntil.ToUniversalTime();
+        if (normalizedFrom < Draft.ValidUntil)
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.validity_overlap",
+                "Masa renewal harus dimulai pada atau setelah masa berlaku PTW asal berakhir.");
+        }
+
+        if (normalizedFrom >= normalizedUntil)
+        {
+            throw new DomainRuleViolationException(
+                "permit.invalid_validity",
+                "Waktu mulai renewal harus lebih awal daripada waktu selesai.");
+        }
+
+        if (normalizedUntil - normalizedFrom > TimeSpan.FromDays(7))
+        {
+            throw new DomainRuleViolationException(
+                "permit.validity_exceeds_seven_days",
+                "Masa berlaku PTW renewal maksimum tujuh hari.");
+        }
+
+        RenewalRequest = new PermitRenewalRequestEvidence(
+            printPackageId,
+            attachmentIds.Distinct().ToArray(),
+            actorId.Trim(),
+            continuationStatement.Trim(),
+            normalizedFrom,
+            normalizedUntil,
+            now.ToUniversalTime(),
+            (RenewalRequest?.Revision ?? 0) + 1,
+            PermitRenewalReviewStatus.Pending);
+        Version++;
+        Touch(now);
+        Raise("permit_renewal_requested", new
+        {
+            PrintPackageId = printPackageId,
+            AttachmentIds = RenewalRequest.AttachmentIds,
+            RenewalRequest.RequestedBy,
+            RenewalRequest.ContinuationStatement,
+            RenewalValidFrom = normalizedFrom,
+            RenewalValidUntil = normalizedUntil,
+            RenewalRequest.Revision,
+            Version
+        });
+    }
+
+    public void RequestRenewalEvidenceReplacement(string actorId, string reason, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Issued, PermitStatus.Expired);
+        EnsureEvidence(actorId, reason);
+        EnsurePendingRenewalRequest();
+        RenewalRequest = RenewalRequest! with
+        {
+            Status = PermitRenewalReviewStatus.RevisionRequired,
+            ReplacementReason = reason.Trim(),
+            DecidedBy = actorId.Trim(),
+            DecisionStatement = reason.Trim(),
+            DecidedAt = now.ToUniversalTime()
+        };
+        Touch(now);
+        Raise("renewal_evidence_replacement_requested", new
+        {
+            RequestedBy = actorId.Trim(),
+            Reason = reason.Trim(),
+            RenewalRequest.Revision
+        });
+    }
+
+    public void RejectRenewal(string actorId, string reason, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Issued, PermitStatus.Expired);
+        EnsureEvidence(actorId, reason);
+        EnsurePendingRenewalRequest();
+        RenewalRequest = RenewalRequest! with
+        {
+            Status = PermitRenewalReviewStatus.Rejected,
+            DecidedBy = actorId.Trim(),
+            DecisionStatement = reason.Trim(),
+            DecidedAt = now.ToUniversalTime()
+        };
+        Touch(now);
+        Raise("renewal_rejected", new { RejectedBy = actorId.Trim(), Reason = reason.Trim() });
+    }
+
+    public void ApproveRenewal(Permit renewal, string actorId, string statement, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Issued, PermitStatus.Expired);
+        EnsureEvidence(actorId, statement);
+        EnsurePendingRenewalRequest();
         if (renewal.RenewedFromPermitId != Id
             || !string.Equals(renewal.Draft.SponsorId, Draft.SponsorId, StringComparison.OrdinalIgnoreCase)
             || !string.Equals(renewal.Draft.LocationId, Draft.LocationId, StringComparison.OrdinalIgnoreCase))
@@ -108,22 +246,30 @@ public sealed class Permit
                 "Draft renewal harus terhubung ke Sponsor dan lokasi PTW asal.");
         }
 
-        if (renewal.Draft.ValidFrom < Draft.ValidUntil)
+        if (renewal.Draft.ValidFrom != RenewalRequest!.ValidFrom
+            || renewal.Draft.ValidUntil != RenewalRequest.ValidUntil)
         {
             throw new DomainRuleViolationException(
-                "permit.renewal.validity_overlap",
-                "Masa renewal harus dimulai pada atau setelah masa berlaku PTW asal berakhir.");
+                "permit.renewal.validity_mismatch",
+                "Masa berlaku draft renewal harus sama dengan permintaan yang disetujui.");
         }
 
         RenewalPermitId = renewal.Id;
-        Version++;
+        RenewalRequest = RenewalRequest with
+        {
+            Status = PermitRenewalReviewStatus.Approved,
+            DecidedBy = actorId.Trim(),
+            DecisionStatement = statement.Trim(),
+            DecidedAt = now.ToUniversalTime()
+        };
         Touch(now);
-        Raise("permit_renewal_requested", new
+        Raise("renewal_approved", new
         {
             RenewalPermitId = renewal.Id,
+            ApprovedBy = actorId.Trim(),
+            Statement = statement.Trim(),
             RenewalValidFrom = renewal.Draft.ValidFrom,
-            RenewalValidUntil = renewal.Draft.ValidUntil,
-            Version
+            RenewalValidUntil = renewal.Draft.ValidUntil
         });
     }
 
@@ -156,6 +302,13 @@ public sealed class Permit
                 "Attachment dan PrintPackage wajib tersedia untuk signed field copy.");
         }
 
+        if (RenewalRequest?.Status == PermitRenewalReviewStatus.Pending)
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.review_pending",
+                "Lampiran tidak dapat diubah selama permintaan perpanjangan sedang ditinjau.");
+        }
+
         Version++;
         Touch(now);
         Raise("signed_field_copy_uploaded", new { AttachmentId = attachmentId, PrintPackageId = printPackageId, Version });
@@ -172,6 +325,7 @@ public sealed class Permit
     public void Submit(string permitNumber, SubmissionReadiness readiness, DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.Draft, PermitStatus.RevisionRequired);
+        EnsureHeaderClassificationIsComplete(Draft);
         EnsureOtherWorkTypeDetailIsComplete(Draft);
         EnsureSupportingDocumentSelectionIsComplete(Draft);
         if (!readiness.IsReady)
@@ -357,6 +511,13 @@ public sealed class Permit
         DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.Issued, PermitStatus.Suspended, PermitStatus.Expired);
+        if (RenewalPermitId is not null
+            || RenewalRequest?.Status is PermitRenewalReviewStatus.Pending or PermitRenewalReviewStatus.RevisionRequired)
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.renewal_conflict",
+                "Penutupan tidak dapat diajukan selama proses perpanjangan masih aktif.");
+        }
         EnsureEvidence(actorId, completionStatement);
         if (!string.Equals(Draft.SponsorId, actorId.Trim(), StringComparison.OrdinalIgnoreCase))
         {
@@ -517,6 +678,13 @@ public sealed class Permit
         var requiredDocumentCodes = PermitSupportingDocumentCatalog.NormalizeAndValidate(
             value.RequiredDocumentCodes,
             allowMissingRequired: allowLegacyIncompleteDraft);
+        var headerClassificationCodes = PermitHeaderClassificationCatalog.NormalizeAndValidate(
+            value.PermitClass,
+            value.HeaderClassificationCodes,
+            allowMissing: true);
+        var riskLevel = value.PermitClass == PermitClass.ColdWork
+            ? ResolveColdWorkLegacyRisk(value.RiskLevel, headerClassificationCodes)
+            : value.RiskLevel;
 
         return value with
         {
@@ -530,6 +698,8 @@ public sealed class Permit
             WorkTypeCode = workTypeCodes[0],
             WorkTypeCodes = workTypeCodes,
             OtherWorkTypeDescription = otherWorkTypeDescription,
+            HeaderClassificationCodes = headerClassificationCodes,
+            RiskLevel = riskLevel,
             RequiredDocumentCodes = requiredDocumentCodes,
             EquipmentTag = NormalizeOptional(value.EquipmentTag),
             EquipmentName = NormalizeOptionalWithMaxLength(
@@ -606,6 +776,28 @@ public sealed class Permit
     private static void EnsureSupportingDocumentSelectionIsComplete(PermitDraft draft) =>
         _ = PermitSupportingDocumentCatalog.NormalizeAndValidate(draft.RequiredDocumentCodes);
 
+    private static void EnsureHeaderClassificationIsComplete(PermitDraft draft) =>
+        _ = PermitHeaderClassificationCatalog.NormalizeAndValidate(
+            draft.PermitClass,
+            draft.HeaderClassificationCodes);
+
+    private static RiskLevel ResolveColdWorkLegacyRisk(
+        RiskLevel current,
+        IReadOnlyCollection<string> headerClassificationCodes)
+    {
+        if (headerClassificationCodes.Contains("COLD_LOW_RISK", StringComparer.OrdinalIgnoreCase))
+        {
+            return RiskLevel.Low;
+        }
+
+        if (headerClassificationCodes.Contains("COLD_HIGH_RISK", StringComparer.OrdinalIgnoreCase))
+        {
+            return RiskLevel.High;
+        }
+
+        return current;
+    }
+
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -639,6 +831,16 @@ public sealed class Permit
             throw new DomainRuleViolationException(
                 "permit.safety_equipment.hse_owned",
                 "APD/perlengkapan safety hanya dapat ditetapkan oleh PIC HSE saat validasi.");
+        }
+    }
+
+    private void EnsurePendingRenewalRequest()
+    {
+        if (RenewalRequest?.Status != PermitRenewalReviewStatus.Pending)
+        {
+            throw new DomainRuleViolationException(
+                "permit.renewal.request_missing",
+                "Permintaan perpanjangan yang menunggu review tidak tersedia.");
         }
     }
 

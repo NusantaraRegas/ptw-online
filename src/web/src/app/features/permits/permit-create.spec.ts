@@ -6,6 +6,69 @@ import { provideRouter } from '@angular/router';
 import { PermitCreate } from './permit-create';
 
 describe('PermitCreate', () => {
+  it('separates five mandatory uploads from the optional Bagian 4 checklist', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PermitCreate],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PermitCreate);
+    fixture.detectChanges();
+    const httpTesting = TestBed.inject(HttpTestingController);
+
+    httpTesting.expectOne('/api/v1/reference-data/mandatory-documents').flush([
+      {
+        code: 'JSA',
+        label: 'Job Safety Analisis (JSA)',
+        uploadCategory: 'JSA',
+        requiresMetadata: true,
+      },
+      { code: 'ID', label: 'ID', uploadCategory: 'SUPPORTING', requiresMetadata: false },
+      {
+        code: 'BPJS_TK',
+        label: 'BPJS TK',
+        uploadCategory: 'SUPPORTING',
+        requiresMetadata: false,
+      },
+      { code: 'FTW', label: 'FTW', uploadCategory: 'SUPPORTING', requiresMetadata: false },
+      {
+        code: 'ESIMI',
+        label: 'E-SIMI',
+        uploadCategory: 'SUPPORTING',
+        requiresMetadata: false,
+      },
+    ]);
+    httpTesting.expectOne('/api/v1/reference-data/supporting-documents').flush([
+      {
+        code: 'JSA',
+        label: 'Job Safety Analisis (JSA)',
+        templateColumn: 0,
+        templateIndex: 0,
+        required: true,
+        requiresMetadata: true,
+      },
+      {
+        code: 'MSDS',
+        label: 'MSDS',
+        templateColumn: 1,
+        templateIndex: 3,
+        required: false,
+        requiresMetadata: false,
+      },
+    ]);
+    fixture.detectChanges();
+
+    const mandatoryCards = fixture.nativeElement.querySelectorAll('.mandatory-document-option');
+    expect(mandatoryCards.length).toBe(5);
+    expect(fixture.nativeElement.textContent).toContain('BPJS TK');
+    expect(fixture.nativeElement.textContent).toContain('E-SIMI');
+
+    const additionalFieldset = Array.from<HTMLElement>(
+      fixture.nativeElement.querySelectorAll('fieldset'),
+    ).find((fieldset) => fieldset.querySelector('legend')?.textContent?.includes('Bagian 4'));
+    expect(additionalFieldset?.textContent).toContain('MSDS');
+    expect(additionalFieldset?.textContent).not.toContain('Job Safety Analisis');
+  });
+
   it('renders approved scoped locations as selectable options', async () => {
     await TestBed.configureTestingModule({
       imports: [PermitCreate],
@@ -35,6 +98,16 @@ describe('PermitCreate', () => {
         options: [
           { code: 'HOT_GRINDING', label: 'Menggerinda' },
           { code: 'HOT_WELDING', label: 'Mengelas' },
+        ],
+      },
+    ]);
+    httpTesting.expectOne('/api/v1/reference-data/header-classifications').flush([
+      {
+        permitClass: 'HotWork',
+        selectionMode: 'MULTIPLE',
+        options: [
+          { code: 'HOT_OPEN_FLAME', label: 'Api Terbuka' },
+          { code: 'HOT_SPARK', label: 'Percikan Api' },
         ],
       },
     ]);
@@ -72,6 +145,63 @@ describe('PermitCreate', () => {
 
     const form = (fixture.componentInstance as unknown as { form: FormGroup }).form;
     expect(form.controls['sponsorId'].value).toBe('sponsor.only.demo');
+  });
+
+  it('uses checkboxes for HOT, radios for COLD, and no extra header choice for CSE', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PermitCreate],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PermitCreate);
+    fixture.detectChanges();
+    const httpTesting = TestBed.inject(HttpTestingController);
+
+    httpTesting.expectOne('/api/v1/me').flush({
+      userId: 'sponsor.only.demo',
+      displayName: 'Sponsor Only Demo',
+      roles: ['Sponsor'],
+      locationScopes: ['*'],
+      competencyCodes: [],
+      isDevelopmentIdentity: true,
+    });
+    httpTesting.expectOne('/api/v1/locations').flush({ items: [], count: 0 });
+    httpTesting.expectOne('/api/v1/reference-data/work-types').flush([]);
+    httpTesting.expectOne('/api/v1/reference-data/header-classifications').flush([
+      {
+        permitClass: 'HotWork',
+        selectionMode: 'MULTIPLE',
+        options: [
+          { code: 'HOT_OPEN_FLAME', label: 'Api Terbuka' },
+          { code: 'HOT_SPARK', label: 'Percikan Api' },
+        ],
+      },
+      {
+        permitClass: 'ColdWork',
+        selectionMode: 'SINGLE',
+        options: [
+          { code: 'COLD_LOW_RISK', label: 'Low Risk' },
+          { code: 'COLD_HIGH_RISK', label: 'High Risk' },
+        ],
+      },
+      { permitClass: 'ConfinedSpaceEntry', selectionMode: 'NONE', options: [] },
+    ]);
+    fixture.detectChanges();
+
+    const headerInputs = () =>
+      Array.from<HTMLInputElement>(
+        fixture.nativeElement.querySelectorAll('input[name="header-classification"]'),
+      );
+    expect(headerInputs().map((input) => input.type)).toEqual(['checkbox', 'checkbox']);
+
+    const form = (fixture.componentInstance as unknown as { form: FormGroup }).form;
+    form.controls['permitClass'].setValue('ColdWork');
+    fixture.detectChanges();
+    expect(headerInputs().map((input) => input.type)).toEqual(['radio', 'radio']);
+
+    form.controls['permitClass'].setValue('ConfinedSpaceEntry');
+    fixture.detectChanges();
+    expect(headerInputs().length).toBe(0);
+    expect(form.controls['headerClassificationCodes'].valid).toBe(true);
   });
 
   it('allows multiple controlled work types to be selected', async () => {
@@ -207,6 +337,7 @@ describe('PermitCreate', () => {
       performingAuthority: 'Pelaksana',
       company: 'PT Mitra',
       workTypeCodes: ['HOT_WELDING'],
+      headerClassificationCodes: ['HOT_OPEN_FLAME', 'HOT_SPARK'],
       equipmentName: ' Gas inlet separator ',
       workOrderNumber: ' WO-2026-001 ',
       additionalHazardReference: ' Akses sisi utara licin ',
@@ -222,6 +353,7 @@ describe('PermitCreate', () => {
     expect(request.request.body.equipmentName).toBe('Gas inlet separator');
     expect(request.request.body.workOrderNumber).toBe('WO-2026-001');
     expect(request.request.body.additionalHazardReference).toBe('Akses sisi utara licin');
+    expect(request.request.body.headerClassificationCodes).toEqual(['HOT_OPEN_FLAME', 'HOT_SPARK']);
     expect(request.request.body.hazards).toEqual([]);
   });
 });

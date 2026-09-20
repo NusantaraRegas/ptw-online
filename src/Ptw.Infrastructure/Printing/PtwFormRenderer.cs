@@ -16,7 +16,7 @@ namespace Ptw.Infrastructure.Printing;
 /// </remarks>
 internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
 {
-    internal const string RendererVersion = "ptw-form-renderer/2.3.0";
+    internal const string RendererVersion = "ptw-form-renderer/2.4.0";
 
     private const double PageWidth = 420;
     private const double PageHeight = 297;
@@ -103,6 +103,13 @@ internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
             XColors.White);
         if (descriptor.SubTypes.Count > 0)
         {
+            var selectedHeaderClassifications = new HashSet<string>(
+                PermitHeaderClassificationCatalog.NormalizeAndValidate(
+                    snapshot.Permit.PermitClass,
+                    snapshot.Permit.HeaderClassificationCodes,
+                    allowMissing: true),
+                StringComparer.OrdinalIgnoreCase);
+            var headerOptions = PermitHeaderClassificationCatalog.Resolve(descriptor.PermitClass);
             for (var index = 0; index < descriptor.SubTypes.Count; index++)
             {
                 var itemY = y + 4.5 + (index * 5);
@@ -118,6 +125,11 @@ internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
                     TextAlign.Left,
                     XColors.White);
                 canvas.Box(classX + 44.5, itemY + 0.8, 4.5, 2.4);
+                var option = headerOptions.FirstOrDefault(item => item.TemplateIndex == index);
+                if (option is not null && selectedHeaderClassifications.Contains(option.Code))
+                {
+                    canvas.CheckMark(classX + 45.0, itemY + 0.75, 2.1);
+                }
             }
         }
         else if (!string.IsNullOrEmpty(descriptor.BannerSubLabel))

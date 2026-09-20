@@ -14,6 +14,25 @@ namespace Ptw.Api.IntegrationTests;
 public sealed class PermitApiTests(PtwApiFactory factory)
 {
     [Fact]
+    public async Task HeaderClassificationReferenceDataMatchesControlledTemplate()
+    {
+        using var client = factory.CreateClient();
+
+        var catalog = Required(await client.GetFromJsonAsync<PermitHeaderClassificationCatalogResponse[]>(
+            "/api/v1/reference-data/header-classifications"));
+
+        var hot = Assert.Single(catalog, item => item.PermitClass == "HotWork");
+        Assert.Equal("MULTIPLE", hot.SelectionMode);
+        Assert.Equal(["Api Terbuka", "Percikan Api"], hot.Options.Select(option => option.Label));
+        var cold = Assert.Single(catalog, item => item.PermitClass == "ColdWork");
+        Assert.Equal("SINGLE", cold.SelectionMode);
+        Assert.Equal(["Low Risk", "High Risk"], cold.Options.Select(option => option.Label));
+        var cse = Assert.Single(catalog, item => item.PermitClass == "ConfinedSpaceEntry");
+        Assert.Equal("NONE", cse.SelectionMode);
+        Assert.Empty(cse.Options);
+    }
+
+    [Fact]
     public async Task DraftRoundTripsOptionalPlanningReferenceFields()
     {
         var sponsorId = Unique("sponsor");
@@ -52,6 +71,21 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     }
 
     [Fact]
+    public async Task MandatoryDocumentReferenceDataRequiresJsaIdBpjsTkFtwAndESimi()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/api/v1/reference-data/mandatory-documents");
+        response.EnsureSuccessStatusCode();
+        var options = Required(
+            await response.Content.ReadFromJsonAsync<PermitMandatoryDocumentOptionResponse[]>());
+
+        Assert.Equal(["JSA", "ID", "BPJS_TK", "FTW", "ESIMI"], options.Select(x => x.Code));
+        Assert.Equal("JSA", options[0].UploadCategory);
+        Assert.All(options.Skip(1), option => Assert.Equal("SUPPORTING", option.UploadCategory));
+    }
+
+    [Fact]
     public async Task SponsorCannotAssignHseOwnedSafetyEquipmentInDraft()
     {
         var sponsorId = Unique("sponsor");
@@ -65,6 +99,28 @@ public sealed class PermitApiTests(PtwApiFactory factory)
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("permit.safety_equipment.hse_owned", await ProblemCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task SubmitRejectsDraftWithoutControlledHeaderClassification()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        using var createResponse = await sponsor.PostAsJsonAsync(
+            "/api/v1/permits",
+            Draft(sponsorId, "ORF") with { HeaderClassificationCodes = [] });
+        createResponse.EnsureSuccessStatusCode();
+        var draft = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        draft = await UploadMandatoryDocumentsAsync(sponsor, draft);
+
+        using var response = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{draft.Id}/submit",
+            draft.ETag,
+            ReadyToSubmit()));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("permit.header_classification_required", await ProblemCodeAsync(response));
     }
 
     [Fact]
@@ -111,7 +167,31 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             ReadyToSubmit()));
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal("permit.supporting_document.evidence_required", await ProblemCodeAsync(response));
+        Assert.Equal("permit.mandatory_document.evidence_required", await ProblemCodeAsync(response));
+    }
+
+    [Theory]
+    [InlineData("JSA", "Job Safety Analisis")]
+    [InlineData("ID", "ID")]
+    [InlineData("BPJS_TK", "BPJS TK")]
+    [InlineData("FTW", "FTW")]
+    [InlineData("ESIMI", "E-SIMI")]
+    public async Task SubmitRejectsEachMissingMandatoryDocument(string omittedCode, string expectedLabel)
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        var draft = await CreateAsync(sponsor, sponsorId, "ORF");
+        draft = await UploadMandatoryDocumentsAsync(sponsor, draft, omittedCode);
+
+        using var response = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{draft.Id}/submit",
+            draft.ETag,
+            ReadyToSubmit()));
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal("permit.mandatory_document.evidence_required", await ProblemCodeAsync(response));
+        Assert.Contains(expectedLabel, await response.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -124,7 +204,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             Draft(sponsorId, "ORF") with { RequiredDocumentCodes = ["JSA", "MSDS"] });
         createResponse.EnsureSuccessStatusCode();
         var draft = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        draft = await UploadJsaAsync(sponsor, draft);
+        draft = await UploadMandatoryDocumentsAsync(sponsor, draft);
 
         using var response = await sponsor.SendAsync(Command(
             HttpMethod.Post,
@@ -378,7 +458,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     }
 
     [Fact]
-    public async Task AttachmentUploadAcceptsVerifiedPdfJpegAndPngSignaturesAsPendingEvidence()
+    public async Task DevelopmentAttachmentUploadAcceptsVerifiedPdfJpegAndPngSignaturesAsCleanEvidence()
     {
         var sponsorId = Unique("sponsor");
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
@@ -409,7 +489,11 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             using var response = await sponsor.SendAsync(request);
             Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
             var mutation = Required(await response.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
-            Assert.Equal("PENDING", mutation.Attachment.ScanStatus);
+            Assert.Equal("CLEAN", mutation.Attachment.ScanStatus);
+            Assert.StartsWith(
+                "development-trusted-upload:",
+                Assert.IsType<string>(mutation.Attachment.ScanEvidenceReference));
+            Assert.NotNull(mutation.Attachment.ScannedAt);
             Assert.Equal("SUPPORTING", mutation.Attachment.Category);
             Assert.Equal(mediaType, mutation.Attachment.MediaType);
             Assert.Equal(64, mutation.Attachment.Sha256.Length);
@@ -417,10 +501,9 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             permit = permit with { ETag = mutation.ETag, Version = mutation.PermitVersion };
         }
 
-        using var pendingDownload = await sponsor.GetAsync(
+        using var cleanDownload = await sponsor.GetAsync(
             $"/api/v1/permits/{permit.Id}/attachments/{Required(firstAttachment).Id}/content");
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, pendingDownload.StatusCode);
-        Assert.Equal("attachment.not_clean", await ProblemCodeAsync(pendingDownload));
+        Assert.Equal(HttpStatusCode.OK, cleanDownload.StatusCode);
 
         using var otherSponsor = Client(Unique("other-sponsor"), "Sponsor", "ORF");
         using var crossSponsorList = await otherSponsor.GetAsync($"/api/v1/permits/{permit.Id}/attachments");
@@ -500,7 +583,17 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         using var uploadResponse = await sponsor.SendAsync(uploadRequest);
         Assert.True(uploadResponse.IsSuccessStatusCode, await uploadResponse.Content.ReadAsStringAsync());
         var upload = Required(await uploadResponse.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
-        Assert.Equal("PENDING", upload.Attachment.ScanStatus);
+        Assert.Equal("CLEAN", upload.Attachment.ScanStatus);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+            var attachment = await db.PermitAttachments.SingleAsync(x => x.Id == upload.Attachment.Id);
+            attachment.ScanStatus = "PENDING";
+            attachment.ScanEvidenceReference = null;
+            attachment.ScannedAt = null;
+            await db.SaveChangesAsync();
+        }
 
         using var closureResponse = await sponsor.SendAsync(Command(
             HttpMethod.Post,
@@ -519,6 +612,102 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var verificationDb = verificationScope.ServiceProvider.GetRequiredService<PtwDbContext>();
         Assert.Empty(await verificationDb.PermitTasks.Where(x =>
             x.PermitId == issued.Id && x.Type == "AREA_CLOSE_VERIFICATION").ToListAsync());
+    }
+
+    [Fact]
+    public async Task RenewalCreatesSuccessorDraftOnlyAfterAreaOwnerApprovesVerifiedFieldCopy()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
+        using var manager = Client(Unique("manager"), "AreaOwnerManager", "ORF");
+        var validated = await CreateAndValidateAsync(sponsor, validator, sponsorId);
+        var approvalTask = await PendingTaskAsync(validated.Id, "AREA_APPROVE_AND_ISSUE");
+        using var issueResponse = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{approvalTask.Id}/approve-and-issue",
+            validated.ETag,
+            new ApproveAndIssuePermitRequest("Disetujui dan diterbitkan.", null)));
+        issueResponse.EnsureSuccessStatusCode();
+        var issued = Required(await issueResponse.Content.ReadFromJsonAsync<PermitResponse>());
+
+        Guid printPackageId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+            var package = await db.PrintPackageSnapshots.SingleAsync(x => x.PermitId == issued.Id);
+            package.RenderStatus = "READY";
+            printPackageId = package.Id;
+            await db.SaveChangesAsync();
+        }
+
+        using var uploadContent = new MultipartFormDataContent();
+        var file = new ByteArrayContent(Encoding.ASCII.GetBytes("%PDF-1.7\n"));
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        uploadContent.Add(file, "file", "latest-field-copy.pdf");
+        uploadContent.Add(new StringContent("SIGNED_FIELD_COPY"), "category");
+        uploadContent.Add(new StringContent("SFC-RENEW-001"), "documentNumber");
+        uploadContent.Add(new StringContent("1"), "documentRevision");
+        uploadContent.Add(new StringContent(DateTimeOffset.UtcNow.ToString("O")), "documentDate");
+        uploadContent.Add(new StringContent(printPackageId.ToString()), "printPackageId");
+        using var uploadRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1/permits/{issued.Id}/attachments")
+        {
+            Content = uploadContent
+        };
+        uploadRequest.Headers.TryAddWithoutValidation("If-Match", issued.ETag);
+        uploadRequest.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+        using var uploadResponse = await sponsor.SendAsync(uploadRequest);
+        uploadResponse.EnsureSuccessStatusCode();
+        var upload = Required(await uploadResponse.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+            var attachment = await db.PermitAttachments.SingleAsync(x => x.Id == upload.Attachment.Id);
+            attachment.ScanStatus = "CLEAN";
+            attachment.ScanEvidenceReference = "integration-test-clean-evidence";
+            attachment.ScannedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        using var requestResponse = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{issued.Id}/renew",
+            upload.ETag,
+            new RequestPermitRenewalRequest(
+                issued.Draft.ValidUntil,
+                issued.Draft.ValidUntil.AddDays(1),
+                printPackageId,
+                [upload.Attachment.Id],
+                "Pekerjaan belum selesai dan perlu dilanjutkan.",
+                true,
+                true)));
+        requestResponse.EnsureSuccessStatusCode();
+        var requested = Required(await requestResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Null(requested.RenewalPermitId);
+        Assert.Equal("PENDING", requested.Workflow.Renewal.Status);
+
+        var renewalTask = await PendingTaskAsync(issued.Id, "AREA_RENEWAL_REVIEW");
+        using var sponsorApproval = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/renewal-tasks/{renewalTask.Id}/approve",
+            requested.ETag,
+            new ApproveRenewalRequest("Tidak berwenang.", true, true)));
+        Assert.Equal(HttpStatusCode.Forbidden, sponsorApproval.StatusCode);
+
+        using var ownerApproval = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/renewal-tasks/{renewalTask.Id}/approve",
+            requested.ETag,
+            new ApproveRenewalRequest("Hardcopy lapangan telah diverifikasi.", true, true)));
+        ownerApproval.EnsureSuccessStatusCode();
+        var result = Required(await ownerApproval.Content.ReadFromJsonAsync<PermitRenewalResponse>());
+        Assert.Equal("DRAFT", result.Renewal.Status);
+        Assert.Equal(issued.Id, result.Renewal.RenewedFromPermitId);
+        Assert.Equal(result.Renewal.Id, (await sponsor.GetFromJsonAsync<PermitResponse>(
+            $"/api/v1/permits/{issued.Id}"))?.RenewalPermitId);
     }
 
     private async Task<PermitResponse> CreateAndValidateAsync(
@@ -546,7 +735,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         string location = "ORF")
     {
         var draft = await CreateAsync(sponsor, sponsorId, location);
-        draft = await UploadJsaAsync(sponsor, draft);
+        draft = await UploadMandatoryDocumentsAsync(sponsor, draft);
         using var response = await sponsor.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/permits/{draft.Id}/submit",
@@ -554,6 +743,29 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             ReadyToSubmit()));
         response.EnsureSuccessStatusCode();
         return Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
+    }
+
+    private static async Task<PermitResponse> UploadMandatoryDocumentsAsync(
+        HttpClient client,
+        PermitResponse permit,
+        string? omittedCode = null)
+    {
+        if (!string.Equals(omittedCode, "JSA", StringComparison.OrdinalIgnoreCase))
+        {
+            permit = await UploadJsaAsync(client, permit);
+        }
+
+        foreach (var code in new[] { "ID", "BPJS_TK", "FTW", "ESIMI" })
+        {
+            if (string.Equals(omittedCode, code, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            permit = await UploadSupportingDocumentAsync(client, permit, code);
+        }
+
+        return permit;
     }
 
     private static async Task<PermitResponse> UploadJsaAsync(HttpClient client, PermitResponse permit)
@@ -567,6 +779,33 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         content.Add(new StringContent(Required(permit.Draft.JsaDocumentNumber)), "documentNumber");
         content.Add(new StringContent(Required(permit.Draft.JsaRevision)), "documentRevision");
         content.Add(new StringContent(permit.Draft.JsaDate!.Value.ToString("O")), "documentDate");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1/permits/{permit.Id}/attachments")
+        {
+            Content = content
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", permit.ETag);
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+
+        using var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        var mutation = Required(
+            await response.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
+        return permit with { ETag = mutation.ETag, Version = mutation.PermitVersion };
+    }
+
+    private static async Task<PermitResponse> UploadSupportingDocumentAsync(
+        HttpClient client,
+        PermitResponse permit,
+        string documentCode)
+    {
+        using var content = new MultipartFormDataContent();
+        var file = new ByteArrayContent(Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF\n"));
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        content.Add(file, "file", $"{documentCode.ToLowerInvariant()}.pdf");
+        content.Add(new StringContent("SUPPORTING"), "category");
+        content.Add(new StringContent(documentCode), "supportingDocumentCode");
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/api/v1/permits/{permit.Id}/attachments")
@@ -651,7 +890,8 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             JsaDocumentNumber: "JSA-TEST-001",
             JsaRevision: "1",
             JsaDate: now,
-            WorkTypeCodes: ["HOT_WELDING"]);
+            WorkTypeCodes: ["HOT_WELDING"],
+            HeaderClassificationCodes: ["HOT_OPEN_FLAME"]);
     }
 
     private static async Task<string?> ProblemCodeAsync(HttpResponseMessage response)

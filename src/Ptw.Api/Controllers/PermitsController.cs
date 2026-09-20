@@ -130,19 +130,43 @@ public sealed class PermitsController(
         PermitCommandAsync((etag, _) => service.UpdateDraftAsync(id, request, etag, CorrelationId, cancellationToken));
 
     [HttpPost("{id:guid}/renew")]
-    public async Task<ActionResult<PermitRenewalResponse>> CreateRenewal(
+    public Task<ActionResult<PermitResponse>> RequestRenewal(
         Guid id,
         RequestPermitRenewalRequest request,
+        CancellationToken cancellationToken) =>
+        PermitCommandAsync((etag, key) => service.RequestRenewalAsync(
+            id, request, etag, key, CorrelationId, cancellationToken));
+
+    [HttpPost("/api/v1/renewal-tasks/{taskId:guid}/request-evidence")]
+    public Task<ActionResult<PermitResponse>> RequestRenewalEvidenceReplacement(
+        Guid taskId,
+        PermitReasonRequest request,
+        CancellationToken cancellationToken) =>
+        PermitCommandAsync((etag, key) => service.RequestRenewalEvidenceReplacementAsync(
+            taskId, request, etag, key, CorrelationId, cancellationToken));
+
+    [HttpPost("/api/v1/renewal-tasks/{taskId:guid}/reject")]
+    public Task<ActionResult<PermitResponse>> RejectRenewal(
+        Guid taskId,
+        PermitReasonRequest request,
+        CancellationToken cancellationToken) =>
+        PermitCommandAsync((etag, key) => service.RejectRenewalAsync(
+            taskId, request, etag, key, CorrelationId, cancellationToken));
+
+    [HttpPost("/api/v1/renewal-tasks/{taskId:guid}/approve")]
+    public async Task<ActionResult<PermitRenewalResponse>> ApproveRenewal(
+        Guid taskId,
+        ApproveRenewalRequest request,
         CancellationToken cancellationToken)
     {
-        var response = await service.RequestRenewalAsync(
-            id,
+        var response = await service.ApproveRenewalAsync(
+            taskId,
             request,
             Request.Headers.IfMatch.ToString(),
             Request.Headers["Idempotency-Key"].ToString(),
             CorrelationId,
             cancellationToken);
-        Response.Headers.ETag = response.Renewal.ETag;
+        Response.Headers.ETag = response.SourceETag;
         return CreatedAtAction(nameof(Get), new { id = response.Renewal.Id }, response);
     }
 

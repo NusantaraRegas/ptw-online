@@ -33,7 +33,15 @@ public sealed record PermitDraftRequest(
     string? OtherWorkTypeDescription = null,
     string? EquipmentName = null,
     string? WorkOrderNumber = null,
-    string? AdditionalHazardReference = null);
+    string? AdditionalHazardReference = null,
+    IReadOnlyList<string>? HeaderClassificationCodes = null);
+
+public sealed record PermitHeaderClassificationOptionResponse(string Code, string Label);
+
+public sealed record PermitHeaderClassificationCatalogResponse(
+    string PermitClass,
+    string SelectionMode,
+    IReadOnlyList<PermitHeaderClassificationOptionResponse> Options);
 
 public sealed record PermitWorkTypeOptionResponse(string Code, string Label, bool RequiresDetail);
 
@@ -55,6 +63,12 @@ public sealed record PermitSupportingDocumentOptionResponse(
     bool Required,
     bool RequiresMetadata);
 
+public sealed record PermitMandatoryDocumentOptionResponse(
+    string Code,
+    string Label,
+    string UploadCategory,
+    bool RequiresMetadata);
+
 public sealed record SubmitPermitRequest(
     bool ESimiEligible,
     bool RulesEvaluated,
@@ -73,7 +87,17 @@ public sealed record PermitReasonRequest(string Reason);
 
 public sealed record RequestPermitRenewalRequest(
     DateTimeOffset ValidFrom,
-    DateTimeOffset ValidUntil);
+    DateTimeOffset ValidUntil,
+    Guid PrintPackageId,
+    IReadOnlyList<Guid> SignedFieldCopyAttachmentIds,
+    string ContinuationStatement,
+    bool AllPagesReviewed,
+    bool ReadableAndCompleteAcknowledged);
+
+public sealed record ApproveRenewalRequest(
+    string Statement,
+    bool FieldVerificationConfirmed,
+    bool EvidenceReadable);
 
 public sealed record ResolveSuspensionRequest(string Resolution);
 
@@ -134,10 +158,27 @@ public sealed record PermitClosureResponse(
     string? CloseStatement,
     DateTimeOffset? ClosedAt);
 
+public sealed record PermitRenewalRequestResponse(
+    bool Requested,
+    string? Status,
+    Guid? PrintPackageId,
+    IReadOnlyList<Guid> SignedFieldCopyAttachmentIds,
+    string? RequestedBy,
+    string? ContinuationStatement,
+    DateTimeOffset? ValidFrom,
+    DateTimeOffset? ValidUntil,
+    DateTimeOffset? RequestedAt,
+    int Revision,
+    string? ReplacementReason,
+    string? DecidedBy,
+    string? DecisionStatement,
+    DateTimeOffset? DecidedAt);
+
 public sealed record PermitWorkflowResponse(
     PermitValidationResponse Hse,
     PermitApprovalResponse Approval,
     PermitSuspensionResponse Suspension,
+    PermitRenewalRequestResponse Renewal,
     PermitClosureResponse Closure);
 
 public sealed record PermitResponse(

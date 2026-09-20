@@ -205,3 +205,22 @@ internal sealed class UnavailableMalwareScanner : IMalwareScanner
             "attachment.scanner_required",
             "Malware scanner belum dikonfigurasi.");
 }
+
+/// <summary>
+/// Development-only adapter that makes local uploads immediately usable without invoking an
+/// external malware scanner. Production never registers this adapter and remains fail-closed.
+/// </summary>
+internal sealed class DevelopmentUploadTrustScanner(IClock clock) : IMalwareScanner
+{
+    public bool IsAvailable => true;
+
+    public Task<MalwareScanResult> ScanAsync(
+        Stream content,
+        string mediaType,
+        string sha256,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new MalwareScanResult(
+            "CLEAN",
+            $"development-trusted-upload:{sha256.ToLowerInvariant()}",
+            clock.UtcNow));
+}

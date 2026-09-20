@@ -86,8 +86,8 @@
             <dd>{{ permit()!.draft.permitClass }}</dd>
           </div>
           <div>
-            <dt>Tingkat risiko</dt>
-            <dd>{{ permit()!.draft.riskLevel }}</dd>
+            <dt>Klasifikasi header izin</dt>
+            <dd>{{ headerClassificationLabels(permit()!.draft) }}</dd>
           </div>
           <div>
             <dt>Tipe pengaju</dt>
@@ -154,6 +154,7 @@
           [permitId]="permit()!.id"
           [eTag]="permit()!.eTag"
           [canManage]="canManageAttachments()"
+          [fieldCopyOnly]="fieldCopyOnly()"
           [selectedDocumentCodes]="permit()!.draft.requiredDocumentCodes"
           [jsaDocumentNumber]="permit()!.draft.jsaDocumentNumber ?? ''"
           [jsaRevision]="permit()!.draft.jsaRevision ?? ''"
@@ -221,11 +222,24 @@
           </section>
         }
 
-        @if (canRequestRenewal() && !showingRenewalForm()) {
+        @if (permit()!.workflow.renewal?.status === 'PENDING') {
+          <section class="card workflow-action evidence-card">
+            <h2>Perpanjangan sedang ditinjau</h2>
+            <p>Pemilik Wilayah sedang memeriksa hardcopy hasil verifikasi lapangan.</p>
+          </section>
+        } @else if (permit()!.workflow.renewal?.status === 'REVISION_REQUIRED') {
+          <section class="card workflow-action evidence-card">
+            <h2>Evidence perpanjangan perlu diperbarui</h2>
+            <p>{{ permit()!.workflow.renewal?.replacementReason }}</p>
+          </section>
+        }
+
+        @if (canRequestRenewal() && !showingRenewalForm() && !showingClosureForm()) {
           <section class="card workflow-action">
             <h2>Perpanjangan PTW</h2>
             <p>
-              Buat draft renewal dengan nomor PTW baru. PTW lama tetap berlaku dan tidak berubah.
+              Ajukan hardcopy hasil verifikasi lapangan kepada Pemilik Wilayah. Draft PTW penerus
+              baru dibuat setelah disetujui.
             </p>
             <button class="secondary-button" type="button" (click)="openRenewalForm()">
               Ajukan perpanjangan
@@ -241,9 +255,30 @@
           >
             <h2>Masa berlaku renewal</h2>
             <p>
-              Masa renewal maksimum tujuh hari dan tidak boleh tumpang tindih dengan PTW asal.
-              Lampiran tidak disalin otomatis.
+              Masa renewal maksimum tujuh hari dan tidak boleh tumpang tindih dengan PTW asal. Pilih
+              paket cetak dan salinan lapangan yang telah diunggah di bagian Lampiran PTW.
             </p>
+            <label>
+              Paket cetak yang diverifikasi
+              <select formControlName="printPackageId">
+                <option value="">Pilih paket cetak</option>
+                @for (option of readyPrintPackages(); track option.id) {
+                  <option [value]="option.id">Versi {{ option.permitVersion }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              Hardcopy terbaru
+              <select formControlName="signedFieldCopyAttachmentId">
+                <option value="">Pilih salinan lapangan</option>
+                @for (
+                  attachment of fieldCopiesForPackage(renewalForm.controls.printPackageId.value);
+                  track attachment.id
+                ) {
+                  <option [value]="attachment.id">{{ attachment.fileName }}</option>
+                }
+              </select>
+            </label>
             <label>
               Mulai renewal
               <input type="datetime-local" formControlName="validFrom" />
@@ -251,6 +286,22 @@
             <label>
               Selesai renewal
               <input type="datetime-local" formControlName="validUntil" />
+            </label>
+            <label>
+              Alasan pekerjaan perlu dilanjutkan
+              <textarea
+                rows="3"
+                maxlength="1000"
+                formControlName="continuationStatement"
+              ></textarea>
+            </label>
+            <label class="check">
+              <input type="checkbox" formControlName="allPagesReviewed" />
+              Saya telah meninjau seluruh halaman hardcopy terbaru.
+            </label>
+            <label class="check">
+              <input type="checkbox" formControlName="readableAndCompleteAcknowledged" />
+              Hardcopy terbaca, lengkap, dan merupakan hasil verifikasi lapangan terbaru.
             </label>
             @if (renewalError()) {
               <div class="message error renewal-error" role="alert">
@@ -274,7 +325,88 @@
                 type="submit"
                 [disabled]="saving() || renewalForm.invalid"
               >
-                {{ saving() ? 'Membuat draft…' : 'Buat draft renewal' }}
+                {{ saving() ? 'Mengirim...' : 'Kirim permintaan perpanjangan' }}
+              </button>
+            </div>
+          </form>
+        }
+
+        @if (canRequestClosure() && !showingClosureForm() && !showingRenewalForm()) {
+          <section class="card workflow-action">
+            <h2>Pekerjaan selesai</h2>
+            <p>
+              Nyatakan pekerjaan selesai dan kirim hardcopy terbaru agar Pemilik Wilayah dapat
+              memverifikasi serta menutup PTW.
+            </p>
+            <button class="secondary-button" type="button" (click)="openClosureForm()">
+              Ajukan penutupan
+            </button>
+          </section>
+        }
+
+        @if (showingClosureForm()) {
+          <form
+            class="card workflow-action"
+            [formGroup]="closureForm"
+            (ngSubmit)="requestClosure()"
+          >
+            <h2>Ajukan penutupan PTW</h2>
+            <label>
+              Paket cetak yang diverifikasi
+              <select formControlName="printPackageId">
+                <option value="">Pilih paket cetak</option>
+                @for (option of readyPrintPackages(); track option.id) {
+                  <option [value]="option.id">Versi {{ option.permitVersion }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              Hardcopy terbaru
+              <select formControlName="signedFieldCopyAttachmentId">
+                <option value="">Pilih salinan lapangan</option>
+                @for (
+                  attachment of fieldCopiesForPackage(closureForm.controls.printPackageId.value);
+                  track attachment.id
+                ) {
+                  <option [value]="attachment.id">{{ attachment.fileName }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              Pernyataan penyelesaian pekerjaan
+              <textarea rows="3" maxlength="1000" formControlName="completionStatement"></textarea>
+            </label>
+            <label class="check">
+              <input type="checkbox" formControlName="allPagesReviewed" />
+              Saya telah meninjau seluruh halaman hardcopy terbaru.
+            </label>
+            <label class="check">
+              <input type="checkbox" formControlName="readableAndCompleteAcknowledged" />
+              Hardcopy terbaca, lengkap, dan merupakan hasil verifikasi lapangan terbaru.
+            </label>
+            @if (closureError()) {
+              <div class="message error closure-error" role="alert">
+                <span>{{ closureError() }}</span>
+                @if (closureConflict()) {
+                  <button type="button" (click)="reload()">Muat versi terbaru</button>
+                }
+              </div>
+            }
+            <div class="action-buttons renewal-actions">
+              <button
+                class="text-button"
+                type="button"
+                [disabled]="saving()"
+                (click)="cancelClosure()"
+              >
+                Batal
+              </button>
+              <button
+                class="primary-button"
+                type="submit"
+                [disabled]="saving() || closureForm.invalid"
+              >
+                {{ saving() ? 'Mengirim...' : 'Kirim permintaan penutupan' }}
               </button>
             </div>
           </form>
@@ -366,6 +498,57 @@
                 </span>
               </div>
             }
+            @if (canReviewRenewal()) {
+              <div class="decision-context">
+                <strong>Review perpanjangan</strong>
+                <span>
+                  {{ permit()!.workflow.renewal?.continuationStatement }}
+                </span>
+                <span>
+                  Masa diminta:
+                  {{
+                    permit()!.workflow.renewal?.validFrom
+                      | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta'
+                  }}
+                  WIB sampai
+                  {{
+                    permit()!.workflow.renewal?.validUntil
+                      | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta'
+                  }}
+                  WIB
+                </span>
+              </div>
+              <div [formGroup]="renewalDecisionForm" class="confirmation-list">
+                <label class="check">
+                  <input type="checkbox" formControlName="fieldVerificationConfirmed" />
+                  Verifikasi lapangan pada hardcopy telah dikonfirmasi.
+                </label>
+                <label class="check">
+                  <input type="checkbox" formControlName="evidenceReadable" />
+                  Evidence terbaca dan cocok dengan paket cetak.
+                </label>
+              </div>
+            }
+            @if (canClose()) {
+              <div class="decision-context">
+                <strong>Verifikasi penutupan</strong>
+                <span>{{ permit()!.workflow.closure.completionStatement }}</span>
+              </div>
+              <div [formGroup]="closureDecisionForm" class="confirmation-list">
+                <label class="check">
+                  <input type="checkbox" formControlName="completionConfirmed" />
+                  Penyelesaian pekerjaan telah dikonfirmasi.
+                </label>
+                <label class="check">
+                  <input type="checkbox" formControlName="handbackConfirmed" />
+                  Handback area telah dikonfirmasi.
+                </label>
+                <label class="check">
+                  <input type="checkbox" formControlName="evidenceReadable" />
+                  Evidence hardcopy terbaca dan cocok dengan paket cetak.
+                </label>
+              </div>
+            }
             <label
               >Pernyataan atau alasan<textarea
                 rows="3"
@@ -400,6 +583,52 @@
                   (click)="approveAndIssue()"
                 >
                   Setujui dan terbitkan
+                </button>
+              }
+              @if (canReviewRenewal()) {
+                <button
+                  class="primary-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid || renewalDecisionForm.invalid"
+                  (click)="approveRenewal()"
+                >
+                  Setujui perpanjangan
+                </button>
+                <div class="disposition-actions">
+                  <button
+                    class="secondary-button"
+                    type="button"
+                    [disabled]="saving() || decisionStatement.invalid"
+                    (click)="requestRenewalEvidence()"
+                  >
+                    Minta evidence baru
+                  </button>
+                  <button
+                    class="danger-button"
+                    type="button"
+                    [disabled]="saving() || decisionStatement.invalid"
+                    (click)="rejectRenewal()"
+                  >
+                    Tolak perpanjangan
+                  </button>
+                </div>
+              }
+              @if (canClose()) {
+                <button
+                  class="primary-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid || closureDecisionForm.invalid"
+                  (click)="closePermit()"
+                >
+                  Verifikasi dan tutup PTW
+                </button>
+                <button
+                  class="secondary-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid"
+                  (click)="requestClosureEvidence()"
+                >
+                  Minta evidence pengganti
                 </button>
               }
               @if (canDisposition()) {
@@ -512,6 +741,46 @@
             <option value="ConfinedSpaceEntry">Memasuki Ruang Terbatas</option>
           </select></label
         >
+        <fieldset class="work-types wide" aria-describedby="edit-header-classification-help">
+          <legend>Klasifikasi header izin</legend>
+          <small id="edit-header-classification-help">
+            @if (form.controls.permitClass.value === 'HotWork') {
+              Pilih Api Terbuka dan/atau Percikan Api sesuai pekerjaan. Pilihan dicetak pada header
+              formulir HOT.
+            } @else if (form.controls.permitClass.value === 'ColdWork') {
+              Pilih satu klasifikasi Low Risk atau High Risk sesuai header formulir COLD.
+            } @else {
+              Formulir CSE tidak memiliki pilihan klasifikasi tambahan pada header.
+            }
+          </small>
+          @if (loadingHeaderClassifications()) {
+            <p class="work-type-state">Memuat klasifikasi izin...</p>
+          } @else if (headerClassificationError()) {
+            <p class="work-type-state error-text" role="alert">
+              {{ headerClassificationError() }}
+            </p>
+          } @else if (headerClassificationOptions().length > 0) {
+            <div class="work-type-options">
+              @for (option of headerClassificationOptions(); track option.code) {
+                <label class="work-type-option">
+                  <input
+                    [type]="headerClassificationSelectionMode() === 'SINGLE' ? 'radio' : 'checkbox'"
+                    name="edit-header-classification"
+                    [checked]="isHeaderClassificationSelected(option.code)"
+                    (change)="toggleHeaderClassification(option.code, $event)"
+                  />
+                  <span>{{ option.label }}</span>
+                </label>
+              }
+            </div>
+          }
+          @if (
+            form.controls.headerClassificationCodes.touched &&
+            form.controls.headerClassificationCodes.invalid
+          ) {
+            <span class="field-error" role="alert">Pilih klasifikasi sesuai formulir izin.</span>
+          }
+        </fieldset>
         <fieldset class="work-types wide" aria-describedby="edit-work-type-help">
           <legend>Jenis pekerjaan</legend>
           <small id="edit-work-type-help">
@@ -593,13 +862,42 @@
         <label>Revisi JSA<input formControlName="jsaRevision" /></label>
         <label>Tanggal JSA<input type="date" formControlName="jsaDate" /></label>
         <fieldset
+          class="work-types mandatory-documents wide"
+          aria-describedby="edit-mandatory-help"
+        >
+          <legend>Dokumen dasar wajib</legend>
+          <small id="edit-mandatory-help">
+            Semua dokumen berikut wajib diunggah melalui bagian Lampiran PTW setelah perubahan
+            disimpan.
+          </small>
+          @if (loadingMandatoryDocuments()) {
+            <p class="work-type-state">Memuat daftar dokumen wajib...</p>
+          } @else if (mandatoryDocumentError()) {
+            <p class="work-type-state error-text" role="alert">
+              {{ mandatoryDocumentError() }}
+            </p>
+          } @else {
+            <div class="supporting-document-options">
+              @for (option of mandatoryDocumentOptions(); track option.code) {
+                <div class="supporting-document-option required mandatory-document-option">
+                  <span class="mandatory-document-marker" aria-hidden="true">↑</span>
+                  <span>
+                    <strong>{{ option.label }}</strong>
+                    <small>Wajib diunggah</small>
+                  </span>
+                </div>
+              }
+            </div>
+          }
+        </fieldset>
+        <fieldset
           class="work-types supporting-documents wide"
           aria-describedby="edit-supporting-help"
         >
-          <legend>Dokumen pendukung (Bagian 4)</legend>
+          <legend>Dokumen tambahan (Bagian 4)</legend>
           <small id="edit-supporting-help">
-            JSA wajib. Dokumen lain dipilih sesuai kebutuhan; unggah file setelah perubahan
-            disimpan.
+            JSA otomatis dicentang pada PDF melalui dokumen wajib di atas. Pilih dokumen tambahan
+            hanya jika diperlukan untuk pekerjaan ini.
           </small>
           @if (loadingSupportingDocuments()) {
             <p class="work-type-state">Memuat daftar dokumen pendukung...</p>
@@ -609,31 +907,22 @@
             </p>
           } @else {
             <div class="supporting-document-options">
-              @for (option of supportingDocumentOptions(); track option.code) {
-                <label class="supporting-document-option" [class.required]="option.required">
+              @for (option of additionalSupportingDocumentOptions(); track option.code) {
+                <label class="supporting-document-option">
                   <input
                     type="checkbox"
                     [checked]="isSupportingDocumentSelected(option.code)"
-                    [disabled]="option.required"
                     (change)="toggleSupportingDocument(option, $event)"
                   />
                   <span>
                     <strong>{{ option.label }}</strong>
-                    <small>{{ option.required ? 'Wajib' : 'Opsional' }}</small>
+                    <small>Opsional</small>
                   </span>
                 </label>
               }
             </div>
           }
         </fieldset>
-        <label
-          >Tingkat risiko<select formControlName="riskLevel">
-            <option value="Low">Rendah</option>
-            <option value="Medium">Sedang</option>
-            <option value="High">Tinggi</option>
-            <option value="Extreme">Ekstrem</option>
-          </select></label
-        >
         <label>Nomor E-SIMI<input formControlName="eSimiNumber" /></label>
         <label>Mulai<input type="datetime-local" formControlName="validFrom" /></label>
         <label

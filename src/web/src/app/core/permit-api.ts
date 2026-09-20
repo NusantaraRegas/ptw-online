@@ -27,6 +27,7 @@ export interface PermitDraft {
   equipmentName?: string | null;
   workOrderNumber?: string | null;
   additionalHazardReference?: string | null;
+  headerClassificationCodes?: string[];
   plantArea?: string | null;
   clsrApplicable?: boolean;
   simopsDeclaration?: string | null;
@@ -41,6 +42,17 @@ export interface PermitWorkTypeOption {
   code: string;
   label: string;
   requiresDetail: boolean;
+}
+
+export interface PermitHeaderClassificationOption {
+  code: string;
+  label: string;
+}
+
+export interface PermitHeaderClassificationCatalog {
+  permitClass: string;
+  selectionMode: 'NONE' | 'SINGLE' | 'MULTIPLE';
+  options: PermitHeaderClassificationOption[];
 }
 
 export interface PermitWorkTypeCatalog {
@@ -64,6 +76,13 @@ export interface PermitSupportingDocumentOption {
   templateColumn: number;
   templateIndex: number;
   required: boolean;
+  requiresMetadata: boolean;
+}
+
+export interface PermitMandatoryDocumentOption {
+  code: string;
+  label: string;
+  uploadCategory: 'JSA' | 'SUPPORTING';
   requiresMetadata: boolean;
 }
 
@@ -96,7 +115,25 @@ export interface PermitWorkflow {
   hse: PermitValidation;
   approval: PermitApproval;
   suspension: PermitSuspension;
+  renewal?: PermitRenewalWorkflow;
   closure: PermitClosure;
+}
+
+export interface PermitRenewalWorkflow {
+  requested: boolean;
+  status: 'PENDING' | 'REVISION_REQUIRED' | 'APPROVED' | 'REJECTED' | null;
+  printPackageId: string | null;
+  signedFieldCopyAttachmentIds: string[];
+  requestedBy: string | null;
+  continuationStatement: string | null;
+  validFrom: string | null;
+  validUntil: string | null;
+  requestedAt: string | null;
+  revision: number;
+  replacementReason: string | null;
+  decidedBy: string | null;
+  decisionStatement: string | null;
+  decidedAt: string | null;
 }
 
 export interface PermitApproval {
@@ -152,6 +189,19 @@ export interface ValidateSubmissionRequest {
 export interface RequestPermitRenewal {
   validFrom: string;
   validUntil: string;
+  printPackageId: string;
+  signedFieldCopyAttachmentIds: string[];
+  continuationStatement: string;
+  allPagesReviewed: boolean;
+  readableAndCompleteAcknowledged: boolean;
+}
+
+export interface RequestPermitClosure {
+  printPackageId: string;
+  signedFieldCopyAttachmentIds: string[];
+  completionStatement: string;
+  allPagesReviewed: boolean;
+  readableAndCompleteAcknowledged: boolean;
 }
 
 export interface PermitRenewalResult {
@@ -222,6 +272,12 @@ export class PermitApi {
     return this.http.get<PermitWorkTypeCatalog[]>('/api/v1/reference-data/work-types');
   }
 
+  listHeaderClassifications(): Observable<PermitHeaderClassificationCatalog[]> {
+    return this.http.get<PermitHeaderClassificationCatalog[]>(
+      '/api/v1/reference-data/header-classifications',
+    );
+  }
+
   listSafetyEquipment(): Observable<PermitSafetyEquipmentCatalog[]> {
     return this.http.get<PermitSafetyEquipmentCatalog[]>('/api/v1/reference-data/safety-equipment');
   }
@@ -229,6 +285,12 @@ export class PermitApi {
   listSupportingDocuments(): Observable<PermitSupportingDocumentOption[]> {
     return this.http.get<PermitSupportingDocumentOption[]>(
       '/api/v1/reference-data/supporting-documents',
+    );
+  }
+
+  listMandatoryDocuments(): Observable<PermitMandatoryDocumentOption[]> {
+    return this.http.get<PermitMandatoryDocumentOption[]>(
+      '/api/v1/reference-data/mandatory-documents',
     );
   }
 
@@ -250,17 +312,61 @@ export class PermitApi {
     return this.command(id, 'submit', eTag, readiness);
   }
 
-  requestRenewal(
-    id: string,
-    eTag: string,
-    request: RequestPermitRenewal,
-  ): Observable<PermitRenewalResult> {
-    return this.http.post<PermitRenewalResult>(`/api/v1/permits/${id}/renew`, request, {
+  requestRenewal(id: string, eTag: string, request: RequestPermitRenewal): Observable<Permit> {
+    return this.http.post<Permit>(`/api/v1/permits/${id}/renew`, request, {
       headers: new HttpHeaders({
         'If-Match': eTag,
         'Idempotency-Key': crypto.randomUUID(),
       }),
     });
+  }
+
+  approveRenewal(
+    taskId: string,
+    eTag: string,
+    request: {
+      statement: string;
+      fieldVerificationConfirmed: boolean;
+      evidenceReadable: boolean;
+    },
+  ): Observable<PermitRenewalResult> {
+    return this.taskCommand<
+      {
+        statement: string;
+        fieldVerificationConfirmed: boolean;
+        evidenceReadable: boolean;
+      },
+      PermitRenewalResult
+    >(taskId, 'approve', eTag, request, '/api/v1/renewal-tasks');
+  }
+
+  requestRenewalEvidence(taskId: string, eTag: string, reason: string): Observable<Permit> {
+    return this.taskCommand(taskId, 'request-evidence', eTag, { reason }, '/api/v1/renewal-tasks');
+  }
+
+  rejectRenewal(taskId: string, eTag: string, reason: string): Observable<Permit> {
+    return this.taskCommand(taskId, 'reject', eTag, { reason }, '/api/v1/renewal-tasks');
+  }
+
+  requestClosure(id: string, eTag: string, request: RequestPermitClosure): Observable<Permit> {
+    return this.command(id, 'closure-requests', eTag, request);
+  }
+
+  requestClosureEvidence(taskId: string, eTag: string, reason: string): Observable<Permit> {
+    return this.taskCommand(taskId, 'request-evidence', eTag, { reason }, '/api/v1/closure-tasks');
+  }
+
+  close(
+    taskId: string,
+    eTag: string,
+    request: {
+      statement: string;
+      completionConfirmed: boolean;
+      handbackConfirmed: boolean;
+      evidenceReadable: boolean;
+    },
+  ): Observable<Permit> {
+    return this.taskCommand(taskId, 'close', eTag, request, '/api/v1/closure-tasks');
   }
 
   validate(taskId: string, eTag: string, request: ValidateSubmissionRequest): Observable<Permit> {
@@ -320,13 +426,14 @@ export class PermitApi {
     });
   }
 
-  private taskCommand<TRequest>(
+  private taskCommand<TRequest, TResponse = Permit>(
     taskId: string,
     command: string,
     eTag: string,
     body: TRequest,
-  ): Observable<Permit> {
-    return this.http.post<Permit>(`/api/v1/tasks/${taskId}/${command}`, body, {
+    basePath = '/api/v1/tasks',
+  ): Observable<TResponse> {
+    return this.http.post<TResponse>(`${basePath}/${taskId}/${command}`, body, {
       headers: new HttpHeaders({
         'If-Match': eTag,
         'Idempotency-Key': crypto.randomUUID(),

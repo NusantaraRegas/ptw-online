@@ -46,10 +46,11 @@ Increment P0 lifecycle v1.7 telah tersedia:
 - Sponsor yang juga PIC HSE tidak dapat memvalidasi PTW miliknya sendiri;
 - satu task `AREA_APPROVE_AND_ISSUE` dan satu command atomik menyimpan decision, status `ISSUED`, audit, outbox, `PrintPackageSnapshot`, serta placeholder `GeneratedDocument` dalam satu `SaveChanges` transaction;
 - release lokasi dikonfigurasi server-side; Development mengaktifkan ORF, Site-Office, dan Water-Based Activity, sedangkan lokasi lain ditolak fail-closed;
-- suspend berlaku langsung, resolve kembali ke `ISSUED`, dan renewal membuat permit baru tanpa overlap;
+- suspend berlaku langsung dan resolve kembali ke `ISSUED`; request renewal Sponsor memerlukan signed field copy exact package/version dan baru membuat permit penerus tanpa overlap setelah Pemilik Wilayah menyetujui;
 - closure memakai task pemilik area dan memerlukan signed field copy yang `CLEAN`, bermetadata lengkap, tidak superseded, serta cocok dengan exact PermitVersion dan PrintPackage;
 - lampiran privat mengenali signature PDF/JPEG/PNG, menyimpan SHA-256, kategori, metadata dokumen, target version, PrintPackage, replacement lineage, serta evidence malware scan; file selain `CLEAN` tidak dapat diunduh;
-- form draft Sponsor memuat tipe pengaju, work type multi-select (opsi `Lain-lain` mewajibkan detail yang ikut tercetak), nomor dan nama equipment, Work Order No., plant/area, CLSR, SIMOPS, isolation/precaution, serta nomor/revisi/tanggal JSA. Referensi bahaya tambahan bersifat opsional dan informatif; JSA tetap menjadi sumber resmi identifikasi bahaya dan pengendalian;
+- form draft Sponsor memuat tipe pengaju, klasifikasi header resmi (HOT: `Api Terbuka`/`Percikan Api` multi-select; COLD: tepat satu `Low Risk`/`High Risk`; CSE tanpa pilihan tambahan), work type multi-select (opsi `Lain-lain` mewajibkan detail yang ikut tercetak), nomor dan nama equipment, Work Order No., plant/area, CLSR, SIMOPS, isolation/precaution, serta nomor/revisi/tanggal JSA. Referensi bahaya tambahan bersifat opsional dan informatif; JSA tetap menjadi sumber resmi identifikasi bahaya dan pengendalian;
+- dokumen dasar JSA, ID, BPJS TK, FTW, dan E-SIMI wajib memiliki lampiran bertaut sebelum submit; dokumen selain JSA menjadi evidence pengajuan dan tidak ditambahkan ke checklist Bagian 4 pada PDF resmi;
 - Bagian 4 memakai 15 pilihan dokumen sesuai template resmi: JSA wajib dan pilihan lain opsional. Setiap pilihan harus memiliki lampiran yang tertaut sebelum submit, metadata lampiran JSA harus cocok dengan draft, dan hasil checklist dicetak dari immutable snapshot;
 - APD/perlengkapan safety Bagian 5 dipilih secara multi-select oleh PIC HSE pada tahap validasi dan tidak dapat diisi bebas oleh Sponsor; approval permit lama tanpa evidence Bagian 5 diblokir dan diarahkan melalui revisi; input hazards/controls bebas telah dihapus dari UI;
 - paket cetak resmi dirender Worker dari `PrintPackageSnapshot` yang immutable dengan halaman resmi FM-001/002/003-B-002-NR-B220 sebagai template vektor A3 landscape; sistem mengisi Bagian 1-5 dan 7, sedangkan Bagian 6 dan Bagian 8-10 tetap kosong untuk diisi manual di lapangan;
@@ -131,7 +132,7 @@ flowchart TB
 ### Struktur repository
 
 ```text
-src/Ptw.Domain          aggregate, state machine, invariant — tanpa EF/ASP.NET/IO
+src/Ptw.Domain          aggregate, state machine, invariant, katalog checklist formulir — tanpa EF/ASP.NET/IO
 src/Ptw.Contracts       DTO netral — tanpa domain behavior
 src/Ptw.Application     use case, authorization, ports (IPermitStore, IPrintPackage...)
 src/Ptw.Infrastructure  EF Core, storage, audit, outbox, Printing/ (renderer + template)
@@ -175,7 +176,7 @@ stateDiagram-v2
 
 - `CLOSED`, `REJECTED`, `CANCELLED`, dan `EXPIRED` bersifat terminal.
 - Suspend menghentikan hak kerja seketika; resolve hanya kembali ke `ISSUED`.
-- Renewal tidak memperpanjang permit lama; ia membuat aggregate dan nomor PTW baru tanpa overlap.
+- Renewal tidak memperpanjang permit lama. Sponsor mengajukan hardcopy hasil verifikasi lapangan, Pemilik Wilayah meninjau melalui task khusus, lalu approval membuat aggregate draft baru tanpa overlap. Draft penerus tetap mengikuti submit, validasi HSE, dan approval penerbitan normal.
 - Istilah UI untuk `ISSUED` adalah **Diterbitkan**.
 
 ## Sequence diagram
@@ -292,7 +293,10 @@ Pratinjau draft (`GET .../print-packages/preview`) merender langsung dari state 
 | `POST` | `/api/v1/tasks/{taskId}/approve-and-issue` | `ApproveAndIssuePermit` |
 | `POST` | `/api/v1/permits/{id}/suspensions` | `SuspendPermit` |
 | `POST` | `/api/v1/permits/{id}/suspensions/resolve` | `ResolveSuspension` |
-| `POST` | `/api/v1/permits/{id}/renew` | `CreateRenewal` |
+| `POST` | `/api/v1/permits/{id}/renew` | `RequestRenewal` |
+| `POST` | `/api/v1/renewal-tasks/{taskId}/request-evidence` | `RequestRenewalEvidenceReplacement` |
+| `POST` | `/api/v1/renewal-tasks/{taskId}/reject` | `RejectRenewal` |
+| `POST` | `/api/v1/renewal-tasks/{taskId}/approve` | `ApproveRenewal` dan pembuatan draft penerus atomik |
 | `POST` | `/api/v1/permits/{id}/closure-requests` | `RequestClosure` |
 | `POST` | `/api/v1/closure-tasks/{taskId}/request-evidence` | `RequestClosureEvidenceReplacement` |
 | `POST` | `/api/v1/closure-tasks/{taskId}/close` | `ClosePermit` |
@@ -305,7 +309,9 @@ Pratinjau draft (`GET .../print-packages/preview`) merender langsung dari state 
 
 Task command memakai `taskId`, bukan permit ID. Semua transition memerlukan `If-Match` dan `Idempotency-Key`. Tidak ada endpoint generik `setStatus`.
 
-Endpoint baca/create draft, attachment (multipart dengan `supportingDocumentCode` untuk Bagian 4), history, master lokasi, authorization, policy readiness/simulation/UAT, dan health tetap tersedia. Katalog checklist formulir dibaca dari `GET /api/v1/reference-data/work-types`, `/supporting-documents`, dan `/safety-equipment`; nilainya adalah transkripsi formulir terkontrol dan divalidasi ulang di server. OpenAPI hanya diekspos pada Development melalui `/openapi/v1.json`.
+Endpoint baca/create draft, attachment (multipart dengan `supportingDocumentCode` untuk dokumen wajib dan Bagian 4), history, master lokasi, authorization, policy readiness/simulation/UAT, dan health tetap tersedia. Katalog dokumen wajib dibaca dari `GET /api/v1/reference-data/mandatory-documents`; katalog checklist formulir dibaca dari `/header-classifications`, `/work-types`, `/supporting-documents`, dan `/safety-equipment`. Nilai dikontrol dan divalidasi ulang di server. OpenAPI hanya diekspos pada Development melalui `/openapi/v1.json`.
+
+Renewal tidak mengubah status PTW asal. Request Sponsor membuat task `AREA_RENEWAL_REVIEW` untuk Manager pemilik area; permit penerus (`DRAFT`, terhubung lewat `RenewedFromPermitId`) baru dibuat secara atomik saat task tersebut disetujui, dan selama review masih `PENDING` lampiran PTW asal tidak dapat diubah serta closure tidak dapat diajukan.
 
 ## Menjalankan aplikasi
 
@@ -352,6 +358,8 @@ npm start
 
 Development identity hanya aktif pada environment `Development`. Profil yang relevan untuk flow v1.7 adalah Sponsor, PIC HSE (`HSEValidator`), dan Manager pemilik area (`AreaOwnerManager`). Identitas dan Sponsor aktif berasal dari `/api/v1/me`; header development diabaikan di luar Development.
 
+Pada Development dengan `Attachments:RequireMalwareScan=false` (nilai default `appsettings.Development.json`), upload lokal langsung diberi evidence internal `CLEAN` oleh adapter tepercaya agar submit, closure, dan renewal dapat diuji end-to-end tanpa scanner eksternal. Adapter ini tidak pernah terdaftar di luar Development; production tetap memakai adapter unavailable yang fail-closed sampai scanner resmi tersedia.
+
 Migration baru dibuat dengan mengubah model/mapping lalu menjalankan
 `dotnet ef migrations add <Nama> --project src/Ptw.Infrastructure --startup-project src/Ptw.Api`.
 Jangan mengedit file migration hasil generate secara manual.
@@ -396,4 +404,4 @@ Urutan rujukan ketika ambigu: permintaan pengguna, decision record yang disahkan
 
 ## Batas produksi
 
-Konfigurasi produksi default fail-closed: master authorization wajib siap, issuance policy tidak approved, dan attachment memerlukan scanner. Jangan mengaktifkan issuance sampai exact ruleset, print template, campaign assets, owner mapping, authority, dan keputusan OPN terkait telah disahkan. Compose development bukan topologi HA produksi.
+Konfigurasi produksi default fail-closed: master authorization wajib siap, issuance policy tidak approved, dan attachment memerlukan scanner (`RequireMalwareScan=true`; adapter upload tepercaya hanya ada di Development). Jangan mengaktifkan issuance sampai exact ruleset, print template, campaign assets, owner mapping, authority, dan keputusan OPN terkait telah disahkan. Compose development bukan topologi HA produksi.

@@ -213,29 +213,128 @@ public sealed class PermitStateMachineTests
     }
 
     [Fact]
-    public void RenewalIsNewPermitWithoutWorkflowEvidenceAndCannotOverlap()
+    public void RenewalRequiresOwnerApprovalBeforeNewDraftAndCannotOverlap()
     {
         var source = IssuedPermit();
-        var overlap = Permit.CreateRenewal(source.Id, ValidDraft() with
-        {
-            ValidFrom = source.Draft.ValidUntil.AddMinutes(-1),
-            ValidUntil = source.Draft.ValidUntil.AddHours(1)
-        }, Now.AddHours(1));
-        var error = Assert.Throws<DomainRuleViolationException>(() => source.RequestRenewal(overlap, Now.AddHours(1)));
+        var packageId = Guid.NewGuid();
+        var attachmentId = Guid.NewGuid();
+        var error = Assert.Throws<DomainRuleViolationException>(() => source.RequestRenewal(
+            packageId,
+            [attachmentId],
+            "sponsor.demo",
+            "Pekerjaan perlu dilanjutkan.",
+            source.Draft.ValidUntil.AddMinutes(-1),
+            source.Draft.ValidUntil.AddHours(1),
+            Now.AddHours(1)));
         Assert.Equal("permit.renewal.validity_overlap", error.Code);
+
+        source.RequestRenewal(
+            packageId,
+            [attachmentId],
+            "sponsor.demo",
+            "Pekerjaan perlu dilanjutkan.",
+            source.Draft.ValidUntil,
+            source.Draft.ValidUntil.AddHours(8),
+            Now.AddHours(1));
+        Assert.Null(source.RenewalPermitId);
+        Assert.Equal(PermitRenewalReviewStatus.Pending, source.RenewalRequest?.Status);
 
         var renewal = Permit.CreateRenewal(source.Id, ValidDraft() with
         {
             ValidFrom = source.Draft.ValidUntil,
             ValidUntil = source.Draft.ValidUntil.AddHours(8)
-        }, Now.AddHours(1));
-        source.RequestRenewal(renewal, Now.AddHours(1));
+        }, Now.AddHours(2));
+        source.ApproveRenewal(renewal, "area.manager", "Hardcopy terverifikasi.", Now.AddHours(2));
 
         Assert.Equal(PermitStatus.Draft, renewal.Status);
+        Assert.Equal(renewal.Id, source.RenewalPermitId);
+        Assert.Equal(PermitRenewalReviewStatus.Approved, source.RenewalRequest?.Status);
         Assert.Null(renewal.PermitNumber);
         Assert.Null(renewal.HseValidation);
         Assert.Null(renewal.Approval);
         Assert.Null(renewal.ClosureRequest);
+    }
+
+    [Fact]
+    public void ClosureAndPendingRenewalAreMutuallyExclusive()
+    {
+        var permit = IssuedPermit();
+        permit.RequestRenewal(
+            Guid.NewGuid(),
+            [Guid.NewGuid()],
+            "sponsor.demo",
+            "Pekerjaan perlu dilanjutkan.",
+            permit.Draft.ValidUntil,
+            permit.Draft.ValidUntil.AddHours(4),
+            Now.AddHours(1));
+
+        var error = Assert.Throws<DomainRuleViolationException>(() => permit.RequestClosure(
+            Guid.NewGuid(),
+            [Guid.NewGuid()],
+            "sponsor.demo",
+            "Pekerjaan selesai.",
+            Now.AddHours(2)));
+        Assert.Equal("permit.closure.renewal_conflict", error.Code);
+    }
+
+    [Fact]
+    public void AreaOwnerCanRequestNewRenewalEvidenceAndSponsorCanResubmit()
+    {
+        var permit = IssuedPermit();
+        var originalAttachmentId = Guid.NewGuid();
+        permit.RequestRenewal(
+            Guid.NewGuid(),
+            [originalAttachmentId],
+            "sponsor.demo",
+            "Pekerjaan perlu dilanjutkan.",
+            permit.Draft.ValidUntil,
+            permit.Draft.ValidUntil.AddHours(4),
+            Now.AddHours(1));
+
+        permit.RequestRenewalEvidenceReplacement(
+            "area.manager",
+            "Halaman verifikasi lapangan belum terbaca.",
+            Now.AddHours(2));
+        Assert.Equal(PermitRenewalReviewStatus.RevisionRequired, permit.RenewalRequest?.Status);
+
+        var unchanged = Assert.Throws<DomainRuleViolationException>(() => permit.RequestRenewal(
+            Guid.NewGuid(),
+            [originalAttachmentId],
+            "sponsor.demo",
+            "Evidence lama dikirim ulang.",
+            permit.Draft.ValidUntil,
+            permit.Draft.ValidUntil.AddHours(4),
+            Now.AddHours(3)));
+        Assert.Equal("permit.renewal.evidence_not_replaced", unchanged.Code);
+
+        permit.RequestRenewal(
+            Guid.NewGuid(),
+            [Guid.NewGuid()],
+            "sponsor.demo",
+            "Evidence telah diperbarui.",
+            permit.Draft.ValidUntil,
+            permit.Draft.ValidUntil.AddHours(4),
+            Now.AddHours(3));
+        Assert.Equal(PermitRenewalReviewStatus.Pending, permit.RenewalRequest?.Status);
+        Assert.Equal(2, permit.RenewalRequest?.Revision);
+    }
+
+    [Fact]
+    public void RejectedRenewalDoesNotCreateSuccessorPermit()
+    {
+        var permit = IssuedPermit();
+        permit.RequestRenewal(
+            Guid.NewGuid(),
+            [Guid.NewGuid()],
+            "sponsor.demo",
+            "Pekerjaan perlu dilanjutkan.",
+            permit.Draft.ValidUntil,
+            permit.Draft.ValidUntil.AddHours(4),
+            Now.AddHours(1));
+        permit.RejectRenewal("area.manager", "Perpanjangan tidak dapat diberikan.", Now.AddHours(2));
+
+        Assert.Equal(PermitRenewalReviewStatus.Rejected, permit.RenewalRequest?.Status);
+        Assert.Null(permit.RenewalPermitId);
     }
 
     [Fact]
@@ -319,6 +418,60 @@ public sealed class PermitStateMachineTests
     }
 
     [Fact]
+    public void HotWorkHeaderClassificationAcceptsBothControlledCheckboxes()
+    {
+        var permit = Permit.CreateDraft(ValidDraft() with
+        {
+            HeaderClassificationCodes = [" Percikan Api ", "HOT_OPEN_FLAME"]
+        }, Now);
+
+        Assert.Equal(
+            ["HOT_OPEN_FLAME", "HOT_SPARK"],
+            permit.Draft.HeaderClassificationCodes);
+    }
+
+    [Fact]
+    public void ColdWorkHeaderClassificationRequiresOneChoiceAndSynchronizesLegacyRisk()
+    {
+        var permit = Permit.CreateDraft(ValidDraft() with
+        {
+            PermitClass = PermitClass.ColdWork,
+            WorkTypeCodes = ["COLD_MECHANICAL"],
+            RiskLevel = RiskLevel.Extreme,
+            HeaderClassificationCodes = ["COLD_LOW_RISK"]
+        }, Now);
+
+        Assert.Equal(RiskLevel.Low, permit.Draft.RiskLevel);
+        var error = Assert.Throws<DomainRuleViolationException>(() => Permit.CreateDraft(
+            ValidDraft() with
+            {
+                PermitClass = PermitClass.ColdWork,
+                WorkTypeCodes = ["COLD_MECHANICAL"],
+                HeaderClassificationCodes = ["COLD_LOW_RISK", "COLD_HIGH_RISK"]
+            },
+            Now));
+        Assert.Equal("permit.header_classification_single_required", error.Code);
+    }
+
+    [Fact]
+    public void LegacyDraftWithoutHeaderClassificationCanBeReadButCannotEnterWorkflow()
+    {
+        var permit = Permit.Rehydrate(
+            Guid.NewGuid(),
+            null,
+            PermitStatus.Draft,
+            1,
+            ValidDraft() with { HeaderClassificationCodes = [] },
+            Now,
+            Now);
+
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.Submit("PTW-LEGACY-HEADER", ReadyToSubmit(), Now.AddMinutes(1)));
+
+        Assert.Equal("permit.header_classification_required", error.Code);
+    }
+
+    [Fact]
     public void SponsorDraftCannotAssignHseOwnedSafetyEquipment()
     {
         var error = Assert.Throws<DomainRuleViolationException>(() =>
@@ -369,6 +522,17 @@ public sealed class PermitStateMachineTests
         }, Now);
 
         Assert.Equal(["JSA", "LIFTING_PLAN", "MSDS"], permit.Draft.RequiredDocumentCodes);
+    }
+
+    [Fact]
+    public void MandatoryUploadCatalogKeepsNonTemplateEvidenceSeparateFromBagian4()
+    {
+        Assert.Equal(
+            ["JSA", "ID", "BPJS_TK", "FTW", "ESIMI"],
+            PermitMandatoryDocumentCatalog.Resolve().Select(option => option.Code));
+        Assert.DoesNotContain(
+            PermitSupportingDocumentCatalog.Resolve(),
+            option => option.Code == PermitMandatoryDocumentCatalog.IdentityCode);
     }
 
     [Fact]
@@ -513,5 +677,6 @@ public sealed class PermitStateMachineTests
         [],
         [],
         ["JSA"],
-        WorkTypeCodes: ["HOT_WELDING"]);
+        WorkTypeCodes: ["HOT_WELDING"],
+        HeaderClassificationCodes: ["HOT_OPEN_FLAME"]);
 }

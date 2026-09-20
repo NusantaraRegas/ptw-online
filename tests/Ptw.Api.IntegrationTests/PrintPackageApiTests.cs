@@ -54,7 +54,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         Assert.Equal("READY", snapshot.RenderStatus);
         var document = await db.GeneratedDocuments.AsNoTracking()
             .SingleAsync(x => x.PrintPackageSnapshotId == snapshot.Id);
-        Assert.Equal("ptw-form-renderer/2.3.0", document.RendererVersion);
+        Assert.Equal("ptw-form-renderer/2.4.0", document.RendererVersion);
         // Sensitive downloads are material audit events under BR-AUD-001.
         Assert.True(await db.AuditEvents.AsNoTracking().AnyAsync(
             x => x.PermitId == issued.Id && x.EventType == "print_package_downloaded"));
@@ -176,7 +176,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         using var manager = Client(Unique("manager"), "AreaOwnerManager", "ORF");
 
         var draft = await CreateAsync(sponsor, sponsorId, "ORF");
-        draft = await UploadJsaAsync(sponsor, draft);
+        draft = await UploadMandatoryDocumentsAsync(sponsor, draft);
         using var submitResponse = await sponsor.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/permits/{draft.Id}/submit",
@@ -206,6 +206,19 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         return Required(await issueResponse.Content.ReadFromJsonAsync<PermitResponse>());
     }
 
+    private static async Task<PermitResponse> UploadMandatoryDocumentsAsync(
+        HttpClient client,
+        PermitResponse permit)
+    {
+        permit = await UploadJsaAsync(client, permit);
+        foreach (var code in new[] { "ID", "BPJS_TK", "FTW", "ESIMI" })
+        {
+            permit = await UploadSupportingDocumentAsync(client, permit, code);
+        }
+
+        return permit;
+    }
+
     private static async Task<PermitResponse> UploadJsaAsync(HttpClient client, PermitResponse permit)
     {
         using var content = new MultipartFormDataContent();
@@ -217,6 +230,33 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         content.Add(new StringContent(Required(permit.Draft.JsaDocumentNumber)), "documentNumber");
         content.Add(new StringContent(Required(permit.Draft.JsaRevision)), "documentRevision");
         content.Add(new StringContent(permit.Draft.JsaDate!.Value.ToString("O")), "documentDate");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1/permits/{permit.Id}/attachments")
+        {
+            Content = content
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", permit.ETag);
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+
+        using var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        var mutation = Required(
+            await response.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
+        return permit with { ETag = mutation.ETag, Version = mutation.PermitVersion };
+    }
+
+    private static async Task<PermitResponse> UploadSupportingDocumentAsync(
+        HttpClient client,
+        PermitResponse permit,
+        string documentCode)
+    {
+        using var content = new MultipartFormDataContent();
+        var file = new ByteArrayContent(Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF\n"));
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        content.Add(file, "file", $"{documentCode.ToLowerInvariant()}.pdf");
+        content.Add(new StringContent("SUPPORTING"), "category");
+        content.Add(new StringContent(documentCode), "supportingDocumentCode");
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/api/v1/permits/{permit.Id}/attachments")
@@ -288,7 +328,8 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
             JsaDocumentNumber: "JSA-TEST-001",
             JsaRevision: "1",
             JsaDate: now,
-            WorkTypeCodes: ["HOT_WELDING"]);
+            WorkTypeCodes: ["HOT_WELDING"],
+            HeaderClassificationCodes: ["HOT_OPEN_FLAME"]);
     }
 
     private static async Task<string?> ProblemCodeAsync(HttpResponseMessage response)

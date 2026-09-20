@@ -48,7 +48,8 @@ internal static class PermitMapper
             request.OtherWorkTypeDescription,
             request.EquipmentName,
             request.WorkOrderNumber,
-            request.AdditionalHazardReference);
+            request.AdditionalHazardReference,
+            request.HeaderClassificationCodes);
     }
 
     public static PermitResponse ToResponse(this StoredPermit stored)
@@ -90,6 +91,23 @@ internal static class PermitMapper
                     permit.Suspension?.ResolvedBy,
                     permit.Suspension?.Resolution,
                     permit.Suspension?.ResolvedAt),
+                new PermitRenewalRequestResponse(
+                    permit.RenewalRequest is not null,
+                    permit.RenewalRequest is null
+                        ? null
+                        : ToUpperSnakeCase(permit.RenewalRequest.Status.ToString()),
+                    permit.RenewalRequest?.PrintPackageId,
+                    permit.RenewalRequest?.AttachmentIds ?? [],
+                    permit.RenewalRequest?.RequestedBy,
+                    permit.RenewalRequest?.ContinuationStatement,
+                    permit.RenewalRequest?.ValidFrom,
+                    permit.RenewalRequest?.ValidUntil,
+                    permit.RenewalRequest?.RequestedAt,
+                    permit.RenewalRequest?.Revision ?? 0,
+                    permit.RenewalRequest?.ReplacementReason,
+                    permit.RenewalRequest?.DecidedBy,
+                    permit.RenewalRequest?.DecisionStatement,
+                    permit.RenewalRequest?.DecidedAt),
                 new PermitClosureResponse(
                     permit.ClosureRequest is not null,
                     permit.ClosureRequest?.PrintPackageId,
@@ -160,6 +178,7 @@ internal static class PermitMapper
             draft.OtherWorkTypeDescription,
             draft.EquipmentName,
             draft.WorkOrderNumber,
-            draft.AdditionalHazardReference);
+            draft.AdditionalHazardReference,
+            draft.HeaderClassificationCodes);
     }
 }

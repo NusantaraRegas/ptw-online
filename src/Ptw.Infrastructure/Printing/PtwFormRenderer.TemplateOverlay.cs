@@ -25,6 +25,7 @@ internal sealed partial class PtwFormRenderer
         OverlayText(canvas, layout.PermitNumber, snapshot.PermitNumber, 4.1, bold: true);
         OverlayText(canvas, layout.PermitDate, FormCanvas.Wib(snapshot.CreatedAt, "dd/MM/yy"), 4.0);
         OverlayFittedText(canvas, layout.WorkOrderNumber, draft.WorkOrderNumber, 4.0, 2.8);
+        DrawHeaderClassificationSelection(canvas, draft, layout.HeaderClassificationChecks);
 
         DrawSelection(
             canvas,
@@ -143,6 +144,27 @@ internal sealed partial class PtwFormRenderer
             if (row < checkYs.Count)
             {
                 DrawTick(canvas, new PdfPoint(checkXs[column], checkYs[row]));
+            }
+        }
+    }
+
+    private static void DrawHeaderClassificationSelection(
+        FormCanvas canvas,
+        PermitDraft draft,
+        IReadOnlyList<PdfPoint> checkPositions)
+    {
+        var selected = new HashSet<string>(
+            PermitHeaderClassificationCatalog.NormalizeAndValidate(
+                draft.PermitClass,
+                draft.HeaderClassificationCodes,
+                allowMissing: true),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var option in PermitHeaderClassificationCatalog.Resolve(draft.PermitClass))
+        {
+            if (selected.Contains(option.Code) && option.TemplateIndex < checkPositions.Count)
+            {
+                var point = checkPositions[option.TemplateIndex];
+                canvas.CheckMark(Pt(point.X), Pt(point.Y), Pt(7.0));
             }
         }
     }
@@ -288,6 +310,7 @@ internal sealed record TemplateOverlayLayout(
     PdfRect PermitNumber,
     PdfRect PermitDate,
     PdfRect WorkOrderNumber,
+    IReadOnlyList<PdfPoint> HeaderClassificationChecks,
     PdfRect AppliedDate,
     PdfRect PlannedStart,
     PdfRect EquipmentTag,
@@ -327,6 +350,7 @@ internal static class TemplateOverlayCatalog
         new(514, 198, 258, 7),
         new(514, 207, 258, 7),
         new(520, 214, 252, 7),
+        [new(283.5, 206.5), new(283.5, 214.2)],
         new(130, 287, 185, 7),
         new(421, 287, 302, 7),
         new(111, 295, 160, 7),
@@ -365,6 +389,7 @@ internal static class TemplateOverlayCatalog
         new(530, 196, 214, 7),
         new(530, 205, 214, 7),
         new(536, 212, 208, 7),
+        [new(267.5, 204.0), new(267.5, 211.5)],
         new(115, 285, 192, 7),
         new(415, 285, 283, 7),
         new(96, 292, 162, 7),
@@ -403,6 +428,7 @@ internal static class TemplateOverlayCatalog
         new(497, 196, 262, 7),
         new(497, 205, 262, 7),
         new(502, 212, 257, 7),
+        [],
         new(80, 284, 189, 7),
         new(372, 284, 346, 7),
         new(63, 291, 155, 7),

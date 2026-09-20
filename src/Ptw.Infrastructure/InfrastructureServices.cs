@@ -8,7 +8,10 @@ namespace Ptw.Infrastructure;
 
 public static class InfrastructureServices
 {
-    public static IServiceCollection AddPtwInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddPtwInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        bool isDevelopment = false)
     {
         var connectionString = configuration.GetConnectionString("PtwDb")
             ?? throw new InvalidOperationException("ConnectionStrings:PtwDb wajib dikonfigurasi.");
@@ -58,7 +61,10 @@ public static class InfrastructureServices
             attachmentSettings.Enabled
                 ? new LocalAttachmentStorage(provider.GetRequiredService<AttachmentSettings>())
                 : new DisabledAttachmentStorage());
-        services.AddSingleton<IMalwareScanner, UnavailableMalwareScanner>();
+        services.AddSingleton<IMalwareScanner>(provider =>
+            isDevelopment && !attachmentSettings.RequireMalwareScan
+                ? new DevelopmentUploadTrustScanner(provider.GetRequiredService<IClock>())
+                : new UnavailableMalwareScanner());
 
         var generatedDocumentSettings = new GeneratedDocumentSettings
         {

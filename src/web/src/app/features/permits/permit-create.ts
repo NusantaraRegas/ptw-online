@@ -7,6 +7,9 @@ import { LocationApi, LocationOption } from '../../core/location-api';
 import {
   PermitApi,
   PermitDraft,
+  PermitHeaderClassificationCatalog,
+  PermitHeaderClassificationOption,
+  PermitMandatoryDocumentOption,
   PermitSupportingDocumentOption,
   PermitWorkTypeOption,
 } from '../../core/permit-api';
@@ -93,14 +96,46 @@ function localDate(hoursFromNow: number): string {
             <option value="ConfinedSpaceEntry">Memasuki Ruang Terbatas</option>
           </select></label
         >
-        <label
-          >Tingkat risiko<select formControlName="riskLevel">
-            <option value="Low">Rendah</option>
-            <option value="Medium">Sedang</option>
-            <option value="High">Tinggi</option>
-            <option value="Extreme">Ekstrem</option>
-          </select></label
-        >
+        <fieldset class="work-types wide" aria-describedby="header-classification-help">
+          <legend>Klasifikasi header izin</legend>
+          <small id="header-classification-help">
+            @if (form.controls.permitClass.value === 'HotWork') {
+              Pilih Api Terbuka dan/atau Percikan Api sesuai pekerjaan. Pilihan dicetak pada header
+              formulir HOT.
+            } @else if (form.controls.permitClass.value === 'ColdWork') {
+              Pilih satu klasifikasi Low Risk atau High Risk sesuai header formulir COLD.
+            } @else {
+              Formulir CSE tidak memiliki pilihan klasifikasi tambahan pada header.
+            }
+          </small>
+          @if (loadingHeaderClassifications()) {
+            <p class="work-type-state">Memuat klasifikasi izin...</p>
+          } @else if (headerClassificationError()) {
+            <p class="work-type-state error-text" role="alert">
+              {{ headerClassificationError() }}
+            </p>
+          } @else if (headerClassificationOptions().length > 0) {
+            <div class="work-type-options">
+              @for (option of headerClassificationOptions(); track option.code) {
+                <label class="work-type-option">
+                  <input
+                    [type]="headerClassificationSelectionMode() === 'SINGLE' ? 'radio' : 'checkbox'"
+                    name="header-classification"
+                    [checked]="isHeaderClassificationSelected(option.code)"
+                    (change)="toggleHeaderClassification(option.code, $event)"
+                  />
+                  <span>{{ option.label }}</span>
+                </label>
+              }
+            </div>
+          }
+          @if (
+            form.controls.headerClassificationCodes.touched &&
+            form.controls.headerClassificationCodes.invalid
+          ) {
+            <span class="field-error" role="alert">Pilih klasifikasi sesuai formulir izin.</span>
+          }
+        </fieldset>
         <fieldset class="work-types wide" aria-describedby="work-type-help">
           <legend>Jenis pekerjaan</legend>
           <small id="work-type-help">
@@ -187,11 +222,36 @@ function localDate(hoursFromNow: number): string {
         <label>Nomor JSA<input formControlName="jsaDocumentNumber" /></label>
         <label>Revisi JSA<input formControlName="jsaRevision" /></label>
         <label>Tanggal JSA<input type="date" formControlName="jsaDate" /></label>
+        <fieldset class="work-types mandatory-documents wide" aria-describedby="mandatory-help">
+          <legend>Dokumen dasar wajib</legend>
+          <small id="mandatory-help">
+            Semua dokumen berikut wajib diunggah pada halaman detail setelah draft disimpan.
+          </small>
+          @if (loadingMandatoryDocuments()) {
+            <p class="work-type-state">Memuat daftar dokumen wajib...</p>
+          } @else if (mandatoryDocumentError()) {
+            <p class="work-type-state error-text" role="alert">
+              {{ mandatoryDocumentError() }}
+            </p>
+          } @else {
+            <div class="supporting-document-options">
+              @for (option of mandatoryDocumentOptions(); track option.code) {
+                <div class="supporting-document-option required mandatory-document-option">
+                  <span class="mandatory-document-marker" aria-hidden="true">↑</span>
+                  <span>
+                    <strong>{{ option.label }}</strong>
+                    <small>Wajib diunggah</small>
+                  </span>
+                </div>
+              }
+            </div>
+          }
+        </fieldset>
         <fieldset class="work-types supporting-documents wide" aria-describedby="supporting-help">
-          <legend>Dokumen pendukung (Bagian 4)</legend>
+          <legend>Dokumen tambahan (Bagian 4)</legend>
           <small id="supporting-help">
-            JSA wajib. Dokumen lain dipilih sesuai kebutuhan dan file diunggah setelah draft
-            disimpan.
+            JSA otomatis dicentang pada PDF melalui dokumen wajib di atas. Pilih dokumen tambahan
+            hanya jika diperlukan untuk pekerjaan ini.
           </small>
           @if (loadingSupportingDocuments()) {
             <p class="work-type-state">Memuat daftar dokumen pendukung...</p>
@@ -201,17 +261,16 @@ function localDate(hoursFromNow: number): string {
             </p>
           } @else {
             <div class="supporting-document-options">
-              @for (option of supportingDocumentOptions(); track option.code) {
-                <label class="supporting-document-option" [class.required]="option.required">
+              @for (option of additionalSupportingDocumentOptions(); track option.code) {
+                <label class="supporting-document-option">
                   <input
                     type="checkbox"
                     [checked]="isSupportingDocumentSelected(option.code)"
-                    [disabled]="option.required"
                     (change)="toggleSupportingDocument(option, $event)"
                   />
                   <span>
                     <strong>{{ option.label }}</strong>
-                    <small>{{ option.required ? 'Wajib' : 'Opsional' }}</small>
+                    <small>Opsional</small>
                   </span>
                 </label>
               }
@@ -366,9 +425,17 @@ export class PermitCreate {
   protected readonly workTypeCatalog = signal<Record<string, PermitWorkTypeOption[]>>({});
   protected readonly loadingWorkTypes = signal(true);
   protected readonly workTypeError = signal('');
+  protected readonly headerClassificationCatalog = signal<
+    Record<string, PermitHeaderClassificationCatalog>
+  >({});
+  protected readonly loadingHeaderClassifications = signal(true);
+  protected readonly headerClassificationError = signal('');
   protected readonly supportingDocumentOptions = signal<PermitSupportingDocumentOption[]>([]);
   protected readonly loadingSupportingDocuments = signal(true);
   protected readonly supportingDocumentError = signal('');
+  protected readonly mandatoryDocumentOptions = signal<PermitMandatoryDocumentOption[]>([]);
+  protected readonly loadingMandatoryDocuments = signal(true);
+  protected readonly mandatoryDocumentError = signal('');
   protected readonly form = this.fb.nonNullable.group({
     title: ['', Validators.required],
     description: ['', Validators.required],
@@ -381,6 +448,9 @@ export class PermitCreate {
     }),
     permitClass: ['HotWork', Validators.required],
     riskLevel: ['High', Validators.required],
+    headerClassificationCodes: this.fb.nonNullable.control<string[]>([], {
+      validators: [Validators.required],
+    }),
     workTypeCodes: this.fb.nonNullable.control<string[]>([], {
       validators: [Validators.required],
     }),
@@ -433,6 +503,26 @@ export class PermitCreate {
       });
 
     this.api
+      .listHeaderClassifications()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (catalog) => {
+          this.headerClassificationCatalog.set(
+            Object.fromEntries(catalog.map((item) => [item.permitClass, item])),
+          );
+          this.loadingHeaderClassifications.set(false);
+          this.reconcileHeaderClassificationSelection();
+        },
+        error: (response) => {
+          this.loadingHeaderClassifications.set(false);
+          this.headerClassificationError.set(
+            response?.error?.detail ??
+              'Klasifikasi header izin gagal dimuat. Coba muat ulang halaman.',
+          );
+        },
+      });
+
+    this.api
       .listWorkTypes()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -448,6 +538,23 @@ export class PermitCreate {
           this.workTypeError.set(
             response?.error?.detail ??
               'Daftar jenis pekerjaan gagal dimuat. Coba muat ulang halaman.',
+          );
+        },
+      });
+
+    this.api
+      .listMandatoryDocuments()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (options) => {
+          this.mandatoryDocumentOptions.set(options);
+          this.loadingMandatoryDocuments.set(false);
+        },
+        error: (response) => {
+          this.loadingMandatoryDocuments.set(false);
+          this.mandatoryDocumentError.set(
+            response?.error?.detail ??
+              'Daftar dokumen wajib gagal dimuat. Coba muat ulang halaman.',
           );
         },
       });
@@ -472,7 +579,41 @@ export class PermitCreate {
 
     this.form.controls.permitClass.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.reconcileWorkTypeSelection());
+      .subscribe(() => {
+        this.reconcileHeaderClassificationSelection();
+        this.reconcileWorkTypeSelection();
+      });
+  }
+
+  protected headerClassificationOptions(): PermitHeaderClassificationOption[] {
+    return this.headerClassificationCatalog()[this.form.controls.permitClass.value]?.options ?? [];
+  }
+
+  protected headerClassificationSelectionMode(): 'NONE' | 'SINGLE' | 'MULTIPLE' {
+    return (
+      this.headerClassificationCatalog()[this.form.controls.permitClass.value]?.selectionMode ??
+      'NONE'
+    );
+  }
+
+  protected isHeaderClassificationSelected(code: string): boolean {
+    return this.form.controls.headerClassificationCodes.value.includes(code);
+  }
+
+  protected toggleHeaderClassification(code: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    const current = this.form.controls.headerClassificationCodes.value;
+    const next =
+      this.headerClassificationSelectionMode() === 'SINGLE'
+        ? checked
+          ? [code]
+          : []
+        : checked
+          ? [...new Set([...current, code])]
+          : current.filter((item) => item !== code);
+    this.form.controls.headerClassificationCodes.setValue(next);
+    this.form.controls.headerClassificationCodes.markAsTouched();
+    this.syncLegacyRiskLevel(next);
   }
 
   protected workTypeOptions(): PermitWorkTypeOption[] {
@@ -503,6 +644,10 @@ export class PermitCreate {
 
   protected isSupportingDocumentSelected(code: string): boolean {
     return this.form.controls.requiredDocumentCodes.value.includes(code);
+  }
+
+  protected additionalSupportingDocumentOptions(): PermitSupportingDocumentOption[] {
+    return this.supportingDocumentOptions().filter((option) => !option.required);
   }
 
   protected toggleSupportingDocument(option: PermitSupportingDocumentOption, event: Event): void {
@@ -568,6 +713,37 @@ export class PermitCreate {
       this.form.controls.workTypeCodes.setValue(next);
     }
     this.syncOtherWorkTypeValidation();
+  }
+
+  private reconcileHeaderClassificationSelection(): void {
+    const control = this.form.controls.headerClassificationCodes;
+    const configuration = this.headerClassificationCatalog()[this.form.controls.permitClass.value];
+    if (!configuration) return;
+    const validCodes = new Set(configuration.options.map((option) => option.code));
+    const mode = configuration.selectionMode;
+    let next = control.value.filter((code) => validCodes.has(code));
+    if (mode === 'SINGLE' && next.length > 1) {
+      next = next.slice(0, 1);
+    }
+
+    control.setValue(next);
+    if (mode === 'NONE') {
+      control.clearValidators();
+    } else {
+      control.setValidators([Validators.required]);
+    }
+    control.updateValueAndValidity({ emitEvent: false });
+    this.syncLegacyRiskLevel(next);
+  }
+
+  private syncLegacyRiskLevel(classificationCodes: string[]): void {
+    if (this.form.controls.permitClass.value === 'ColdWork') {
+      if (classificationCodes.includes('COLD_LOW_RISK')) {
+        this.form.controls.riskLevel.setValue('Low');
+      } else if (classificationCodes.includes('COLD_HIGH_RISK')) {
+        this.form.controls.riskLevel.setValue('High');
+      }
+    }
   }
 
   private syncOtherWorkTypeValidation(): void {

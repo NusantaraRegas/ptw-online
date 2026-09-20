@@ -373,6 +373,9 @@ h3 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 9px 12px;
 }
+.mandatory-documents .supporting-document-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 .work-types .supporting-document-option {
   min-width: 0;
   min-height: 48px;
@@ -390,6 +393,22 @@ h3 {
   border-color: #9bc9b1;
   background: #f0faf5;
   cursor: default;
+}
+.work-types .mandatory-document-option {
+  align-items: center;
+}
+.mandatory-document-marker {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  color: #17633f;
+  background: #dcefe5;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
 }
 .work-types .supporting-document-option input {
   width: 17px;
@@ -477,6 +496,9 @@ h3 {
     grid-template-columns: 1fr;
   }
   .supporting-document-options {
+    grid-template-columns: 1fr;
+  }
+  .mandatory-documents .supporting-document-options {
     grid-template-columns: 1fr;
   }
   .work-types .supporting-document-option {

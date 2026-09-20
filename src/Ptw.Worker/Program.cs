@@ -2,7 +2,7 @@ using Ptw.Infrastructure;
 using Ptw.Worker;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddPtwInfrastructure(builder.Configuration);
+builder.Services.AddPtwInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
 builder.Services.AddHostedService<OutboxWorker>();
 builder.Services.AddHostedService<PrintPackageRenderWorker>();
 

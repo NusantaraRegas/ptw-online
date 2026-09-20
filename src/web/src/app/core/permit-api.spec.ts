@@ -22,6 +22,7 @@ describe('PermitApi', () => {
     controls: ['Isolasi energi'],
     requiredDocumentCodes: [],
     workTypeCodes: ['COLD_MECHANICAL'],
+    headerClassificationCodes: ['COLD_LOW_RISK'],
   };
 
   beforeEach(() => {
@@ -55,6 +56,20 @@ describe('PermitApi', () => {
     request.flush([]);
   });
 
+  it('loads the controlled header classifications used by the form and PDF', () => {
+    api.listHeaderClassifications().subscribe();
+    const request = http.expectOne('/api/v1/reference-data/header-classifications');
+    expect(request.request.method).toBe('GET');
+    request.flush([]);
+  });
+
+  it('loads the mandatory upload document catalog', () => {
+    api.listMandatoryDocuments().subscribe();
+    const request = http.expectOne('/api/v1/reference-data/mandatory-documents');
+    expect(request.request.method).toBe('GET');
+    request.flush([]);
+  });
+
   it('sends If-Match when updating a draft', () => {
     api.updateDraft('permit-id', draft, '"etag-value"').subscribe();
     const request = http.expectOne('/api/v1/permits/permit-id/draft');
@@ -64,10 +79,15 @@ describe('PermitApi', () => {
     request.flush({});
   });
 
-  it('requests renewal as a new permit with concurrency and idempotency headers', () => {
+  it('requests area-owner renewal review with concurrency and idempotency headers', () => {
     const renewal = {
       validFrom: '2026-08-26T09:00:00.000Z',
       validUntil: '2026-08-26T17:00:00.000Z',
+      printPackageId: 'package-id',
+      signedFieldCopyAttachmentIds: ['attachment-id'],
+      continuationStatement: 'Pekerjaan perlu dilanjutkan.',
+      allPagesReviewed: true,
+      readableAndCompleteAcknowledged: true,
     };
     api.requestRenewal('permit-id', '"etag-value"', renewal).subscribe();
     const request = http.expectOne('/api/v1/permits/permit-id/renew');
@@ -75,6 +95,39 @@ describe('PermitApi', () => {
     expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
     expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
     expect(request.request.body).toEqual(renewal);
+    request.flush({});
+  });
+
+  it('sends renewal approval to the dedicated area-owner task endpoint', () => {
+    const body = {
+      statement: 'Hardcopy terverifikasi.',
+      fieldVerificationConfirmed: true,
+      evidenceReadable: true,
+    };
+    api.approveRenewal('task-id', '"etag-value"', body).subscribe();
+
+    const request = http.expectOne('/api/v1/renewal-tasks/task-id/approve');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
+    expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
+    expect(request.request.body).toEqual(body);
+    request.flush({});
+  });
+
+  it('sends closure request with exact field-copy references', () => {
+    const body = {
+      printPackageId: 'package-id',
+      signedFieldCopyAttachmentIds: ['attachment-id'],
+      completionStatement: 'Pekerjaan selesai.',
+      allPagesReviewed: true,
+      readableAndCompleteAcknowledged: true,
+    };
+    api.requestClosure('permit-id', '"etag-value"', body).subscribe();
+
+    const request = http.expectOne('/api/v1/permits/permit-id/closure-requests');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
+    expect(request.request.body).toEqual(body);
     request.flush({});
   });
 

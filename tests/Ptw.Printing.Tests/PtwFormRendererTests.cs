@@ -109,6 +109,14 @@ public sealed class PtwFormRendererTests
                 .Where(option => option.TemplateColumn == 1)
                 .OrderBy(option => option.TemplateIndex)
                 .Select(option => option.Label));
+        foreach (var permitClass in new[] { PermitClass.HotWork, PermitClass.ColdWork })
+        {
+            Assert.Equal(
+                PrintTemplateCatalog.Resolve(permitClass).SubTypes,
+                PermitHeaderClassificationCatalog.Resolve(permitClass)
+                    .OrderBy(option => option.TemplateIndex)
+                    .Select(option => option.Label));
+        }
     }
 
     [Fact]
@@ -175,6 +183,24 @@ public sealed class PtwFormRendererTests
         var emptyDocument = renderer.Render(new(empty, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
 
         Assert.NotEqual(Canonicalise(populatedDocument.Content), Canonicalise(emptyDocument.Content));
+    }
+
+    [Theory]
+    [InlineData(PermitClass.HotWork)]
+    [InlineData(PermitClass.ColdWork)]
+    public void HeaderClassificationChangesTheControlledOverlay(PermitClass permitClass)
+    {
+        var renderer = new PtwFormRenderer();
+        var selected = Snapshot(permitClass);
+        var empty = selected with
+        {
+            Permit = selected.Permit with { HeaderClassificationCodes = [] }
+        };
+
+        var selectedDocument = renderer.Render(new(selected, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var emptyDocument = renderer.Render(new(empty, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+
+        Assert.NotEqual(Canonicalise(selectedDocument.Content), Canonicalise(emptyDocument.Content));
     }
 
     private static PrintPackageRenderRequest Request(PermitClass permitClass) =>
@@ -247,7 +273,17 @@ public sealed class PtwFormRendererTests
         OtherWorkTypeDescription: null,
         EquipmentName: "Gas inlet separator",
         WorkOrderNumber: "WO-2026-001",
-        AdditionalHazardReference: "Akses sisi utara licin saat hujan; lihat pengendalian pada JSA.");
+        AdditionalHazardReference: "Akses sisi utara licin saat hujan; lihat pengendalian pada JSA.",
+        HeaderClassificationCodes: HeaderClassificationCodes(permitClass));
+
+    private static IReadOnlyList<string> HeaderClassificationCodes(PermitClass permitClass) =>
+        permitClass switch
+        {
+            PermitClass.HotWork => ["HOT_OPEN_FLAME", "HOT_SPARK"],
+            PermitClass.ColdWork => ["COLD_HIGH_RISK"],
+            PermitClass.ConfinedSpaceEntry => [],
+            _ => throw new ArgumentOutOfRangeException(nameof(permitClass), permitClass, null)
+        };
 
     private static IReadOnlyList<string> WorkTypeCodes(PermitClass permitClass) => permitClass switch
     {

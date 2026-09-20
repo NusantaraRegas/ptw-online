@@ -432,6 +432,9 @@ public sealed class OperationalPolicyApiTests(PtwApiFactory factory)
                 [PermitPolicyOperations.CreateDraft] = actionCode,
                 [PermitPolicyOperations.UpdateDraft] = $"{actionCode}.update",
                 [PermitPolicyOperations.RequestRenewal] = $"{actionCode}.request-renewal",
+                [PermitPolicyOperations.ApproveRenewal] = $"{actionCode}.approve-renewal",
+                [PermitPolicyOperations.RequestRenewalEvidenceReplacement] = $"{actionCode}.request-renewal-evidence",
+                [PermitPolicyOperations.RejectRenewal] = $"{actionCode}.reject-renewal",
                 [PermitPolicyOperations.Submit] = $"{actionCode}.submit",
                 [PermitPolicyOperations.ValidateSubmission] = $"{actionCode}.validate-hse",
                 [PermitPolicyOperations.EscalateValidation] = $"{actionCode}.escalate-validation",
@@ -559,7 +562,8 @@ public sealed class OperationalPolicyApiTests(PtwApiFactory factory)
         ["Energi tersimpan"],
         ["Isolasi energi"],
         ["JSA"],
-        WorkTypeCodes: ["COLD_MECHANICAL"]);
+        WorkTypeCodes: ["COLD_MECHANICAL"],
+        HeaderClassificationCodes: ["COLD_HIGH_RISK"]);
 
     private static PolicyUatSuiteDraftRequest UatDraft(
         string suiteKey,

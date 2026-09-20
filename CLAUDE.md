@@ -42,7 +42,7 @@ tests/Ptw.Domain.Tests           unit state machine
 tests/Ptw.Api.IntegrationTests   end-to-end via PtwApiFactory + Testcontainers
 tests/Ptw.Printing.Tests         regresi layout dokumen (akses internal via InternalsVisibleTo)
 docs/                            BRD/PRD/FSD v1.7 (sumber requirement)
-docs/decisions/                  OPN-001..009, PTW-RENEWAL — sumber kebijakan yang disahkan
+docs/decisions/                  OPN-001..009 (DRAFT), PTW-RENEWAL (baseline Development) — register kebijakan; DRAFT bukan keputusan
 docs/implementation-status.md    matriks traceability requirement -> komponen -> test
 ```
 
@@ -113,7 +113,8 @@ Frontend:
 Printing:
 
 - `PrintTemplateDescriptor` adalah transkripsi formulir terkontrol. Jangan merapikan teks, urutan item, atau kolomnya tanpa decision record yang disahkan.
-- `PermitWorkTypeCatalog`, `PermitSupportingDocumentCatalog`, dan `PermitSafetyEquipmentCatalog` di `Ptw.Domain` adalah transkripsi Bagian 1, 4, dan 5 dengan koordinat template. Perlakukan sama seperti descriptor: tanpa decision record, jangan mengubah label, urutan, kewajiban item, atau kelas izin yang memuatnya.
+- `PermitHeaderClassificationCatalog`, `PermitWorkTypeCatalog`, `PermitSupportingDocumentCatalog`, dan `PermitSafetyEquipmentCatalog` di `Ptw.Domain` adalah transkripsi kotak klasifikasi header (HOT: `Api Terbuka`/`Percikan Api` multi-select; COLD: tepat satu `Low Risk`/`High Risk`; CSE tanpa kotak), Bagian 1, 4, dan 5 dengan koordinat template. Perlakukan sama seperti descriptor: tanpa decision record, jangan mengubah label, urutan, mode pemilihan, kewajiban item, atau kelas izin yang memuatnya.
+- `PermitMandatoryDocumentCatalog` (JSA, ID, BPJS TK, FTW, E-SIMI) **bukan** transkripsi formulir; ia adalah evidence pengajuan yang wajib berlampiran sebelum submit. Hanya JSA yang juga tercetak di Bagian 4 — jangan menambahkan empat dokumen lainnya ke checklist PDF.
 - `PtwFormRenderer.RendererVersion` harus dinaikkan bila output dokumen berubah.
 - Font dan logo di-embed sebagai `EmbeddedResource` agar render deterministik pada image runtime tanpa font sistem.
 
@@ -128,9 +129,10 @@ disamarkan sebagai selesai.
 - [ ] Perubahan tidak membuat `ISSUED`/**Diterbitkan** tampak sebagai izin otomatis memulai pekerjaan; peringatan hardcopy tetap ada.
 - [ ] Tidak ada status di luar sebelas status aktif (`DRAFT`, `UNDER_VALIDATION`, `REVISION_REQUIRED`, `AWAITING_AREA_APPROVAL`, `ISSUED`, `SUSPENDED`, `CLOSURE_REQUESTED`, `CLOSED`, `REJECTED`, `CANCELLED`, `EXPIRED`).
 - [ ] `CLOSED`, `REJECTED`, `CANCELLED`, `EXPIRED` tetap terminal; validity maksimum tujuh hari; renewal membuat permit dan nomor baru.
+- [ ] Renewal tidak mengubah status PTW asal dan tidak membuat permit saat request: Sponsor mengajukan signed field copy `CLEAN` yang cocok dengan exact PrintPackage/PermitVersion, task `AREA_RENEWAL_REVIEW` dibuat, dan draft penerus hanya lahir atomik saat Manager pemilik area menyetujui. Draft penerus tetap melewati submit, validasi HSE, dan approve-and-issue normal.
 - [ ] Suspend tetap menghentikan hak kerja seketika; resolve hanya kembali ke `ISSUED`.
 - [ ] Tidak ada endpoint atau helper generik bergaya `setStatus`.
-- [ ] Tidak ada kebijakan OPN-001–012 yang dikarang: location authority, risk/approval matrix, checklist final, ambang/umur gas test, urutan review, contractor acknowledgement, kontrak SSO/E-SIMI produksi, retention, RPO/RTO, topologi HA. Tanpa decision record, jalur tersebut fail-closed.
+- [ ] Tidak ada kebijakan OPN-001–012 yang dikarang: location authority, risk/approval matrix, checklist final, ambang/umur gas test, urutan review, contractor acknowledgement, kontrak SSO/E-SIMI produksi, retention, RPO/RTO, topologi HA. Tanpa decision record, jalur tersebut fail-closed. Klasifikasi header HOT/COLD hanya merepresentasikan checklist formulir (dan memetakan `RiskLevel` legacy pada COLD), bukan matriks routing risiko OPN-002.
 
 Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputusan eksplisit.
 
@@ -159,7 +161,9 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 - [ ] Identitas actor dan Sponsor aktif berasal dari `/api/v1/me`, bukan profil demo yang di-hard-code ke payload domain.
 - [ ] Bagian 5 hanya dapat ditetapkan PIC HSE saat validasi; payload draft Sponsor yang membawa Bagian 5 ditolak, dan approval tanpa evidence Bagian 5 diarahkan ke revisi.
 - [ ] Bagian 4: JSA wajib, setiap dokumen terpilih memerlukan lampiran bertaut, dan metadata lampiran JSA harus cocok dengan draft sebelum submit. Validasi ini di server, bukan di UI.
+- [ ] Dokumen dasar JSA, ID, BPJS TK, FTW, dan E-SIMI (`PermitMandatoryDocumentCatalog`) masing-masing memiliki lampiran bertaut sebelum submit; JSA harus diunggah dengan kategori `JSA`.
 - [ ] Development identity header hanya aktif pada environment `Development`.
+- [ ] `DevelopmentUploadTrustScanner` hanya terdaftar saat environment `Development` **dan** `Attachments:RequireMalwareScan=false`; di luar itu `UnavailableMalwareScanner` tetap fail-closed. Jangan melonggarkan kondisi ini atau membawanya ke konfigurasi production.
 - [ ] Tidak ada secret, `.env`, token, connection string ber-secret, PII nyata, isi attachment, atau build output yang masuk Git.
 - [ ] Log tidak memuat token, secret, isi dokumen, atau PII berlebih; correlation ID (`X-Correlation-ID`) tetap dipertahankan.
 - [ ] File attachment berstatus selain `CLEAN` tidak dapat diunduh; hanya paket cetak `READY` yang merupakan dokumen resmi.

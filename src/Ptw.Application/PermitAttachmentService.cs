@@ -103,7 +103,7 @@ public sealed class PermitAttachmentService(
             {
                 throw new InvalidRequestException(
                     "attachment.replacement_document_mismatch",
-                    "Lampiran pengganti wajib merujuk jenis dokumen Bagian 4 yang sama.");
+                    "Lampiran pengganti wajib merujuk jenis dokumen wajib atau Bagian 4 yang sama.");
             }
         }
 
@@ -502,6 +502,19 @@ public sealed class PermitAttachmentService(
             return null;
         }
 
+        var mandatoryDocument = PermitMandatoryDocumentCatalog.Find(submittedCode);
+        if (mandatoryDocument is not null)
+        {
+            if (mandatoryDocument.Code == PermitSupportingDocumentCatalog.JsaCode)
+            {
+                throw new InvalidRequestException(
+                    "attachment.jsa_category_required",
+                    "Dokumen JSA harus diunggah menggunakan kategori JSA.");
+            }
+
+            return mandatoryDocument.Code;
+        }
+
         var option = PermitSupportingDocumentCatalog.Resolve(submittedCode);
         if (option.Required)
         {
@@ -515,6 +528,11 @@ public sealed class PermitAttachmentService(
     private static void EnsureSupportingDocumentWasSelected(Permit permit, string? documentCode)
     {
         if (documentCode is null)
+        {
+            return;
+        }
+
+        if (PermitMandatoryDocumentCatalog.Find(documentCode) is not null)
         {
             return;
         }

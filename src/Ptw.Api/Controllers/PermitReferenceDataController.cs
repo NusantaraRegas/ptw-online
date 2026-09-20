@@ -8,6 +8,36 @@ namespace Ptw.Api.Controllers;
 [Route("api/v1/reference-data")]
 public sealed class PermitReferenceDataController : ControllerBase
 {
+    [HttpGet("mandatory-documents")]
+    public IReadOnlyList<PermitMandatoryDocumentOptionResponse> MandatoryDocuments() =>
+        PermitMandatoryDocumentCatalog.Resolve()
+            .Select(option => new PermitMandatoryDocumentOptionResponse(
+                option.Code,
+                option.Label,
+                option.Code == PermitSupportingDocumentCatalog.JsaCode ? "JSA" : "SUPPORTING",
+                option.RequiresMetadata))
+            .ToArray();
+
+    [HttpGet("header-classifications")]
+    public IReadOnlyList<PermitHeaderClassificationCatalogResponse> HeaderClassifications() =>
+        Enum.GetValues<PermitClass>()
+            .Select(permitClass => new PermitHeaderClassificationCatalogResponse(
+                permitClass.ToString(),
+                PermitHeaderClassificationCatalog.SelectionMode(permitClass) switch
+                {
+                    PermitHeaderClassificationSelectionMode.None => "NONE",
+                    PermitHeaderClassificationSelectionMode.Exclusive => "SINGLE",
+                    PermitHeaderClassificationSelectionMode.Multiple => "MULTIPLE",
+                    _ => throw new ArgumentOutOfRangeException(nameof(permitClass), permitClass, null)
+                },
+                PermitHeaderClassificationCatalog.Resolve(permitClass)
+                    .OrderBy(option => option.TemplateIndex)
+                    .Select(option => new PermitHeaderClassificationOptionResponse(
+                        option.Code,
+                        option.Label))
+                    .ToArray()))
+            .ToArray();
+
     [HttpGet("work-types")]
     public IReadOnlyList<PermitWorkTypeCatalogResponse> WorkTypes() =>
         Enum.GetValues<PermitClass>()

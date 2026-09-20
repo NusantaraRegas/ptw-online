@@ -7,6 +7,9 @@ public static class PermitPolicyOperations
     public const string CreateDraft = "CreateDraft";
     public const string UpdateDraft = "UpdateDraft";
     public const string RequestRenewal = "RequestRenewal";
+    public const string ApproveRenewal = "ApproveRenewal";
+    public const string RequestRenewalEvidenceReplacement = "RequestRenewalEvidenceReplacement";
+    public const string RejectRenewal = "RejectRenewal";
     public const string Submit = "Submit";
     public const string ValidateSubmission = "ValidateSubmission";
     public const string EscalateValidation = "EscalateValidation";
@@ -26,6 +29,9 @@ public static class PermitPolicyOperations
         CreateDraft,
         UpdateDraft,
         RequestRenewal,
+        ApproveRenewal,
+        RequestRenewalEvidenceReplacement,
+        RejectRenewal,
         Submit,
         ValidateSubmission,
         EscalateValidation,

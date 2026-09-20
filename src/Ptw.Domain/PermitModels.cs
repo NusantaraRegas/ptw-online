@@ -63,6 +63,29 @@ public sealed record PermitClosureDecisionEvidence(
     string Statement,
     DateTimeOffset ClosedAt);
 
+public enum PermitRenewalReviewStatus
+{
+    Pending,
+    RevisionRequired,
+    Approved,
+    Rejected
+}
+
+public sealed record PermitRenewalRequestEvidence(
+    Guid PrintPackageId,
+    IReadOnlyList<Guid> AttachmentIds,
+    string RequestedBy,
+    string ContinuationStatement,
+    DateTimeOffset ValidFrom,
+    DateTimeOffset ValidUntil,
+    DateTimeOffset RequestedAt,
+    int Revision,
+    PermitRenewalReviewStatus Status,
+    string? ReplacementReason = null,
+    string? DecidedBy = null,
+    string? DecisionStatement = null,
+    DateTimeOffset? DecidedAt = null);
+
 public sealed record PermitDraft(
     string Title,
     string Description,
@@ -94,7 +117,8 @@ public sealed record PermitDraft(
     string? OtherWorkTypeDescription = null,
     string? EquipmentName = null,
     string? WorkOrderNumber = null,
-    string? AdditionalHazardReference = null);
+    string? AdditionalHazardReference = null,
+    IReadOnlyList<string>? HeaderClassificationCodes = null);
 
 public sealed record SubmissionReadiness(
     bool ESimiEligible,
