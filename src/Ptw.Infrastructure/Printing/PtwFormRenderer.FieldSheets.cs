@@ -185,7 +185,7 @@ internal sealed partial class PtwFormRenderer
 
     private static void DrawSection10(FormCanvas canvas, double x, double y, double width)
     {
-        canvas.Text(x, y, width, 3.6, "(Diisi Oleh Bagian Operasi)", 3.9, align: TextAlign.Center);
+        canvas.Text(x, y, width, 3.6, "(Diisi oleh Pemilik Wilayah)", 3.9, align: TextAlign.Center);
 
         var cursor = y + 4.5;
         cursor = DrawWrappedCheckItem(
@@ -206,7 +206,7 @@ internal sealed partial class PtwFormRenderer
         }
 
         cursor += 12;
-        canvas.Field(x + 1.5, cursor, width * 0.55, 4.4, "Field Operator :", null, 24);
+        canvas.Field(x + 1.5, cursor, width * 0.55, 4.4, "Officer :", null, 24);
         canvas.Text(x + (width * 0.6), cursor, width * 0.38, 4.4, "Tanda Tangan", 4.2);
         cursor += 8;
 
@@ -215,7 +215,7 @@ internal sealed partial class PtwFormRenderer
             x,
             cursor,
             width,
-            "Saya setuju pekerjaan telah selesai atas rincian Field Operator. Tempat kerja dan peralatan telah kembali normal.");
+            "Saya setuju pekerjaan telah selesai atas rincian Officer. Tempat kerja dan peralatan telah kembali normal.");
         cursor = DrawWrappedCheckItem(
             canvas,
             x,
@@ -230,7 +230,7 @@ internal sealed partial class PtwFormRenderer
             "Peralatan / area kerja telah diserahkan kepada kami dari Pelaksana kerja, kami berupaya membuat peralatan / daerah bekerja ke kondisi operasional setelah mencabut semua rambu - rambu yang sudah tidak diperlukan, barikade, penggembokan dll, dan setelah semua langkah tindakan pencegahan operasional yang diperlukan / langkah prosedural.");
 
         cursor += 4;
-        canvas.Field(x + 1.5, cursor, width * 0.55, 4.4, "Leader Operator :", null, 26);
+        canvas.Field(x + 1.5, cursor, width * 0.55, 4.4, "Manager Pemilik Wilayah :", null, 26);
         canvas.Text(x + (width * 0.6), cursor, width * 0.38, 4.4, "Tanda Tangan", 4.2);
     }
 

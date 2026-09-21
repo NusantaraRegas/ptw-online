@@ -281,17 +281,30 @@ internal sealed partial class PtwFormRenderer
             2);
         cursor += 8;
 
-        var isolation = draft.IsolationPrecautionCodes;
+        var selectedConditions = new HashSet<string>(
+            snapshot.AreaOperationsReview?.ConditionCodes ?? [],
+            StringComparer.OrdinalIgnoreCase);
+        string[] conditionCodes =
+        [
+            PermitOperationalConditionCatalog.Isolation,
+            PermitOperationalConditionCatalog.Depressurized,
+            PermitOperationalConditionCatalog.Drained,
+            PermitOperationalConditionCatalog.Ventilated,
+            PermitOperationalConditionCatalog.Flushing,
+            PermitOperationalConditionCatalog.Other
+        ];
         for (var index = 0; index < PrintTemplateCatalog.IsolationOptions.Length; index++)
         {
-            var option = PrintTemplateCatalog.IsolationOptions[index];
+            var option = index == 5 && !string.IsNullOrWhiteSpace(snapshot.AreaOperationsReview?.OtherConditionDetail)
+                ? $"{PrintTemplateCatalog.IsolationOptions[index]}: {snapshot.AreaOperationsReview.OtherConditionDetail}"
+                : PrintTemplateCatalog.IsolationOptions[index];
             canvas.CheckItem(
                 x + 3,
                 cursor + (index * 5),
                 width - 6,
                 5,
                 option,
-                IsSelected(isolation, option),
+                selectedConditions.Contains(conditionCodes[index]),
                 4.6);
         }
 
@@ -363,7 +376,6 @@ internal sealed partial class PtwFormRenderer
                 TextAlign.Center);
         }
 
-        var approval = snapshot.Approval;
         for (var row = 0; row < rows; row++)
         {
             var rowY = tableY + headerHeight + (row * rowHeight);
@@ -378,20 +390,24 @@ internal sealed partial class PtwFormRenderer
                 position,
                 4.2);
 
-            // Only the row matching the recorded approver position is populated; the other stays blank
-            // for wet signature until OPN-002 resolves the two-signatory discrepancy.
-            if (approval is null || !PositionMatches(approval.ActorPosition, position))
+            var actorName = row == 0
+                ? snapshot.AreaOperationsReview?.ActorName
+                : snapshot.Approval?.ActorName ?? snapshot.Approval?.ActorId;
+            var decidedAt = row == 0
+                ? snapshot.AreaOperationsReview?.ReviewedAt
+                : snapshot.Approval?.ApprovedAt;
+            if (string.IsNullOrWhiteSpace(actorName) || decidedAt is null)
             {
                 continue;
             }
 
-            canvas.Text(x + 3 + offsets[0], rowY, offsets[1] - offsets[0] - 2, rowHeight, approval.ActorId, 4.2, bold: true);
+            canvas.Text(x + 3 + offsets[0], rowY, offsets[1] - offsets[0] - 2, rowHeight, actorName, 4.2, bold: true);
             canvas.Text(
                 x + 3 + offsets[2],
                 rowY + 1,
                 offsets[3] - offsets[2] - 2,
                 rowHeight - 2,
-                "Disetujui elektronik",
+                row == 0 ? "Diverifikasi elektronik" : "Disetujui elektronik",
                 4.0,
                 bold: true,
                 TextAlign.Center);
@@ -400,7 +416,7 @@ internal sealed partial class PtwFormRenderer
                 rowY,
                 offsets[4] - offsets[3] - 2,
                 rowHeight,
-                FormCanvas.Wib(approval.ApprovedAt, "dd/MM/yy HH:mm"),
+                FormCanvas.Wib(decidedAt.Value, "dd/MM/yy HH:mm"),
                 4.2,
                 align: TextAlign.Center);
         }

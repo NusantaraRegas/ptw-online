@@ -49,7 +49,13 @@ describe('developmentIdentityInterceptor', () => {
     expect(identityStore.selectedKey()).toBe('sponsor-admin');
   });
 
-  it('uses one area owner actor for approval and issuance', () => {
+  it('keeps Senior Officer review separate from Manager approval and issuance', () => {
+    const seniorOfficer = DEVELOPMENT_IDENTITIES.find(
+      (item) => item.key === 'area-senior-officer-orf',
+    );
+    expect(seniorOfficer?.roles).toEqual(['AreaOwnerSeniorOfficer']);
+    expect(seniorOfficer?.locationScopes).toEqual(['ORF']);
+
     const areaOwner = DEVELOPMENT_IDENTITIES.find((item) => item.key === 'area-owner-orf');
 
     expect(areaOwner?.roles).toEqual(['AreaOwnerManager']);

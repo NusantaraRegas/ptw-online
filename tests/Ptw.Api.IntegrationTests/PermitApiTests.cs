@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ptw.Contracts;
+using Ptw.Domain;
 using Ptw.Infrastructure.Persistence;
 
 namespace Ptw.Api.IntegrationTests;
@@ -33,7 +34,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     }
 
     [Fact]
-    public async Task DraftRoundTripsOptionalPlanningReferenceFields()
+    public async Task DraftNormalizesPlanningReferencesAndIgnoresUnsupportedSponsorFields()
     {
         var sponsorId = Unique("sponsor");
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
@@ -41,7 +42,9 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         {
             EquipmentName = " Gas inlet separator ",
             WorkOrderNumber = " WO-2026-001 ",
-            AdditionalHazardReference = " Akses sisi utara licin saat hujan "
+            AdditionalHazardReference = " Akses sisi utara licin saat hujan ",
+            ClsrApplicable = true,
+            IsolationPrecautionCodes = ["LOTO"]
         };
 
         using var response = await sponsor.PostAsJsonAsync("/api/v1/permits", request);
@@ -51,6 +54,8 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.Equal("Gas inlet separator", permit.Draft.EquipmentName);
         Assert.Equal("WO-2026-001", permit.Draft.WorkOrderNumber);
         Assert.Equal("Akses sisi utara licin saat hujan", permit.Draft.AdditionalHazardReference);
+        Assert.False(permit.Draft.ClsrApplicable);
+        Assert.Empty(permit.Draft.IsolationPrecautionCodes ?? []);
     }
 
     [Fact]
@@ -83,6 +88,24 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.Equal(["JSA", "ID", "BPJS_TK", "FTW", "ESIMI"], options.Select(x => x.Code));
         Assert.Equal("JSA", options[0].UploadCategory);
         Assert.All(options.Skip(1), option => Assert.Equal("SUPPORTING", option.UploadCategory));
+    }
+
+    [Fact]
+    public async Task OperationalConditionReferenceDataMatchesBagian7Hierarchy()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/api/v1/reference-data/operational-conditions");
+        response.EnsureSuccessStatusCode();
+        var options = Required(
+            await response.Content.ReadFromJsonAsync<PermitOperationalConditionOptionResponse[]>());
+
+        Assert.Equal(11, options.Length);
+        Assert.Contains(options, option => option.Code == PermitOperationalConditionCatalog.Isolation);
+        Assert.Contains(options, option =>
+            option.Code == PermitOperationalConditionCatalog.IsolationBlind
+            && option.ParentCode == PermitOperationalConditionCatalog.Isolation);
+        Assert.True(Assert.Single(options, option => option.Code == PermitOperationalConditionCatalog.Other).RequiresDetail);
     }
 
     [Fact]
@@ -323,8 +346,62 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             validated.Workflow.Hse.SafetyEquipmentCodes);
         Assert.Empty(validated.Draft.SafetyEquipmentCodes ?? []);
 
-        var approvalTask = await PendingTaskAsync(submitted.Id, "AREA_APPROVE_AND_ISSUE");
-        Assert.Equal(submitted.Version, approvalTask.PermitVersion);
+        var areaReviewTask = await PendingTaskAsync(submitted.Id, "AREA_OPERATION_REVIEW");
+        Assert.Equal(submitted.Version, areaReviewTask.PermitVersion);
+        Assert.Equal("AreaOwnerSeniorOfficer", areaReviewTask.RequiredRole);
+    }
+
+    [Fact]
+    public async Task SeniorOfficerReviewIsRequiredBeforeManagerTaskAndValidatesBagian7()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
+        using var seniorOfficer = Client(Unique("senior-officer"), "AreaOwnerSeniorOfficer", "ORF");
+        using var manager = Client(Unique("manager"), "AreaOwnerManager", "ORF");
+        var submitted = await CreateAndSubmitAsync(sponsor, sponsorId);
+        var validationTask = await PendingTaskAsync(submitted.Id, "HSE_VALIDATION");
+        using var validationResponse = await validator.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{validationTask.Id}/validate",
+            submitted.ETag,
+            new ValidateSubmissionRequest("Valid.", ["SAFETY_FIRE_EXTINGUISHER"])));
+        validationResponse.EnsureSuccessStatusCode();
+        var validated = Required(await validationResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        var areaTask = await PendingTaskAsync(validated.Id, "AREA_OPERATION_REVIEW");
+
+        using var prematureIssue = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{areaTask.Id}/approve-and-issue",
+            validated.ETag,
+            new ApproveAndIssuePermitRequest("Belum ada review Senior Officer.", null)));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, prematureIssue.StatusCode);
+        Assert.Equal("task.type.invalid", await ProblemCodeAsync(prematureIssue));
+
+        using var invalidReview = await seniorOfficer.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{areaTask.Id}/review-area-operations",
+            validated.ETag,
+            new ReviewAreaOperationsRequest(
+                "Isolasi diperiksa.",
+                [PermitOperationalConditionCatalog.Isolation],
+                null,
+                true)));
+        Assert.Equal(HttpStatusCode.Conflict, invalidReview.StatusCode);
+        Assert.Equal("permit.area_operations.subcondition_required", await ProblemCodeAsync(invalidReview));
+
+        using var reviewResponse = await seniorOfficer.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{areaTask.Id}/review-area-operations",
+            validated.ETag,
+            AreaOperationsReview()));
+        reviewResponse.EnsureSuccessStatusCode();
+        var reviewed = Required(await reviewResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.True(reviewed.Workflow.AreaOperations.Completed);
+        Assert.Equal("AWAITING_AREA_APPROVAL", reviewed.Status);
+
+        var approvalTask = await PendingTaskAsync(reviewed.Id, "AREA_APPROVE_AND_ISSUE");
+        Assert.Equal("AreaOwnerManager", approvalTask.RequiredRole);
     }
 
     [Fact]
@@ -356,7 +433,11 @@ public sealed class PermitApiTests(PtwApiFactory factory)
 
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
-        var decision = await db.PermitDecisions.AsNoTracking().SingleAsync(x => x.PermitId == issued.Id);
+        var decision = await db.PermitDecisions.AsNoTracking().SingleAsync(
+            x => x.PermitId == issued.Id && x.Decision == "APPROVE_AND_ISSUE");
+        var operationsDecision = await db.PermitDecisions.AsNoTracking().SingleAsync(
+            x => x.PermitId == issued.Id && x.Decision == "AREA_OPERATION_REVIEW");
+        Assert.Equal("SENIOR_OFFICER", operationsDecision.ApprovalCapacity);
         var snapshot = await db.PrintPackageSnapshots.AsNoTracking().SingleAsync(x => x.PermitId == issued.Id);
         var document = await db.GeneratedDocuments.AsNoTracking()
             .SingleAsync(x => x.PrintPackageSnapshotId == snapshot.Id);
@@ -375,7 +456,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             request,
             key));
         replay.EnsureSuccessStatusCode();
-        Assert.Equal(1, await db.PermitDecisions.AsNoTracking().CountAsync(x => x.PermitId == issued.Id));
+        Assert.Equal(2, await db.PermitDecisions.AsNoTracking().CountAsync(x => x.PermitId == issued.Id));
 
         using var mismatch = await manager.SendAsync(Command(
             HttpMethod.Post,
@@ -537,7 +618,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     }
 
     [Fact]
-    public async Task ClosureRequestRejectsSignedFieldCopyThatIsNotClean()
+    public async Task ClosureRequiresCleanEvidenceAndCompleteAreaOwnerSection10Verification()
     {
         var sponsorId = Unique("sponsor");
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
@@ -612,6 +693,145 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var verificationDb = verificationScope.ServiceProvider.GetRequiredService<PtwDbContext>();
         Assert.Empty(await verificationDb.PermitTasks.Where(x =>
             x.PermitId == issued.Id && x.Type == "AREA_CLOSE_VERIFICATION").ToListAsync());
+
+        var restoredAttachment = await verificationDb.PermitAttachments.SingleAsync(
+            x => x.Id == upload.Attachment.Id);
+        restoredAttachment.ScanStatus = "CLEAN";
+        restoredAttachment.ScanEvidenceReference = "integration-test-clean-evidence";
+        restoredAttachment.ScannedAt = DateTimeOffset.UtcNow;
+        await verificationDb.SaveChangesAsync();
+
+        using var validClosureResponse = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{issued.Id}/closure-requests",
+            upload.ETag,
+            new RequestClosureRequest(
+                printPackageId,
+                [upload.Attachment.Id],
+                "Pekerjaan dan handback pada hardcopy telah selesai.",
+                true,
+                true)));
+        validClosureResponse.EnsureSuccessStatusCode();
+        var closureRequested = Required(await validClosureResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        var closureTask = await PendingTaskAsync(issued.Id, "AREA_CLOSE_VERIFICATION");
+
+        var completeSection10 = new ClosePermitRequest(
+            "Bagian 10 dan hardcopy telah diverifikasi.",
+            "Officer Operasi",
+            true,
+            true,
+            true,
+            true,
+            true,
+            true);
+        using var sponsorClose = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/closure-tasks/{closureTask.Id}/close",
+            closureRequested.ETag,
+            completeSection10));
+        Assert.Equal(HttpStatusCode.Forbidden, sponsorClose.StatusCode);
+
+        using var incompleteClose = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/closure-tasks/{closureTask.Id}/close",
+            closureRequested.ETag,
+            completeSection10 with { InhibitedSystemsRestored = false }));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, incompleteClose.StatusCode);
+        Assert.Equal("permit.closure.verification_incomplete", await ProblemCodeAsync(incompleteClose));
+
+        using var requestFollowUp = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/closure-tasks/{closureTask.Id}/request-evidence",
+            closureRequested.ETag,
+            new PermitReasonRequest(
+                "Pekerjaan belum selesai - Officer Operasi: flange masih harus dipasang.")));
+        requestFollowUp.EnsureSuccessStatusCode();
+        var needsReplacement = Required(await requestFollowUp.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("CLOSURE_REQUESTED", needsReplacement.Status);
+        Assert.Contains("flange", needsReplacement.Workflow.Closure.ReplacementReason);
+
+        using var closeWhileReplacementPending = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/closure-tasks/{closureTask.Id}/close",
+            needsReplacement.ETag,
+            completeSection10));
+        Assert.Equal(HttpStatusCode.Conflict, closeWhileReplacementPending.StatusCode);
+        Assert.Equal(
+            "permit.closure.evidence_replacement_pending",
+            await ProblemCodeAsync(closeWhileReplacementPending));
+
+        using var managerResubmit = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{issued.Id}/closure-requests/resubmit",
+            needsReplacement.ETag,
+            new RequestClosureRequest(
+                printPackageId,
+                [upload.Attachment.Id],
+                "Percobaan pengajuan ulang oleh Pemilik Wilayah.",
+                true,
+                true)));
+        Assert.Equal(HttpStatusCode.Forbidden, managerResubmit.StatusCode);
+
+        using var replacementUploadContent = new MultipartFormDataContent();
+        var replacementFile = new ByteArrayContent(Encoding.ASCII.GetBytes("%PDF-1.7\nreplacement\n"));
+        replacementFile.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        replacementUploadContent.Add(replacementFile, "file", "signed-field-copy-latest.pdf");
+        replacementUploadContent.Add(new StringContent("SIGNED_FIELD_COPY"), "category");
+        replacementUploadContent.Add(new StringContent("SFC-001"), "documentNumber");
+        replacementUploadContent.Add(new StringContent("2"), "documentRevision");
+        replacementUploadContent.Add(new StringContent(DateTimeOffset.UtcNow.ToString("O")), "documentDate");
+        replacementUploadContent.Add(new StringContent(printPackageId.ToString()), "printPackageId");
+        using var replacementUploadRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1/permits/{issued.Id}/attachments")
+        {
+            Content = replacementUploadContent
+        };
+        replacementUploadRequest.Headers.TryAddWithoutValidation("If-Match", needsReplacement.ETag);
+        replacementUploadRequest.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+        using var replacementUploadResponse = await sponsor.SendAsync(replacementUploadRequest);
+        Assert.True(
+            replacementUploadResponse.IsSuccessStatusCode,
+            await replacementUploadResponse.Content.ReadAsStringAsync());
+        var replacementUpload = Required(
+            await replacementUploadResponse.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
+
+        using var resubmitResponse = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{issued.Id}/closure-requests/resubmit",
+            replacementUpload.ETag,
+            new RequestClosureRequest(
+                printPackageId,
+                [replacementUpload.Attachment.Id],
+                "Pekerjaan telah selesai setelah tindak lanjut dan hardcopy diperbarui.",
+                true,
+                true)));
+        resubmitResponse.EnsureSuccessStatusCode();
+        var resubmitted = Required(await resubmitResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("CLOSURE_REQUESTED", resubmitted.Status);
+        Assert.Null(resubmitted.Workflow.Closure.ReplacementReason);
+        Assert.Equal(
+            [replacementUpload.Attachment.Id],
+            resubmitted.Workflow.Closure.SignedFieldCopyAttachmentIds);
+
+        var refreshedClosureTask = await PendingTaskAsync(issued.Id, "AREA_CLOSE_VERIFICATION");
+        Assert.Equal(closureTask.Id, refreshedClosureTask.Id);
+        Assert.Equal(resubmitted.Version, refreshedClosureTask.PermitVersion);
+
+        using var ownerClose = await manager.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/closure-tasks/{closureTask.Id}/close",
+            resubmitted.ETag,
+            completeSection10));
+        ownerClose.EnsureSuccessStatusCode();
+        var closed = Required(await ownerClose.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal("CLOSED", closed.Status);
+        Assert.Equal("Officer Operasi", closed.Workflow.Closure.OfficerName);
+        Assert.True(closed.Workflow.Closure.WorkAreaInspectedAndClean);
+        Assert.True(closed.Workflow.Closure.ManagerAgreesWorkCompleted);
+        Assert.True(closed.Workflow.Closure.InhibitedSystemsRestored);
+        Assert.True(closed.Workflow.Closure.AreaHandedBackAndSafeguardsRestored);
+        Assert.True(closed.Workflow.Closure.EvidenceReadable);
     }
 
     [Fact]
@@ -726,8 +946,28 @@ public sealed class PermitApiTests(PtwApiFactory factory)
                 "JSA dan requirement telah diverifikasi.",
                 ["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"])));
         response.EnsureSuccessStatusCode();
-        return Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
+        var validated = Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
+
+        using var seniorOfficer = Client(Unique("senior-officer"), "AreaOwnerSeniorOfficer", location);
+        var areaTask = await PendingTaskAsync(validated.Id, "AREA_OPERATION_REVIEW");
+        using var reviewResponse = await seniorOfficer.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{areaTask.Id}/review-area-operations",
+            validated.ETag,
+            AreaOperationsReview()));
+        reviewResponse.EnsureSuccessStatusCode();
+        return Required(await reviewResponse.Content.ReadFromJsonAsync<PermitResponse>());
     }
+
+    private static ReviewAreaOperationsRequest AreaOperationsReview() => new(
+        "Seluruh kondisi operasi yang relevan telah diperiksa.",
+        [
+            PermitOperationalConditionCatalog.Isolation,
+            PermitOperationalConditionCatalog.IsolationClosedLockValves,
+            PermitOperationalConditionCatalog.Depressurized
+        ],
+        null,
+        true);
 
     private static async Task<PermitResponse> CreateAndSubmitAsync(
         HttpClient sponsor,

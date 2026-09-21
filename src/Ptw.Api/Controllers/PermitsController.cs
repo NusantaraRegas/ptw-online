@@ -217,6 +217,14 @@ public sealed class PermitsController(
         PermitCommandAsync((etag, key) => service.ApproveAndIssueAsync(
             taskId, request, etag, key, CorrelationId, cancellationToken));
 
+    [HttpPost("/api/v1/tasks/{taskId:guid}/review-area-operations")]
+    public Task<ActionResult<PermitResponse>> ReviewAreaOperations(
+        Guid taskId,
+        ReviewAreaOperationsRequest request,
+        CancellationToken cancellationToken) =>
+        PermitCommandAsync((etag, key) => service.ReviewAreaOperationsAsync(
+            taskId, request, etag, key, CorrelationId, cancellationToken));
+
     [HttpPost("{id:guid}/suspensions")]
     public Task<ActionResult<PermitResponse>> Suspend(
         Guid id,
@@ -239,6 +247,14 @@ public sealed class PermitsController(
         RequestClosureRequest request,
         CancellationToken cancellationToken) =>
         PermitCommandAsync((etag, key) => service.RequestClosureAsync(
+            id, request, etag, key, CorrelationId, cancellationToken));
+
+    [HttpPost("{id:guid}/closure-requests/resubmit")]
+    public Task<ActionResult<PermitResponse>> ResubmitClosure(
+        Guid id,
+        RequestClosureRequest request,
+        CancellationToken cancellationToken) =>
+        PermitCommandAsync((etag, key) => service.ResubmitClosureAsync(
             id, request, etag, key, CorrelationId, cancellationToken));
 
     [HttpPost("/api/v1/closure-tasks/{taskId:guid}/request-evidence")]

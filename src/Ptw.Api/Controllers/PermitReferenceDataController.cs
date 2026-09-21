@@ -63,6 +63,17 @@ public sealed class PermitReferenceDataController : ControllerBase
                     .ToArray()))
             .ToArray();
 
+    [HttpGet("operational-conditions")]
+    public IReadOnlyList<PermitOperationalConditionOptionResponse> OperationalConditions() =>
+        PermitOperationalConditionCatalog.Resolve()
+            .Select(option => new PermitOperationalConditionOptionResponse(
+                option.Code,
+                option.Label,
+                option.TemplateIndex,
+                option.ParentCode,
+                option.RequiresDetail))
+            .ToArray();
+
     [HttpGet("supporting-documents")]
     public IReadOnlyList<PermitSupportingDocumentOptionResponse> SupportingDocuments() =>
         PermitSupportingDocumentCatalog.Resolve()

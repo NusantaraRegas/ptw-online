@@ -138,6 +138,7 @@ describe('PermitDetail HSE validation', () => {
             ],
           },
         ]),
+      listOperationalConditions: () => of([]),
       listSupportingDocuments: () =>
         of([
           {
@@ -259,6 +260,17 @@ const permit: Permit = {
   },
   workflow: {
     hse: validation('HSE', 'PIC HSE'),
+    areaOperations: {
+      completed: true,
+      actorId: 'area.senior-officer.orf.demo',
+      actorName: 'Senior Officer ORF Demo',
+      actorPosition: 'Senior Officer Distribusi Gas dan Manajemen ORF',
+      authorizationId: 'senior-officer-authorization-id',
+      conditionCodes: ['OPS_DEPRESSURIZED'],
+      otherConditionDetail: null,
+      statement: 'Kondisi operasi telah diperiksa.',
+      reviewedAt: '2026-09-04T01:25:00.000Z',
+    },
     approval: {
       completed: true,
       actorId: 'area.owner.orf.demo',
@@ -302,6 +314,12 @@ describe('PermitDetail', () => {
   let requestedPermitIds: string[];
   let currentPermit: Permit;
   let currentTasks: PermitTask[];
+  let areaReviewRequest: {
+    statement: string;
+    conditionCodes: string[];
+    otherConditionDetail: string | null;
+    conditionsReviewed: boolean;
+  } | null;
 
   beforeEach(async () => {
     sessionStorage.setItem('ptw.development-identity', 'sponsor-admin');
@@ -309,6 +327,7 @@ describe('PermitDetail', () => {
     requestedPermitIds = [];
     currentPermit = permit;
     currentTasks = [];
+    areaReviewRequest = null;
 
     const permitApi = {
       get: (id: string) => {
@@ -335,6 +354,16 @@ describe('PermitDetail', () => {
           },
         ]),
       listSafetyEquipment: () => of([]),
+      listOperationalConditions: () =>
+        of([
+          {
+            code: 'OPS_DEPRESSURIZED',
+            label: 'Depressurized',
+            templateIndex: 1,
+            parentCode: null,
+            requiresDetail: false,
+          },
+        ]),
       listSupportingDocuments: () =>
         of([
           {
@@ -347,6 +376,36 @@ describe('PermitDetail', () => {
           },
         ]),
       listMandatoryDocuments: () => of([]),
+      reviewAreaOperations: (
+        _taskId: string,
+        _eTag: string,
+        request: {
+          statement: string;
+          conditionCodes: string[];
+          otherConditionDetail: string | null;
+          conditionsReviewed: boolean;
+        },
+      ) => {
+        areaReviewRequest = request;
+        return of({
+          ...currentPermit,
+          eTag: '"etag-reviewed"',
+          workflow: {
+            ...currentPermit.workflow,
+            areaOperations: {
+              completed: true,
+              actorId: 'area.senior-officer.orf.demo',
+              actorName: 'Senior Officer ORF Demo',
+              actorPosition: 'Senior Officer Distribusi Gas dan Manajemen ORF',
+              authorizationId: 'review-authorization',
+              conditionCodes: request.conditionCodes,
+              otherConditionDetail: request.otherConditionDetail,
+              statement: request.statement,
+              reviewedAt: '2026-09-04T01:25:00.000Z',
+            },
+          },
+        });
+      },
       requestRenewal: (
         _id: string,
         _eTag: string,
@@ -390,6 +449,76 @@ describe('PermitDetail', () => {
         },
       })
       .compileComponents();
+  });
+
+  it('lets the Senior Officer review Bagian 7 before Manager approval becomes available', () => {
+    sessionStorage.setItem('ptw.development-identity', 'area-senior-officer-orf');
+    currentPermit = {
+      ...permit,
+      status: 'AWAITING_AREA_APPROVAL',
+      workflow: {
+        ...permit.workflow,
+        areaOperations: {
+          completed: false,
+          actorId: null,
+          actorName: null,
+          actorPosition: null,
+          authorizationId: null,
+          conditionCodes: [],
+          otherConditionDetail: null,
+          statement: null,
+          reviewedAt: null,
+        },
+        approval: { ...permit.workflow.approval, completed: false, approvedAt: null },
+      },
+    };
+    currentTasks = [
+      {
+        id: 'area-review-task-id',
+        permitId: permit.id,
+        permitVersion: permit.version,
+        type: 'AREA_OPERATION_REVIEW',
+        label: 'Verifikasi kondisi operasi Bagian 7',
+        requiredRole: 'AreaOwnerSeniorOfficer',
+        status: 'PENDING',
+        permitNumber: permit.permitNumber ?? null,
+        permitTitle: permit.draft.title,
+        locationId: permit.draft.locationId,
+        createdAt: permit.createdAt,
+        completedAt: null,
+      },
+    ];
+
+    const fixture = TestBed.createComponent(PermitDetail);
+    fixture.detectChanges();
+    const panel = fixture.nativeElement.querySelector('.area-operation-review') as HTMLElement;
+    const condition = panel.querySelector(
+      '.operational-condition-parent input',
+    ) as HTMLInputElement;
+    condition.click();
+    const confirmation = panel.querySelector(
+      '.operational-review-confirmation input',
+    ) as HTMLInputElement;
+    confirmation.click();
+    const statement = fixture.nativeElement.querySelector(
+      '.decision-statement textarea',
+    ) as HTMLTextAreaElement;
+    statement.value = 'Kondisi operasi telah diperiksa.';
+    statement.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    const button = Array.from(
+      fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+    ).find((item) => item.textContent?.includes('Sahkan kondisi operasi'));
+    expect(button?.disabled).toBe(false);
+    button?.click();
+
+    expect(areaReviewRequest).toEqual({
+      statement: 'Kondisi operasi telah diperiksa.',
+      conditionCodes: ['OPS_DEPRESSURIZED'],
+      otherConditionDetail: null,
+      conditionsReviewed: true,
+    });
   });
 
   afterEach(() => {
@@ -467,6 +596,120 @@ describe('PermitDetail', () => {
     expect(warning?.textContent).toContain('Bagian 5 belum lengkap');
     expect(warning?.textContent).toContain('Minta revisi');
     expect(approveButton?.disabled).toBe(true);
+  });
+
+  it('presents area-owner closure verification as a clear, structured decision flow', () => {
+    sessionStorage.setItem('ptw.development-identity', 'area-owner-orf');
+    currentPermit = {
+      ...permit,
+      status: 'CLOSURE_REQUESTED',
+      workflow: {
+        ...permit.workflow,
+        closure: {
+          ...permit.workflow.closure,
+          requested: true,
+          printPackageId: 'package-id',
+          signedFieldCopyAttachmentIds: ['attachment-id'],
+          requestedBy: 'sponsor.demo',
+          completionStatement: 'Pekerjaan selesai dan area siap diserahterimakan.',
+          requestedAt: '2026-09-04T10:00:00.000Z',
+        },
+      },
+    };
+    currentTasks = [
+      {
+        id: 'closure-task-id',
+        permitId: permit.id,
+        permitVersion: permit.version,
+        type: 'AREA_CLOSE_VERIFICATION',
+        label: 'Verifikasi penutupan',
+        requiredRole: 'AreaOwnerManager',
+        status: 'PENDING',
+        permitNumber: permit.permitNumber ?? null,
+        permitTitle: permit.draft.title,
+        locationId: permit.draft.locationId,
+        createdAt: permit.createdAt,
+        completedAt: null,
+      },
+    ];
+
+    const fixture = TestBed.createComponent(PermitDetail);
+    fixture.detectChanges();
+
+    const panel = fixture.nativeElement.querySelector(
+      '.closure-workflow-action',
+    ) as HTMLElement | null;
+    expect(panel?.querySelector('h2')?.textContent).toContain('Verifikasi akhir Pemilik Wilayah');
+    expect(panel?.querySelector('.closure-context')?.textContent).toContain(
+      'Pekerjaan selesai dan area siap diserahterimakan.',
+    );
+    expect(panel?.querySelectorAll('.closure-check').length).toBe(5);
+    expect(panel?.querySelector('[formControlName="officerName"]')).not.toBeNull();
+    expect(panel?.querySelectorAll('[formControlName="completionOutcome"]').length).toBe(2);
+    expect(panel?.textContent).toContain('Manager Pemilik Wilayah ORF Demo');
+    expect(panel?.querySelector('.decision-statement small')?.textContent).toContain('Wajib diisi');
+    expect(panel?.querySelector('.closure-secondary-action')?.textContent).toContain(
+      'Evidence belum sesuai?',
+    );
+
+    const incompleteOption = panel?.querySelector(
+      'input[formControlName="completionOutcome"][value="INCOMPLETE"]',
+    ) as HTMLInputElement | null;
+    incompleteOption?.click();
+    fixture.detectChanges(false);
+
+    const incompletePanel = fixture.nativeElement.querySelector(
+      '.closure-workflow-action',
+    ) as HTMLElement | null;
+    expect(incompletePanel?.textContent).toContain('PTW tidak dapat ditutup');
+    expect(
+      incompletePanel?.querySelector('[formControlName="incompleteWorkStatus"]'),
+    ).not.toBeNull();
+    expect(incompletePanel?.textContent).toContain('Minta tindak lanjut Sponsor');
+    expect(incompletePanel?.textContent).not.toContain('Verifikasi dan tutup PTW');
+  });
+
+  it('guides the Sponsor to replace and resubmit closure evidence without reopening work', () => {
+    currentPermit = {
+      ...permit,
+      status: 'CLOSURE_REQUESTED',
+      workflow: {
+        ...permit.workflow,
+        closure: {
+          ...permit.workflow.closure,
+          requested: true,
+          printPackageId: 'package-id',
+          signedFieldCopyAttachmentIds: ['old-attachment-id'],
+          requestedBy: 'sponsor.demo',
+          completionStatement: 'Pekerjaan sebelumnya dinyatakan selesai.',
+          requestedAt: '2026-09-04T10:00:00.000Z',
+          revision: 2,
+          replacementReason: 'Pekerjaan belum selesai - Officer Budi: flange belum terpasang.',
+        },
+      },
+    };
+
+    const fixture = TestBed.createComponent(PermitDetail);
+    fixture.detectChanges();
+
+    const followUp = fixture.nativeElement.querySelector(
+      '.closure-follow-up-card',
+    ) as HTMLElement | null;
+    expect(followUp?.textContent).toContain('flange belum terpasang');
+    expect(followUp?.textContent).toContain('tidak mengaktifkan kembali izin kerja');
+
+    const openButton = followUp?.querySelector('button') as HTMLButtonElement | null;
+    expect(openButton?.textContent).toContain('Perbarui dan ajukan ulang');
+    openButton?.click();
+    fixture.detectChanges();
+
+    const resubmissionForm = fixture.nativeElement.querySelector(
+      'form.workflow-action',
+    ) as HTMLFormElement | null;
+    expect(fixture.nativeElement.textContent).toContain('Ajukan ulang penutupan PTW');
+    expect(fixture.nativeElement.textContent).toContain('Evidence pengganti harus merujuk paket');
+    expect(fixture.nativeElement.textContent).toContain('Kirim ulang ke Pemilik Wilayah');
+    expect(resubmissionForm).not.toBeNull();
   });
 
   it('shows a renewal failure beside the renewal form instead of at the top', () => {

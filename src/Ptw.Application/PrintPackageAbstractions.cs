@@ -28,7 +28,8 @@ public sealed record PrintPackageSnapshotPayload(
     string PrintTemplateVersion,
     string CampaignAssetVersion,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<SupportingDocumentEvidenceSnapshot>? SupportingDocuments = null);
+    IReadOnlyList<SupportingDocumentEvidenceSnapshot>? SupportingDocuments = null,
+    AreaOperationsReviewEvidence? AreaOperationsReview = null);
 
 public sealed record PrintPackageDocumentEntry(
     Guid PrintPackageId,

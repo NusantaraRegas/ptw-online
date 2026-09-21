@@ -55,6 +55,13 @@ public sealed record PermitSafetyEquipmentCatalogResponse(
     string PermitClass,
     IReadOnlyList<PermitSafetyEquipmentOptionResponse> Options);
 
+public sealed record PermitOperationalConditionOptionResponse(
+    string Code,
+    string Label,
+    int TemplateIndex,
+    string? ParentCode,
+    bool RequiresDetail);
+
 public sealed record PermitSupportingDocumentOptionResponse(
     string Code,
     string Label,
@@ -78,6 +85,12 @@ public sealed record SubmitPermitRequest(
 public sealed record ValidateSubmissionRequest(
     string Statement,
     IReadOnlyList<string> SafetyEquipmentCodes);
+
+public sealed record ReviewAreaOperationsRequest(
+    string Statement,
+    IReadOnlyList<string> ConditionCodes,
+    string? OtherConditionDetail,
+    bool ConditionsReviewed);
 
 public sealed record ApproveAndIssuePermitRequest(
     string Statement,
@@ -110,8 +123,12 @@ public sealed record RequestClosureRequest(
 
 public sealed record ClosePermitRequest(
     string Statement,
-    bool CompletionConfirmed,
-    bool HandbackConfirmed,
+    string OfficerName,
+    bool WorkAreaInspectedAndClean,
+    bool WorkCompleted,
+    bool ManagerAgreesWorkCompleted,
+    bool InhibitedSystemsRestored,
+    bool AreaHandedBackAndSafeguardsRestored,
     bool EvidenceReadable);
 
 public sealed record PermitValidationResponse(
@@ -133,7 +150,19 @@ public sealed record PermitApprovalResponse(
     Guid? AuthorizationId,
     Guid? ActingAssignmentId,
     string? Statement,
-    DateTimeOffset? ApprovedAt);
+    DateTimeOffset? ApprovedAt,
+    string? ActorName = null);
+
+public sealed record AreaOperationsReviewResponse(
+    bool Completed,
+    string? ActorId,
+    string? ActorName,
+    string? ActorPosition,
+    Guid? AuthorizationId,
+    IReadOnlyList<string> ConditionCodes,
+    string? OtherConditionDetail,
+    string? Statement,
+    DateTimeOffset? ReviewedAt);
 
 public sealed record PermitSuspensionResponse(
     bool Suspended,
@@ -156,7 +185,14 @@ public sealed record PermitClosureResponse(
     bool Closed,
     string? ClosedBy,
     string? CloseStatement,
-    DateTimeOffset? ClosedAt);
+    DateTimeOffset? ClosedAt,
+    string? OfficerName,
+    bool WorkAreaInspectedAndClean,
+    bool WorkCompleted,
+    bool ManagerAgreesWorkCompleted,
+    bool InhibitedSystemsRestored,
+    bool AreaHandedBackAndSafeguardsRestored,
+    bool EvidenceReadable);
 
 public sealed record PermitRenewalRequestResponse(
     bool Requested,
@@ -176,6 +212,7 @@ public sealed record PermitRenewalRequestResponse(
 
 public sealed record PermitWorkflowResponse(
     PermitValidationResponse Hse,
+    AreaOperationsReviewResponse AreaOperations,
     PermitApprovalResponse Approval,
     PermitSuspensionResponse Suspension,
     PermitRenewalRequestResponse Renewal,

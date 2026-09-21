@@ -11,9 +11,14 @@ import { PermitWorkflow } from '../../core/permit-api';
 export class PermitValidationProgress {
   readonly workflow = input.required<PermitWorkflow>();
 
-  protected readonly completedCount = computed(() => Number(this.workflow().hse.completed));
+  protected readonly completedCount = computed(
+    () =>
+      Number(this.workflow().hse.completed) +
+      Number(this.workflow().areaOperations.completed) +
+      Number(this.workflow().approval.completed),
+  );
   protected readonly approvalState = computed(() => {
     if (this.workflow().approval.completed) return 'Diterbitkan';
-    return this.completedCount() === 1 ? 'Menunggu approval' : 'Menunggu validasi';
+    return this.workflow().areaOperations.completed ? 'Menunggu approval' : 'Belum tersedia';
   });
 }

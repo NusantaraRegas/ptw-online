@@ -114,10 +114,6 @@
             <dd>{{ permit()!.draft.plantArea || 'Belum diisi' }}</dd>
           </div>
           <div>
-            <dt>CLSR</dt>
-            <dd>{{ permit()!.draft.clsrApplicable ? 'Berlaku' : 'Tidak berlaku' }}</dd>
-          </div>
-          <div>
             <dt>JSA</dt>
             <dd>
               {{ permit()!.draft.jsaDocumentNumber || 'Belum diisi' }} / rev.
@@ -159,7 +155,7 @@
           [jsaDocumentNumber]="permit()!.draft.jsaDocumentNumber ?? ''"
           [jsaRevision]="permit()!.draft.jsaRevision ?? ''"
           [jsaDate]="permit()!.draft.jsaDate ?? ''"
-          [printPackages]="readyPrintPackages()"
+          [printPackages]="fieldCopyUploadPackages()"
           (permitChanged)="applyAttachmentPermitChange($event)"
         />
       </article>
@@ -344,28 +340,80 @@
           </section>
         }
 
+        @if (canResubmitClosure() && !showingClosureForm() && !showingRenewalForm()) {
+          <section class="card workflow-action closure-follow-up-card">
+            <span class="workflow-action-kicker">Tindak lanjut penutupan</span>
+            <h2>Perbarui hardcopy lapangan</h2>
+            <p>{{ permit()!.workflow.closure.replacementReason }}</p>
+            <div class="closure-follow-up-safety">
+              PTW tetap menunggu penutupan. Tindakan ini tidak mengaktifkan kembali izin kerja.
+            </div>
+            <button class="primary-button" type="button" (click)="openClosureForm()">
+              Perbarui dan ajukan ulang
+            </button>
+          </section>
+        }
+
+        @if (
+          permit()!.status === 'CLOSURE_REQUESTED' &&
+          !closureReplacementPending() &&
+          roles.includes('Sponsor') &&
+          permit()!.draft.sponsorId === actorId
+        ) {
+          <section class="card workflow-action evidence-card">
+            <h2>Penutupan sedang diverifikasi</h2>
+            <p>
+              Hardcopy terbaru sudah dikirim. Pemilik Wilayah sedang melanjutkan verifikasi Bagian
+              10.
+            </p>
+          </section>
+        }
+
+        @if (canReviewClosure() && closureReplacementPending()) {
+          <section class="card workflow-action evidence-card closure-owner-waiting">
+            <span class="workflow-action-kicker">Menunggu Sponsor</span>
+            <h2>Tindak lanjut penutupan belum dikirim ulang</h2>
+            <p>{{ permit()!.workflow.closure.replacementReason }}</p>
+            <small>
+              Penutupan dikunci sampai Sponsor mengunggah hardcopy terbaru dan mengajukan ulang.
+            </small>
+          </section>
+        }
+
         @if (showingClosureForm()) {
           <form
             class="card workflow-action"
             [formGroup]="closureForm"
             (ngSubmit)="requestClosure()"
           >
-            <h2>Ajukan penutupan PTW</h2>
-            <label>
-              Paket cetak yang diverifikasi
-              <select formControlName="printPackageId">
-                <option value="">Pilih paket cetak</option>
-                @for (option of readyPrintPackages(); track option.id) {
-                  <option [value]="option.id">Versi {{ option.permitVersion }}</option>
-                }
-              </select>
-            </label>
+            <h2>
+              {{ canResubmitClosure() ? 'Ajukan ulang penutupan PTW' : 'Ajukan penutupan PTW' }}
+            </h2>
+            @if (canResubmitClosure()) {
+              <div class="closure-resubmission-package">
+                <span>Paket cetak tetap</span>
+                <strong>{{ printPackageLabel(closureForm.controls.printPackageId.value) }}</strong>
+                <small>Evidence pengganti harus merujuk paket cetak yang sama.</small>
+              </div>
+            } @else {
+              <label>
+                Paket cetak yang diverifikasi
+                <select formControlName="printPackageId">
+                  <option value="">Pilih paket cetak</option>
+                  @for (option of readyPrintPackages(); track option.id) {
+                    <option [value]="option.id">Versi {{ option.permitVersion }}</option>
+                  }
+                </select>
+              </label>
+            }
             <label>
               Hardcopy terbaru
               <select formControlName="signedFieldCopyAttachmentId">
                 <option value="">Pilih salinan lapangan</option>
                 @for (
-                  attachment of fieldCopiesForPackage(closureForm.controls.printPackageId.value);
+                  attachment of closureFieldCopiesForPackage(
+                    closureForm.controls.printPackageId.value
+                  );
                   track attachment.id
                 ) {
                   <option [value]="attachment.id">{{ attachment.fileName }}</option>
@@ -406,7 +454,13 @@
                 type="submit"
                 [disabled]="saving() || closureForm.invalid"
               >
-                {{ saving() ? 'Mengirim...' : 'Kirim permintaan penutupan' }}
+                {{
+                  saving()
+                    ? 'Mengirim...'
+                    : canResubmitClosure()
+                      ? 'Kirim ulang ke Pemilik Wilayah'
+                      : 'Kirim permintaan penutupan'
+                }}
               </button>
             </div>
           </form>
@@ -443,8 +497,34 @@
         }
 
         @if (hasDecisionAction()) {
-          <section class="card workflow-action">
-            <h2>Keputusan workflow</h2>
+          <section class="card workflow-action" [class.closure-workflow-action]="canClose()">
+            @if (canReviewAreaOperations()) {
+              <header class="workflow-action-header">
+                <span class="workflow-action-kicker">Bagian 7</span>
+                <h2>Verifikasi kondisi operasi</h2>
+                <p>
+                  Senior Officer menetapkan kondisi operasi yang relevan sebelum PTW diteruskan
+                  kepada Manager Pemilik Wilayah.
+                </p>
+              </header>
+            } @else if (canApprove()) {
+              <header class="workflow-action-header">
+                <span class="workflow-action-kicker">Approval final Bagian 7</span>
+                <h2>Review dan terbitkan PTW</h2>
+                <p>Tinjau hasil verifikasi Senior Officer sebelum memberikan persetujuan akhir.</p>
+              </header>
+            } @else if (canClose()) {
+              <header class="workflow-action-header">
+                <span class="workflow-action-kicker">Penutupan PTW</span>
+                <h2>Verifikasi akhir Pemilik Wilayah</h2>
+                <p>
+                  Pastikan pekerjaan, serah terima area, dan hardcopy sudah sesuai sebelum PTW
+                  ditutup.
+                </p>
+              </header>
+            } @else {
+              <h2>Keputusan workflow</h2>
+            }
             @if (canValidateHse()) {
               <fieldset
                 class="work-types safety-equipment-selector"
@@ -498,6 +578,138 @@
                 </span>
               </div>
             }
+            @if (canReviewAreaOperations()) {
+              <div [formGroup]="areaOperationForm" class="area-operation-review">
+                <fieldset
+                  class="operational-condition-selector"
+                  aria-describedby="operational-condition-help"
+                >
+                  <legend>Checklist kondisi operasi</legend>
+                  <small id="operational-condition-help">
+                    Pilih hanya kondisi yang relevan. Untuk Isolasi dan Bilas, pilih sedikitnya satu
+                    rincian.
+                  </small>
+                  @if (loadingOperationalConditions()) {
+                    <p class="work-type-state">Memuat checklist Bagian 7...</p>
+                  } @else if (operationalConditionError()) {
+                    <p class="work-type-state error-text" role="alert">
+                      {{ operationalConditionError() }}
+                    </p>
+                  } @else {
+                    <div class="operational-condition-options">
+                      @for (option of operationalConditionParents(); track option.code) {
+                        <div
+                          class="operational-condition-group"
+                          [class.selected]="isOperationalConditionSelected(option.code)"
+                        >
+                          <label class="check operational-condition-parent">
+                            <input
+                              type="checkbox"
+                              [checked]="isOperationalConditionSelected(option.code)"
+                              (change)="toggleOperationalCondition(option, $event)"
+                            />
+                            <strong>{{ option.label }}</strong>
+                          </label>
+                          @if (
+                            isOperationalConditionSelected(option.code) &&
+                            operationalConditionChildren(option.code).length > 0
+                          ) {
+                            <div class="operational-subconditions">
+                              @for (
+                                child of operationalConditionChildren(option.code);
+                                track child.code
+                              ) {
+                                <label class="check">
+                                  <input
+                                    type="checkbox"
+                                    [checked]="isOperationalConditionSelected(child.code)"
+                                    (change)="toggleOperationalCondition(child, $event)"
+                                  />
+                                  {{ child.label }}
+                                </label>
+                              }
+                            </div>
+                          }
+                          @if (
+                            option.requiresDetail && isOperationalConditionSelected(option.code)
+                          ) {
+                            <label class="operational-other-detail">
+                              <span>Penjelasan kondisi lainnya</span>
+                              <textarea
+                                rows="2"
+                                maxlength="200"
+                                formControlName="otherConditionDetail"
+                                placeholder="Jelaskan kondisi atau tindakan pencegahan lainnya."
+                              ></textarea>
+                              @if (
+                                areaOperationForm.controls.otherConditionDetail.touched &&
+                                areaOperationForm.controls.otherConditionDetail.invalid
+                              ) {
+                                <span class="field-error" role="alert">
+                                  Penjelasan wajib diisi dan maksimum 200 karakter.
+                                </span>
+                              }
+                            </label>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                  @if (
+                    areaOperationForm.controls.conditionCodes.touched &&
+                    !operationalSelectionValid()
+                  ) {
+                    <span class="field-error" role="alert">
+                      Lengkapi rincian Isolasi, Bilas, atau Lainnya yang dipilih.
+                    </span>
+                  }
+                </fieldset>
+                <label class="check operational-review-confirmation">
+                  <input type="checkbox" formControlName="conditionsReviewed" />
+                  <span>
+                    <strong>Seluruh kondisi operasi yang relevan telah diperiksa.</strong>
+                    <small> Persetujuan ini menjadi evidence Senior Officer pada Bagian 7. </small>
+                  </span>
+                </label>
+              </div>
+            }
+            @if (canApprove()) {
+              <section class="area-operation-summary" aria-labelledby="area-review-summary-title">
+                <div class="area-operation-summary-heading">
+                  <div>
+                    <span>Verifikasi Senior Officer</span>
+                    <h3 id="area-review-summary-title">
+                      {{ permit()!.workflow.areaOperations.actorName }}
+                    </h3>
+                  </div>
+                  <span class="status-pill">Selesai</span>
+                </div>
+                <p>{{ permit()!.workflow.areaOperations.statement }}</p>
+                <div class="operational-condition-summary">
+                  @if (permit()!.workflow.areaOperations.conditionCodes.length === 0) {
+                    <span>Tidak ada kondisi tambahan yang dipilih.</span>
+                  } @else {
+                    @for (code of permit()!.workflow.areaOperations.conditionCodes; track code) {
+                      <span>{{ operationalConditionLabel(code) }}</span>
+                    }
+                  }
+                </div>
+                @if (permit()!.workflow.areaOperations.otherConditionDetail) {
+                  <p>
+                    <strong>Lainnya:</strong>
+                    {{ permit()!.workflow.areaOperations.otherConditionDetail }}
+                  </p>
+                }
+                <small>
+                  {{ permit()!.workflow.areaOperations.actorPosition }} &middot;
+                  {{
+                    permit()!.workflow.areaOperations.reviewedAt
+                      | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta'
+                  }}
+                  WIB
+                </small>
+              </section>
+            }
             @if (canReviewRenewal()) {
               <div class="decision-context">
                 <strong>Review perpanjangan</strong>
@@ -530,32 +742,152 @@
               </div>
             }
             @if (canClose()) {
-              <div class="decision-context">
-                <strong>Verifikasi penutupan</strong>
-                <span>{{ permit()!.workflow.closure.completionStatement }}</span>
+              <div class="decision-context closure-context">
+                <span class="decision-context-label">Pernyataan penyelesaian Sponsor</span>
+                <p>{{ permit()!.workflow.closure.completionStatement }}</p>
               </div>
-              <div [formGroup]="closureDecisionForm" class="confirmation-list">
-                <label class="check">
-                  <input type="checkbox" formControlName="completionConfirmed" />
-                  Penyelesaian pekerjaan telah dikonfirmasi.
-                </label>
-                <label class="check">
-                  <input type="checkbox" formControlName="handbackConfirmed" />
-                  Handback area telah dikonfirmasi.
-                </label>
-                <label class="check">
-                  <input type="checkbox" formControlName="evidenceReadable" />
-                  Evidence hardcopy terbaca dan cocok dengan paket cetak.
-                </label>
+              <div [formGroup]="closureDecisionForm" class="closure-verification-form">
+                <fieldset class="confirmation-list closure-confirmations">
+                  <legend>Inspeksi oleh Officer</legend>
+                  <p class="confirmation-help">
+                    Isi berdasarkan pemeriksaan kondisi aktual di lapangan dan hardcopy terbaru.
+                  </p>
+                  <label class="check closure-check">
+                    <input type="checkbox" formControlName="workAreaInspectedAndClean" />
+                    <span>
+                      <strong>Area telah diperiksa dan bersih</strong>
+                      <small>
+                        Peralatan pelaksana sudah tidak berada di area dan area kerja sudah bersih.
+                      </small>
+                    </span>
+                  </label>
+                  <div class="closure-outcome" role="radiogroup" aria-label="Status pekerjaan">
+                    <label class="closure-outcome-option">
+                      <input type="radio" formControlName="completionOutcome" value="COMPLETED" />
+                      <span>
+                        <strong>Pekerjaan selesai</strong>
+                        <small>Lanjutkan verifikasi pengembalian ke kondisi normal.</small>
+                      </span>
+                    </label>
+                    <label class="closure-outcome-option incomplete">
+                      <input type="radio" formControlName="completionOutcome" value="INCOMPLETE" />
+                      <span>
+                        <strong>Pekerjaan belum selesai</strong>
+                        <small>PTW tidak dapat ditutup dan tidak otomatis kembali berlaku.</small>
+                      </span>
+                    </label>
+                  </div>
+                  @if (closureDecisionForm.controls.completionOutcome.value === 'INCOMPLETE') {
+                    <label class="closure-incomplete-status">
+                      <span>Status pekerjaan yang belum selesai</span>
+                      <textarea
+                        rows="3"
+                        maxlength="800"
+                        formControlName="incompleteWorkStatus"
+                        placeholder="Jelaskan pekerjaan tersisa dan kondisi terakhir di lapangan."
+                      ></textarea>
+                      @if (
+                        closureDecisionForm.controls.incompleteWorkStatus.touched &&
+                        !closureDecisionForm.controls.incompleteWorkStatus.value.trim()
+                      ) {
+                        <span class="field-error" role="alert">
+                          Status pekerjaan yang belum selesai wajib diisi.
+                        </span>
+                      }
+                    </label>
+                  }
+                  <label class="closure-officer-field">
+                    <span>Officer</span>
+                    <input
+                      formControlName="officerName"
+                      maxlength="100"
+                      autocomplete="off"
+                      placeholder="Nama Officer yang melakukan inspeksi"
+                    />
+                    <small>Tanda tangan Officer tetap diverifikasi pada hardcopy.</small>
+                    @if (
+                      closureDecisionForm.controls.officerName.touched &&
+                      closureDecisionForm.controls.officerName.invalid
+                    ) {
+                      <span class="field-error" role="alert">Nama Officer wajib diisi.</span>
+                    }
+                  </label>
+                </fieldset>
+
+                @if (closureDecisionForm.controls.completionOutcome.value === 'COMPLETED') {
+                  <fieldset class="confirmation-list closure-confirmations owner-confirmations">
+                    <legend>Persetujuan Pemilik Wilayah</legend>
+                    <div class="closure-manager-identity">
+                      <span>Manager Pemilik Wilayah</span>
+                      <strong>{{ actorDisplayName }}</strong>
+                      <small>{{ actorId }}</small>
+                    </div>
+                    <label class="check closure-check">
+                      <input type="checkbox" formControlName="managerAgreesWorkCompleted" />
+                      <span>
+                        <strong>Menyetujui pekerjaan telah selesai</strong>
+                        <small>
+                          Kondisi tempat kerja dan peralatan telah kembali normal berdasarkan
+                          rincian Officer.
+                        </small>
+                      </span>
+                    </label>
+                    <label class="check closure-check">
+                      <input type="checkbox" formControlName="inhibitedSystemsRestored" />
+                      <span>
+                        <strong>Sistem inhibited telah normal</strong>
+                        <small>Semua sistem inhibited telah dikembalikan ke kondisi normal.</small>
+                      </span>
+                    </label>
+                    <label class="check closure-check">
+                      <input
+                        type="checkbox"
+                        formControlName="areaHandedBackAndSafeguardsRestored"
+                      />
+                      <span>
+                        <strong>Area dan peralatan telah diserahterimakan</strong>
+                        <small>
+                          Rambu, barikade, penggembokan, dan safeguard sementara telah dilepas atau
+                          ditangani sesuai prosedur.
+                        </small>
+                      </span>
+                    </label>
+                    <label class="check closure-check evidence-check">
+                      <input type="checkbox" formControlName="evidenceReadable" />
+                      <span>
+                        <strong>Hardcopy sesuai</strong>
+                        <small
+                          >Evidence terbaca dan cocok dengan PermitVersion serta paket cetak.</small
+                        >
+                      </span>
+                    </label>
+                  </fieldset>
+                }
               </div>
             }
-            <label
-              >Pernyataan atau alasan<textarea
-                rows="3"
-                maxlength="1000"
-                [formControl]="decisionStatement"
-              ></textarea>
-            </label>
+            @if (
+              !canClose() || closureDecisionForm.controls.completionOutcome.value === 'COMPLETED'
+            ) {
+              <label class="decision-statement">
+                <span>Pernyataan atau alasan</span>
+                @if (canClose()) {
+                  <small>Wajib diisi sebagai catatan keputusan penutupan.</small>
+                }
+                <textarea
+                  rows="3"
+                  maxlength="1000"
+                  [formControl]="decisionStatement"
+                  [attr.placeholder]="
+                    canClose()
+                      ? 'Contoh: Kondisi lapangan dan hardcopy telah diverifikasi.'
+                      : 'Tuliskan dasar keputusan.'
+                  "
+                ></textarea>
+                @if (decisionStatement.touched && decisionStatement.invalid) {
+                  <span class="field-error" role="alert">Pernyataan atau alasan wajib diisi.</span>
+                }
+              </label>
+            }
             <div class="action-buttons">
               @if (canValidateHse()) {
                 <button
@@ -583,6 +915,23 @@
                   (click)="approveAndIssue()"
                 >
                   Setujui dan terbitkan
+                </button>
+              }
+              @if (canReviewAreaOperations()) {
+                <button
+                  class="primary-button"
+                  type="button"
+                  [disabled]="
+                    saving() ||
+                    decisionStatement.invalid ||
+                    areaOperationForm.invalid ||
+                    !operationalSelectionValid() ||
+                    loadingOperationalConditions() ||
+                    !!operationalConditionError()
+                  "
+                  (click)="reviewAreaOperations()"
+                >
+                  Sahkan kondisi operasi
                 </button>
               }
               @if (canReviewRenewal()) {
@@ -614,22 +963,41 @@
                 </div>
               }
               @if (canClose()) {
-                <button
-                  class="primary-button"
-                  type="button"
-                  [disabled]="saving() || decisionStatement.invalid || closureDecisionForm.invalid"
-                  (click)="closePermit()"
-                >
-                  Verifikasi dan tutup PTW
-                </button>
-                <button
-                  class="secondary-button"
-                  type="button"
-                  [disabled]="saving() || decisionStatement.invalid"
-                  (click)="requestClosureEvidence()"
-                >
-                  Minta evidence pengganti
-                </button>
+                @if (closureDecisionForm.controls.completionOutcome.value === 'COMPLETED') {
+                  <button
+                    class="primary-button"
+                    type="button"
+                    [disabled]="saving() || decisionStatement.invalid || !closureReadyToClose()"
+                    (click)="closePermit()"
+                  >
+                    Verifikasi dan tutup PTW
+                  </button>
+                }
+                <div class="closure-secondary-action">
+                  <div>
+                    @if (closureDecisionForm.controls.completionOutcome.value === 'INCOMPLETE') {
+                      <strong>Pekerjaan belum selesai</strong>
+                      <span>
+                        Kirim status kepada Sponsor tanpa menutup PTW atau memulihkan hak kerja.
+                      </span>
+                    } @else {
+                      <strong>Evidence belum sesuai?</strong>
+                      <span>Minta Sponsor mengunggah hardcopy pengganti sebelum penutupan.</span>
+                    }
+                  </div>
+                  <button
+                    class="secondary-button"
+                    type="button"
+                    [disabled]="saving() || !closureFollowUpReady()"
+                    (click)="requestClosureEvidence()"
+                  >
+                    {{
+                      closureDecisionForm.controls.completionOutcome.value === 'INCOMPLETE'
+                        ? 'Minta tindak lanjut Sponsor'
+                        : 'Minta evidence pengganti'
+                    }}
+                  </button>
+                </div>
               }
               @if (canDisposition()) {
                 <div class="disposition-actions">
@@ -848,16 +1216,9 @@
           </small>
           <textarea formControlName="additionalHazardReference" rows="2" maxlength="160"></textarea>
         </label>
-        <label class="clsr-option">
-          <input type="checkbox" formControlName="clsrApplicable" />
-          <span>CLSR berlaku</span>
-        </label>
         <label class="wide"
           >Deklarasi SIMOPS<textarea formControlName="simopsDeclaration" rows="2"></textarea>
         </label>
-        <label class="wide"
-          >Isolation/precaution <input formControlName="isolationPrecautionCodes"
-        /></label>
         <label>Nomor JSA<input formControlName="jsaDocumentNumber" /></label>
         <label>Revisi JSA<input formControlName="jsaRevision" /></label>
         <label>Tanggal JSA<input type="date" formControlName="jsaDate" /></label>

@@ -102,9 +102,8 @@ internal static class PrintTemplateCatalog
     ];
 
     /// <summary>
-    /// Bagian 7 signature rows. The controlled form names two ORF positions while v1.6 models a single
-    /// Manager approval, so only the row matching the approver position is populated and the other is
-    /// left blank for wet signature until OPN-002 resolves the discrepancy.
+    /// Bagian 7 signature rows in their controlled order: Senior Officer operational review first,
+    /// followed by the Manager Pemilik Wilayah approval that issues the PTW.
     /// </summary>
     internal static readonly string[] OperationsAuthorityPositions =
     [

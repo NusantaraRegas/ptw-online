@@ -13,6 +13,7 @@ public static class PermitPolicyOperations
     public const string Submit = "Submit";
     public const string ValidateSubmission = "ValidateSubmission";
     public const string EscalateValidation = "EscalateValidation";
+    public const string ReviewAreaOperations = "ReviewAreaOperations";
     public const string ApproveAndIssue = "ApproveAndIssuePermit";
     public const string RequestRevision = "RequestRevision";
     public const string Reject = "Reject";
@@ -20,6 +21,7 @@ public static class PermitPolicyOperations
     public const string ResolveSuspension = "ResolveSuspension";
     public const string RequestClosure = "RequestClosure";
     public const string RequestClosureEvidenceReplacement = "RequestClosureEvidenceReplacement";
+    public const string ResubmitClosure = "ResubmitClosure";
     public const string Close = "ClosePermit";
     public const string Cancel = "CancelPermit";
     public const string Expire = "ExpirePermit";
@@ -35,6 +37,7 @@ public static class PermitPolicyOperations
         Submit,
         ValidateSubmission,
         EscalateValidation,
+        ReviewAreaOperations,
         ApproveAndIssue,
         RequestRevision,
         Reject,
@@ -42,6 +45,7 @@ public static class PermitPolicyOperations
         ResolveSuspension,
         RequestClosure,
         RequestClosureEvidenceReplacement,
+        ResubmitClosure,
         Close,
         Cancel,
         Expire

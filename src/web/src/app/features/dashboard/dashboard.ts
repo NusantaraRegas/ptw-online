@@ -104,6 +104,7 @@ export class Dashboard {
     return (
       {
         HSE_VALIDATION: 'Validasi',
+        AREA_OPERATION_REVIEW: 'Verifikasi Bagian 7',
         AREA_APPROVE_AND_ISSUE: 'Setujui & terbitkan',
         AREA_CLOSE_VERIFICATION: 'Verifikasi penutupan',
       }[type] ?? 'Buka'

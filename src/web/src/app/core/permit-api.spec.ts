@@ -131,6 +131,44 @@ describe('PermitApi', () => {
     request.flush({});
   });
 
+  it('resubmits closure evidence through the dedicated sponsor command', () => {
+    const body = {
+      printPackageId: 'package-id',
+      signedFieldCopyAttachmentIds: ['replacement-attachment-id'],
+      completionStatement: 'Pekerjaan telah selesai setelah tindak lanjut.',
+      allPagesReviewed: true,
+      readableAndCompleteAcknowledged: true,
+    };
+    api.resubmitClosure('permit-id', '"etag-value"', body).subscribe();
+
+    const request = http.expectOne('/api/v1/permits/permit-id/closure-requests/resubmit');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
+    expect(request.request.body).toEqual(body);
+    request.flush({});
+  });
+
+  it('sends the complete Bagian 10 verification to the dedicated closure task', () => {
+    const body = {
+      statement: 'Bagian 10 dan hardcopy telah diverifikasi.',
+      officerName: 'Officer Operasi',
+      workAreaInspectedAndClean: true,
+      workCompleted: true,
+      managerAgreesWorkCompleted: true,
+      inhibitedSystemsRestored: true,
+      areaHandedBackAndSafeguardsRestored: true,
+      evidenceReadable: true,
+    };
+    api.close('closure-task-id', '"etag-value"', body).subscribe();
+
+    const request = http.expectOne('/api/v1/closure-tasks/closure-task-id/close');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
+    expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
+    expect(request.request.body).toEqual(body);
+    request.flush({});
+  });
+
   it('loads scoped activity with pagination', () => {
     api.listActivity('permit-id', 10, 5).subscribe();
     const request = http.expectOne(
@@ -178,6 +216,29 @@ describe('PermitApi', () => {
     const request = http.expectOne('/api/v1/reference-data/safety-equipment');
     expect(request.request.method).toBe('GET');
     request.flush([]);
+  });
+
+  it('loads the controlled Bagian 7 operational-condition catalogue', () => {
+    api.listOperationalConditions().subscribe();
+    const request = http.expectOne('/api/v1/reference-data/operational-conditions');
+    expect(request.request.method).toBe('GET');
+    request.flush([]);
+  });
+
+  it('submits Senior Officer Bagian 7 evidence through an explicit task command', () => {
+    const body = {
+      statement: 'Kondisi operasi telah diperiksa.',
+      conditionCodes: ['OPS_DEPRESSURIZED'],
+      otherConditionDetail: null,
+      conditionsReviewed: true,
+    };
+    api.reviewAreaOperations('task-id', '"etag-value"', body).subscribe();
+    const request = http.expectOne('/api/v1/tasks/task-id/review-area-operations');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
+    expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
+    expect(request.request.body).toEqual(body);
+    request.flush({});
   });
 
   it('sends an explicit revision command with a mandatory reason', () => {

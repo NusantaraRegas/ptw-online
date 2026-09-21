@@ -354,6 +354,22 @@ describe('PermitCreate', () => {
     expect(request.request.body.workOrderNumber).toBe('WO-2026-001');
     expect(request.request.body.additionalHazardReference).toBe('Akses sisi utara licin');
     expect(request.request.body.headerClassificationCodes).toEqual(['HOT_OPEN_FLAME', 'HOT_SPARK']);
+    expect(request.request.body.clsrApplicable).toBe(false);
+    expect(request.request.body.isolationPrecautionCodes).toEqual([]);
     expect(request.request.body.hazards).toEqual([]);
+  });
+
+  it('does not expose CLSR or isolation precaution fields to the Sponsor', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PermitCreate],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PermitCreate);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[formControlName="clsrApplicable"]')).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[formControlName="isolationPrecautionCodes"]'),
+    ).toBeNull();
   });
 });

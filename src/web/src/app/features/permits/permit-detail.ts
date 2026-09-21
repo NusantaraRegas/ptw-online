@@ -14,6 +14,7 @@ import {
   PermitHeaderClassificationCatalog,
   PermitHeaderClassificationOption,
   PermitMandatoryDocumentOption,
+  PermitOperationalConditionOption,
   PermitSafetyEquipmentOption,
   PermitSupportingDocumentOption,
   PermitTask,
@@ -92,8 +93,12 @@ export class PermitDetail {
   protected readonly mandatoryDocumentOptions = signal<PermitMandatoryDocumentOption[]>([]);
   protected readonly loadingMandatoryDocuments = signal(true);
   protected readonly mandatoryDocumentError = signal('');
+  protected readonly operationalConditionOptions = signal<PermitOperationalConditionOption[]>([]);
+  protected readonly loadingOperationalConditions = signal(true);
+  protected readonly operationalConditionError = signal('');
   protected readonly roles = this.identityStore.selected().roles;
   protected readonly actorId = this.identityStore.selected().userId;
+  protected readonly actorDisplayName = this.identityStore.selected().displayName;
   protected readonly canEdit = computed(() => {
     const status = this.permit()?.status;
     return status === 'DRAFT' || status === 'REVISION_REQUIRED';
@@ -109,9 +114,21 @@ export class PermitDetail {
       (this.roles.includes('Administrator') ||
         (this.roles.includes('Sponsor') && this.permit()?.draft.sponsorId === this.actorId)),
   );
+  protected readonly closureReplacementPending = computed(
+    () =>
+      this.permit()?.status === 'CLOSURE_REQUESTED' &&
+      !!this.permit()?.workflow.closure.replacementReason,
+  );
+  protected readonly canResubmitClosure = computed(
+    () =>
+      this.closureReplacementPending() &&
+      this.roles.includes('Sponsor') &&
+      this.permit()?.draft.sponsorId === this.actorId,
+  );
   protected readonly canUploadFieldCopy = computed(
     () =>
-      ['ISSUED', 'SUSPENDED', 'EXPIRED'].includes(this.permit()?.status ?? '') &&
+      (['ISSUED', 'SUSPENDED', 'EXPIRED'].includes(this.permit()?.status ?? '') ||
+        this.closureReplacementPending()) &&
       this.permit()?.workflow.renewal?.status !== 'PENDING' &&
       (this.roles.includes('Administrator') ||
         (this.roles.includes('Sponsor') && this.permit()?.draft.sponsorId === this.actorId)),
@@ -120,6 +137,13 @@ export class PermitDetail {
     () => this.canManageDraftAttachments() || this.canUploadFieldCopy(),
   );
   protected readonly fieldCopyOnly = computed(() => !this.canEdit());
+  protected readonly fieldCopyUploadPackages = computed(() => {
+    const closurePackageId = this.permit()?.workflow.closure.printPackageId;
+    if (this.closureReplacementPending() && closurePackageId) {
+      return this.readyPrintPackages().filter((item) => item.id === closurePackageId);
+    }
+    return this.readyPrintPackages();
+  });
   protected readonly eligibleSignedFieldCopies = computed(() => {
     const items = this.signedFieldCopies();
     return items.filter(
@@ -164,7 +188,13 @@ export class PermitDetail {
   protected readonly canApprove = computed(
     () =>
       this.currentTask()?.type === 'AREA_APPROVE_AND_ISSUE' &&
-      this.roles.includes('AreaOwnerManager'),
+      this.roles.includes('AreaOwnerManager') &&
+      this.permit()?.workflow.areaOperations.completed,
+  );
+  protected readonly canReviewAreaOperations = computed(
+    () =>
+      this.currentTask()?.type === 'AREA_OPERATION_REVIEW' &&
+      this.roles.includes('AreaOwnerSeniorOfficer'),
   );
   protected readonly approvalMissingSafetyEquipment = computed(
     () =>
@@ -175,6 +205,7 @@ export class PermitDetail {
     return (
       !!task &&
       ((task.type === 'HSE_VALIDATION' && this.roles.includes('HSEValidator')) ||
+        (task.type === 'AREA_OPERATION_REVIEW' && this.roles.includes('AreaOwnerSeniorOfficer')) ||
         (task.type === 'AREA_APPROVE_AND_ISSUE' && this.roles.includes('AreaOwnerManager')))
     );
   });
@@ -207,10 +238,13 @@ export class PermitDetail {
     () =>
       this.currentTask()?.type === 'AREA_RENEWAL_REVIEW' && this.roles.includes('AreaOwnerManager'),
   );
-  protected readonly canClose = computed(
+  protected readonly canReviewClosure = computed(
     () =>
       this.currentTask()?.type === 'AREA_CLOSE_VERIFICATION' &&
       this.roles.includes('AreaOwnerManager'),
+  );
+  protected readonly canClose = computed(
+    () => this.canReviewClosure() && !this.closureReplacementPending(),
   );
   protected readonly canResolveSuspension = computed(
     () =>
@@ -220,6 +254,7 @@ export class PermitDetail {
   protected readonly hasDecisionAction = computed(
     () =>
       this.canValidateHse() ||
+      this.canReviewAreaOperations() ||
       this.canApprove() ||
       this.canDisposition() ||
       this.canReviewRenewal() ||
@@ -252,9 +287,7 @@ export class PermitDetail {
     workOrderNumber: ['', Validators.maxLength(60)],
     additionalHazardReference: ['', Validators.maxLength(160)],
     plantArea: ['', Validators.required],
-    clsrApplicable: [false],
     simopsDeclaration: [''],
-    isolationPrecautionCodes: [''],
     jsaDocumentNumber: ['', Validators.required],
     jsaRevision: ['', Validators.required],
     jsaDate: ['', Validators.required],
@@ -274,6 +307,11 @@ export class PermitDetail {
   ]);
   protected readonly hseSafetyEquipmentCodes = this.fb.nonNullable.control<string[]>([], {
     validators: [Validators.required],
+  });
+  protected readonly areaOperationForm = this.fb.nonNullable.group({
+    conditionCodes: this.fb.nonNullable.control<string[]>([]),
+    otherConditionDetail: ['', Validators.maxLength(200)],
+    conditionsReviewed: [false, Validators.requiredTrue],
   });
   protected readonly renewalForm = this.fb.nonNullable.group({
     validFrom: ['', Validators.required],
@@ -296,9 +334,14 @@ export class PermitDetail {
     evidenceReadable: [false, Validators.requiredTrue],
   });
   protected readonly closureDecisionForm = this.fb.nonNullable.group({
-    completionConfirmed: [false, Validators.requiredTrue],
-    handbackConfirmed: [false, Validators.requiredTrue],
-    evidenceReadable: [false, Validators.requiredTrue],
+    completionOutcome: ['COMPLETED', Validators.required],
+    workAreaInspectedAndClean: [false],
+    incompleteWorkStatus: ['', Validators.maxLength(800)],
+    officerName: ['', [Validators.required, Validators.maxLength(100)]],
+    managerAgreesWorkCompleted: [false],
+    inhibitedSystemsRestored: [false],
+    areaHandedBackAndSafeguardsRestored: [false],
+    evidenceReadable: [false],
   });
 
   constructor() {
@@ -306,6 +349,7 @@ export class PermitDetail {
     this.loadHeaderClassifications();
     this.loadWorkTypes();
     this.loadSafetyEquipment();
+    this.loadOperationalConditions();
     this.loadMandatoryDocuments();
     this.loadSupportingDocuments();
     this.form.controls.permitClass.valueChanges
@@ -362,9 +406,7 @@ export class PermitDetail {
       workOrderNumber: permit.draft.workOrderNumber ?? '',
       additionalHazardReference: permit.draft.additionalHazardReference ?? '',
       plantArea: permit.draft.plantArea ?? '',
-      clsrApplicable: permit.draft.clsrApplicable ?? false,
       simopsDeclaration: permit.draft.simopsDeclaration ?? '',
-      isolationPrecautionCodes: (permit.draft.isolationPrecautionCodes ?? []).join(', '),
       jsaDocumentNumber: permit.draft.jsaDocumentNumber ?? '',
       jsaRevision: permit.draft.jsaRevision ?? '',
       jsaDate: permit.draft.jsaDate?.slice(0, 10) ?? '',
@@ -413,8 +455,9 @@ export class PermitDetail {
       workOrderNumber: value.workOrderNumber.trim() || null,
       additionalHazardReference: value.additionalHazardReference.trim() || null,
       plantArea: value.plantArea.trim() || null,
+      clsrApplicable: false,
       simopsDeclaration: value.simopsDeclaration || null,
-      isolationPrecautionCodes: this.split(value.isolationPrecautionCodes),
+      isolationPrecautionCodes: [],
       jsaDocumentNumber: value.jsaDocumentNumber || null,
       jsaRevision: value.jsaRevision || null,
       jsaDate: value.jsaDate ? new Date(`${value.jsaDate}T00:00:00`).toISOString() : null,
@@ -578,6 +621,72 @@ export class PermitDetail {
     this.hseSafetyEquipmentCodes.markAsTouched();
   }
 
+  protected operationalConditionParents(): PermitOperationalConditionOption[] {
+    return this.operationalConditionOptions().filter((option) => !option.parentCode);
+  }
+
+  protected operationalConditionChildren(parentCode: string): PermitOperationalConditionOption[] {
+    return this.operationalConditionOptions().filter((option) => option.parentCode === parentCode);
+  }
+
+  protected isOperationalConditionSelected(code: string): boolean {
+    return this.areaOperationForm.controls.conditionCodes.value.includes(code);
+  }
+
+  protected toggleOperationalCondition(
+    option: PermitOperationalConditionOption,
+    event: Event,
+  ): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    const control = this.areaOperationForm.controls.conditionCodes;
+    let next = new Set(control.value);
+    if (checked) {
+      next.add(option.code);
+      if (option.parentCode) next.add(option.parentCode);
+    } else {
+      next.delete(option.code);
+      if (!option.parentCode) {
+        for (const child of this.operationalConditionChildren(option.code)) {
+          next.delete(child.code);
+        }
+      }
+      if (option.code === 'OPS_OTHER') {
+        this.areaOperationForm.controls.otherConditionDetail.setValue('');
+      }
+    }
+    control.setValue([...next]);
+    control.markAsTouched();
+    this.syncOperationalConditionDetailValidation();
+  }
+
+  protected operationalSelectionValid(): boolean {
+    const selected = new Set(this.areaOperationForm.controls.conditionCodes.value);
+    const hasChild = (parent: string) =>
+      this.operationalConditionChildren(parent).some((child) => selected.has(child.code));
+    if (selected.has('OPS_ISOLATION') && !hasChild('OPS_ISOLATION')) return false;
+    if (selected.has('OPS_FLUSHING') && !hasChild('OPS_FLUSHING')) return false;
+    if (
+      selected.has('OPS_OTHER') &&
+      !this.areaOperationForm.controls.otherConditionDetail.value.trim()
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  protected operationalConditionLabel(code: string): string {
+    return this.operationalConditionOptions().find((option) => option.code === code)?.label ?? code;
+  }
+
+  private syncOperationalConditionDetailValidation(): void {
+    const detail = this.areaOperationForm.controls.otherConditionDetail;
+    const selected = this.areaOperationForm.controls.conditionCodes.value.includes('OPS_OTHER');
+    detail.setValidators(
+      selected ? [Validators.required, Validators.maxLength(200)] : [Validators.maxLength(200)],
+    );
+    detail.updateValueAndValidity({ emitEvent: false });
+  }
+
   protected applyAttachmentPermitChange(change: PermitAttachmentPermitChange): void {
     this.permit.update((permit) =>
       permit ? { ...permit, eTag: change.eTag, version: change.version } : permit,
@@ -589,6 +698,22 @@ export class PermitDetail {
     return this.eligibleSignedFieldCopies().filter(
       (attachment) => attachment.printPackageId === printPackageId,
     );
+  }
+
+  protected closureFieldCopiesForPackage(printPackageId: string): PermitAttachment[] {
+    const currentEvidence = new Set(
+      this.canResubmitClosure()
+        ? (this.permit()?.workflow.closure.signedFieldCopyAttachmentIds ?? [])
+        : [],
+    );
+    return this.fieldCopiesForPackage(printPackageId).filter(
+      (attachment) => !currentEvidence.has(attachment.id),
+    );
+  }
+
+  protected printPackageLabel(printPackageId: string): string {
+    const item = this.readyPrintPackages().find((option) => option.id === printPackageId);
+    return item ? `Versi ${item.permitVersion}` : 'Paket cetak penutupan saat ini';
   }
 
   protected openRenewalForm(): void {
@@ -659,11 +784,13 @@ export class PermitDetail {
   }
 
   protected openClosureForm(): void {
-    if (!this.canRequestClosure()) return;
+    const permit = this.permit();
+    if (!permit || (!this.canRequestClosure() && !this.canResubmitClosure())) return;
+    const resubmitting = this.canResubmitClosure();
     this.closureForm.reset({
-      printPackageId: '',
+      printPackageId: resubmitting ? (permit.workflow.closure.printPackageId ?? '') : '',
       signedFieldCopyAttachmentId: '',
-      completionStatement: '',
+      completionStatement: resubmitting ? (permit.workflow.closure.completionStatement ?? '') : '',
       allPagesReviewed: false,
       readableAndCompleteAcknowledged: false,
     });
@@ -688,35 +815,39 @@ export class PermitDetail {
       return;
     }
     const value = this.closureForm.getRawValue();
+    const resubmitting = this.canResubmitClosure();
     this.saving.set(true);
     this.success.set('');
     this.closureError.set('');
     this.closureConflict.set(false);
-    this.api
-      .requestClosure(permit.id, permit.eTag, {
-        printPackageId: value.printPackageId,
-        signedFieldCopyAttachmentIds: [value.signedFieldCopyAttachmentId],
-        completionStatement: value.completionStatement,
-        allPagesReviewed: value.allPagesReviewed,
-        readableAndCompleteAcknowledged: value.readableAndCompleteAcknowledged,
-      })
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (updated) => {
-          this.permit.set(updated);
-          this.refreshTasks();
-          this.showingClosureForm.set(false);
-          this.saving.set(false);
-          this.success.set(
-            'Penyelesaian pekerjaan diajukan. Pemilik Wilayah akan memverifikasi hardcopy dan handback.',
-          );
-        },
-        error: (response) => {
-          this.saving.set(false);
-          this.closureConflict.set(response.status === 409);
-          this.closureError.set(response?.error?.detail ?? 'Pengajuan penutupan gagal diproses.');
-        },
-      });
+    const request = {
+      printPackageId: value.printPackageId,
+      signedFieldCopyAttachmentIds: [value.signedFieldCopyAttachmentId],
+      completionStatement: value.completionStatement,
+      allPagesReviewed: value.allPagesReviewed,
+      readableAndCompleteAcknowledged: value.readableAndCompleteAcknowledged,
+    };
+    const command = resubmitting
+      ? this.api.resubmitClosure(permit.id, permit.eTag, request)
+      : this.api.requestClosure(permit.id, permit.eTag, request);
+    command.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (updated) => {
+        this.permit.set(updated);
+        this.refreshTasks();
+        this.showingClosureForm.set(false);
+        this.saving.set(false);
+        this.success.set(
+          resubmitting
+            ? 'Hardcopy terbaru diajukan ulang. Pemilik Wilayah dapat melanjutkan verifikasi penutupan.'
+            : 'Penyelesaian pekerjaan diajukan. Pemilik Wilayah akan memverifikasi hardcopy dan handback.',
+        );
+      },
+      error: (response) => {
+        this.saving.set(false);
+        this.closureConflict.set(response.status === 409);
+        this.closureError.set(response?.error?.detail ?? 'Pengajuan penutupan gagal diproses.');
+      },
+    });
   }
 
   protected submitForValidation(): void {
@@ -757,6 +888,34 @@ export class PermitDetail {
         safetyEquipmentCodes: this.hseSafetyEquipmentCodes.getRawValue(),
       }),
       'Validasi PIC HSE tersimpan. APD/perlengkapan safety akan dicentang pada Bagian 5 paket cetak.',
+    );
+  }
+
+  protected reviewAreaOperations(): void {
+    const task = this.currentTask();
+    const permit = this.permit();
+    this.syncOperationalConditionDetailValidation();
+    if (
+      !task ||
+      !permit ||
+      this.decisionStatement.invalid ||
+      this.areaOperationForm.invalid ||
+      !this.operationalSelectionValid()
+    ) {
+      this.decisionStatement.markAsTouched();
+      this.areaOperationForm.markAllAsTouched();
+      return;
+    }
+
+    const review = this.areaOperationForm.getRawValue();
+    this.runCommand(
+      this.api.reviewAreaOperations(task.id, permit.eTag, {
+        statement: this.decisionStatement.getRawValue(),
+        conditionCodes: review.conditionCodes,
+        otherConditionDetail: review.otherConditionDetail.trim() || null,
+        conditionsReviewed: review.conditionsReviewed,
+      }),
+      'Verifikasi Senior Officer tersimpan. PTW diteruskan kepada Manager Pemilik Wilayah untuk approval final.',
     );
   }
 
@@ -873,6 +1032,25 @@ export class PermitDetail {
   }
 
   protected requestClosureEvidence(): void {
+    const task = this.currentTask();
+    const permit = this.permit();
+    const verification = this.closureDecisionForm.getRawValue();
+    if (verification.completionOutcome === 'INCOMPLETE') {
+      const status = verification.incompleteWorkStatus.trim();
+      if (!task || !permit || this.closureDecisionForm.controls.officerName.invalid || !status) {
+        this.closureDecisionForm.controls.officerName.markAsTouched();
+        this.closureDecisionForm.controls.incompleteWorkStatus.markAsTouched();
+        return;
+      }
+
+      const reason = `Pekerjaan belum selesai - Officer ${verification.officerName.trim()}: ${status}`;
+      this.runCommand(
+        this.api.requestClosureEvidence(task.id, permit.eTag, reason),
+        'Tindak lanjut pekerjaan dikirim kepada Sponsor. PTW belum ditutup dan hak kerja tidak dipulihkan.',
+      );
+      return;
+    }
+
     this.runTaskDecision(
       (task, permit, reason) => this.api.requestClosureEvidence(task.id, permit.eTag, reason),
       'Sponsor diminta mengganti evidence hardcopy sebelum penutupan.',
@@ -881,20 +1059,47 @@ export class PermitDetail {
 
   protected closePermit(): void {
     const confirmations = this.closureDecisionForm.getRawValue();
-    if (this.closureDecisionForm.invalid) {
+    if (!this.closureReadyToClose() || this.decisionStatement.invalid) {
       this.closureDecisionForm.markAllAsTouched();
+      this.decisionStatement.markAsTouched();
       return;
     }
     this.runTaskDecision(
       (task, permit, statement) =>
         this.api.close(task.id, permit.eTag, {
           statement,
-          completionConfirmed: confirmations.completionConfirmed,
-          handbackConfirmed: confirmations.handbackConfirmed,
+          officerName: confirmations.officerName.trim(),
+          workAreaInspectedAndClean: confirmations.workAreaInspectedAndClean,
+          workCompleted: confirmations.completionOutcome === 'COMPLETED',
+          managerAgreesWorkCompleted: confirmations.managerAgreesWorkCompleted,
+          inhibitedSystemsRestored: confirmations.inhibitedSystemsRestored,
+          areaHandedBackAndSafeguardsRestored: confirmations.areaHandedBackAndSafeguardsRestored,
           evidenceReadable: confirmations.evidenceReadable,
         }),
-      'PTW ditutup setelah completion, handback, dan hardcopy terverifikasi.',
+      'PTW ditutup setelah seluruh checklist Bagian 10 dan hardcopy terverifikasi.',
     );
+  }
+
+  protected closureReadyToClose(): boolean {
+    const verification = this.closureDecisionForm.getRawValue();
+    return (
+      verification.completionOutcome === 'COMPLETED' &&
+      verification.workAreaInspectedAndClean &&
+      !!verification.officerName.trim() &&
+      verification.managerAgreesWorkCompleted &&
+      verification.inhibitedSystemsRestored &&
+      verification.areaHandedBackAndSafeguardsRestored &&
+      verification.evidenceReadable
+    );
+  }
+
+  protected closureFollowUpReady(): boolean {
+    const verification = this.closureDecisionForm.getRawValue();
+    if (verification.completionOutcome === 'INCOMPLETE') {
+      return !!verification.officerName.trim() && !!verification.incompleteWorkStatus.trim();
+    }
+
+    return this.decisionStatement.valid;
   }
 
   private runTaskDecision(
@@ -933,6 +1138,12 @@ export class PermitDetail {
         this.saving.set(false);
         this.success.set(message);
         this.decisionStatement.reset();
+        this.areaOperationForm.reset({
+          conditionCodes: updated.workflow.areaOperations.conditionCodes ?? [],
+          otherConditionDetail: updated.workflow.areaOperations.otherConditionDetail ?? '',
+          conditionsReviewed: updated.workflow.areaOperations.completed,
+        });
+        this.syncOperationalConditionDetailValidation();
         this.renewalDecisionForm.reset();
         this.closureDecisionForm.reset();
       },
@@ -956,6 +1167,12 @@ export class PermitDetail {
         next: (permit) => {
           this.permit.set(permit);
           this.hseSafetyEquipmentCodes.setValue(permit.workflow.hse.safetyEquipmentCodes ?? []);
+          this.areaOperationForm.reset({
+            conditionCodes: permit.workflow.areaOperations.conditionCodes ?? [],
+            otherConditionDetail: permit.workflow.areaOperations.otherConditionDetail ?? '',
+            conditionsReviewed: permit.workflow.areaOperations.completed,
+          });
+          this.syncOperationalConditionDetailValidation();
           this.refreshTasks();
           this.loadSignedFieldCopies();
           this.loading.set(false);
@@ -1080,6 +1297,25 @@ export class PermitDetail {
       });
   }
 
+  private loadOperationalConditions(): void {
+    this.api
+      .listOperationalConditions()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (options) => {
+          this.operationalConditionOptions.set(options);
+          this.loadingOperationalConditions.set(false);
+        },
+        error: (response) => {
+          this.loadingOperationalConditions.set(false);
+          this.operationalConditionError.set(
+            response?.error?.detail ??
+              'Daftar kondisi operasi Bagian 7 gagal dimuat. Coba muat ulang halaman.',
+          );
+        },
+      });
+  }
+
   private loadSupportingDocuments(): void {
     this.api
       .listSupportingDocuments()
@@ -1117,13 +1353,6 @@ export class PermitDetail {
           );
         },
       });
-  }
-
-  private split(value: string): string[] {
-    return value
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
   }
 
   private reconcileWorkTypeSelection(): void {

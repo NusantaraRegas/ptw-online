@@ -25,6 +25,7 @@ public sealed class Permit
     public Guid? RenewalPermitId { get; private set; }
     public string? SuspensionReason { get; private set; }
     public PermitValidationEvidence? HseValidation { get; private set; }
+    public AreaOperationsReviewEvidence? AreaOperationsReview { get; private set; }
     public PermitApprovalEvidence? Approval { get; private set; }
     public PermitSuspensionEvidence? Suspension { get; private set; }
     public PermitClosureEvidence? ClosureRequest { get; private set; }
@@ -74,7 +75,8 @@ public sealed class Permit
         PermitClosureDecisionEvidence? closureDecision = null,
         PermitRenewalRequestEvidence? renewalRequest = null,
         Guid? renewedFromPermitId = null,
-        Guid? renewalPermitId = null) =>
+        Guid? renewalPermitId = null,
+        AreaOperationsReviewEvidence? areaOperationsReview = null) =>
         new(id, NormalizeAndValidate(draft, allowLegacyIncompleteDraft: true), createdAt, draftIsNormalized: true)
         {
             PermitNumber = permitNumber,
@@ -83,6 +85,7 @@ public sealed class Permit
             UpdatedAt = updatedAt.ToUniversalTime(),
             SuspensionReason = suspensionReason,
             HseValidation = hseValidation,
+            AreaOperationsReview = areaOperationsReview,
             Approval = approval,
             Suspension = suspension,
             ClosureRequest = closureRequest,
@@ -294,12 +297,33 @@ public sealed class Permit
 
     public void AddSignedFieldCopy(Guid attachmentId, Guid printPackageId, DateTimeOffset now)
     {
-        EnsureStatus(PermitStatus.Issued, PermitStatus.Suspended, PermitStatus.Expired);
+        EnsureStatus(
+            PermitStatus.Issued,
+            PermitStatus.Suspended,
+            PermitStatus.Expired,
+            PermitStatus.ClosureRequested);
         if (attachmentId == Guid.Empty || printPackageId == Guid.Empty)
         {
             throw new DomainRuleViolationException(
                 "permit.closure.attachment_reference_required",
                 "Attachment dan PrintPackage wajib tersedia untuk signed field copy.");
+        }
+
+        if (Status == PermitStatus.ClosureRequested)
+        {
+            if (ClosureRequest is null || string.IsNullOrWhiteSpace(ClosureRequest.ReplacementReason))
+            {
+                throw new DomainRuleViolationException(
+                    "permit.closure.evidence_replacement_not_requested",
+                    "Salinan lapangan baru hanya dapat diunggah setelah Pemilik Wilayah meminta tindak lanjut.");
+            }
+
+            if (ClosureRequest.PrintPackageId != printPackageId)
+            {
+                throw new DomainRuleViolationException(
+                    "permit.closure.print_package_changed",
+                    "Salinan lapangan pengganti harus menggunakan paket cetak yang sama dengan permintaan penutupan.");
+            }
         }
 
         if (RenewalRequest?.Status == PermitRenewalReviewStatus.Pending)
@@ -418,6 +442,13 @@ public sealed class Permit
                 "Validasi HSE wajib selesai sebelum approval penerbitan.");
         }
 
+        if (AreaOperationsReview is null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.area_operations.review_required",
+                "Verifikasi kondisi operasi Bagian 7 oleh Senior Officer wajib selesai sebelum penerbitan.");
+        }
+
         if (HseValidation.SafetyEquipmentCodes is not { Count: > 0 })
         {
             throw new DomainRuleViolationException(
@@ -428,11 +459,12 @@ public sealed class Permit
         PermitSafetyEquipmentCatalog.NormalizeAndValidate(Draft.PermitClass, HseValidation.SafetyEquipmentCodes);
 
         if (string.Equals(Draft.SponsorId, approval.ActorId, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(HseValidation.ActorId, approval.ActorId, StringComparison.OrdinalIgnoreCase))
+            || string.Equals(HseValidation.ActorId, approval.ActorId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(AreaOperationsReview.ActorId, approval.ActorId, StringComparison.OrdinalIgnoreCase))
         {
             throw new DomainRuleViolationException(
                 "permit.approval.separation_of_duty",
-                "Sponsor atau validator HSE tidak boleh menyetujui dan menerbitkan PTW yang sama.");
+                "Sponsor, validator HSE, atau Senior Officer reviewer tidak boleh menyetujui dan menerbitkan PTW yang sama.");
         }
 
         if (approval.AuthorizationId == Guid.Empty
@@ -458,6 +490,69 @@ public sealed class Permit
             Approval.AuthorizationId,
             Approval.ActingAssignmentId,
             Approval.Statement,
+            PermitVersion = Version
+        });
+    }
+
+    public void ReviewAreaOperations(AreaOperationsReviewEvidence review, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.AwaitingAreaApproval);
+        EnsureEvidence(review.ActorId, review.Statement);
+        if (HseValidation is null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.validation.incomplete",
+                "Validasi HSE wajib selesai sebelum verifikasi kondisi operasi Bagian 7.");
+        }
+
+        if (AreaOperationsReview is not null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.area_operations.already_reviewed",
+                "Kondisi operasi Bagian 7 sudah diverifikasi untuk versi PTW ini.");
+        }
+
+        if (string.Equals(Draft.SponsorId, review.ActorId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(HseValidation.ActorId, review.ActorId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleViolationException(
+                "permit.area_operations.separation_of_duty",
+                "Sponsor atau validator HSE tidak boleh menjadi Senior Officer reviewer pada PTW yang sama.");
+        }
+
+        if (review.AuthorizationId == Guid.Empty
+            || string.IsNullOrWhiteSpace(review.ActorName)
+            || string.IsNullOrWhiteSpace(review.ActorPosition))
+        {
+            throw new DomainRuleViolationException(
+                "permit.area_operations.authorization_evidence_required",
+                "Snapshot otorisasi Senior Officer wajib lengkap.");
+        }
+
+        var conditions = PermitOperationalConditionCatalog.NormalizeAndValidate(
+            review.ConditionCodes,
+            review.OtherConditionDetail);
+        AreaOperationsReview = review with
+        {
+            ActorId = review.ActorId.Trim(),
+            ActorName = review.ActorName.Trim(),
+            ActorPosition = review.ActorPosition.Trim(),
+            ConditionCodes = conditions,
+            OtherConditionDetail = string.IsNullOrWhiteSpace(review.OtherConditionDetail)
+                ? null
+                : review.OtherConditionDetail.Trim(),
+            Statement = review.Statement.Trim(),
+            ReviewedAt = now.ToUniversalTime()
+        };
+        Touch(now);
+        Raise("area_operations_review_completed", new
+        {
+            AreaOperationsReview.ActorId,
+            AreaOperationsReview.ActorPosition,
+            AreaOperationsReview.AuthorizationId,
+            AreaOperationsReview.ConditionCodes,
+            AreaOperationsReview.OtherConditionDetail,
+            AreaOperationsReview.Statement,
             PermitVersion = Version
         });
     }
@@ -561,6 +656,13 @@ public sealed class Permit
                 "Permintaan penutupan tidak tersedia.");
         }
 
+        if (!string.IsNullOrWhiteSpace(ClosureRequest.ReplacementReason))
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.evidence_replacement_pending",
+                "Tindak lanjut Sponsor masih menunggu pengajuan ulang.");
+        }
+
         ClosureRequest = ClosureRequest with
         {
             Revision = ClosureRequest.Revision + 1,
@@ -575,7 +677,83 @@ public sealed class Permit
         });
     }
 
-    public void Close(string actorId, string statement, DateTimeOffset now)
+    public void ResubmitClosure(
+        Guid printPackageId,
+        IReadOnlyList<Guid> attachmentIds,
+        string actorId,
+        string completionStatement,
+        DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.ClosureRequested);
+        EnsureEvidence(actorId, completionStatement);
+        if (!string.Equals(Draft.SponsorId, actorId.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.sponsor_mismatch",
+                "Hanya Sponsor PTW yang dapat mengajukan ulang penutupan.");
+        }
+
+        if (ClosureRequest is null || string.IsNullOrWhiteSpace(ClosureRequest.ReplacementReason))
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.evidence_replacement_not_requested",
+                "Pengajuan ulang hanya dapat dilakukan setelah Pemilik Wilayah meminta tindak lanjut.");
+        }
+
+        if (printPackageId != ClosureRequest.PrintPackageId)
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.print_package_changed",
+                "Pengajuan ulang harus menggunakan paket cetak yang sama dengan permintaan penutupan awal.");
+        }
+
+        if (attachmentIds.Count == 0 || attachmentIds.Any(x => x == Guid.Empty))
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.evidence_required",
+                "Hardcopy terbaru wajib dipilih sebelum mengajukan ulang penutupan.");
+        }
+
+        var replacementAttachmentIds = attachmentIds.Distinct().ToArray();
+        if (replacementAttachmentIds.Length == ClosureRequest.AttachmentIds.Count
+            && replacementAttachmentIds.ToHashSet().SetEquals(ClosureRequest.AttachmentIds))
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.evidence_not_replaced",
+                "Pilih salinan lapangan terbaru yang berbeda dari evidence sebelumnya.");
+        }
+
+        ClosureRequest = ClosureRequest with
+        {
+            AttachmentIds = replacementAttachmentIds,
+            RequestedBy = actorId.Trim(),
+            CompletionStatement = completionStatement.Trim(),
+            RequestedAt = now.ToUniversalTime(),
+            ReplacementReason = null
+        };
+        Touch(now);
+        Raise("closure_resubmitted", new
+        {
+            ClosureRequest.PrintPackageId,
+            ClosureRequest.AttachmentIds,
+            ClosureRequest.RequestedBy,
+            ClosureRequest.CompletionStatement,
+            ClosureRequest.Revision,
+            PermitVersion = Version
+        });
+    }
+
+    public void Close(
+        string actorId,
+        string statement,
+        string officerName,
+        bool workAreaInspectedAndClean,
+        bool workCompleted,
+        bool managerAgreesWorkCompleted,
+        bool inhibitedSystemsRestored,
+        bool areaHandedBackAndSafeguardsRestored,
+        bool evidenceReadable,
+        DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.ClosureRequested);
         EnsureEvidence(actorId, statement);
@@ -586,11 +764,61 @@ public sealed class Permit
                 "Bukti hardcopy final wajib tersedia sebelum PTW ditutup.");
         }
 
-        ClosureDecision = new PermitClosureDecisionEvidence(actorId.Trim(), statement.Trim(), now.ToUniversalTime());
+        if (!string.IsNullOrWhiteSpace(ClosureRequest.ReplacementReason))
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.evidence_replacement_pending",
+                "PTW belum dapat ditutup karena tindak lanjut Sponsor masih menunggu pengajuan ulang.");
+        }
+
+        if (string.IsNullOrWhiteSpace(officerName))
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.officer_required",
+                "Nama Officer yang melakukan inspeksi wajib dicatat.");
+        }
+
+        if (officerName.Trim().Length > 100)
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.officer_too_long",
+                "Nama Officer maksimum 100 karakter.");
+        }
+
+        if (!workAreaInspectedAndClean
+            || !workCompleted
+            || !managerAgreesWorkCompleted
+            || !inhibitedSystemsRestored
+            || !areaHandedBackAndSafeguardsRestored
+            || !evidenceReadable)
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.verification_incomplete",
+                "Seluruh inspeksi, persetujuan Pemilik Wilayah, handback, dan keterbacaan hardcopy wajib dikonfirmasi sebelum PTW ditutup.");
+        }
+
+        ClosureDecision = new PermitClosureDecisionEvidence(
+            actorId.Trim(),
+            statement.Trim(),
+            now.ToUniversalTime(),
+            officerName.Trim(),
+            workAreaInspectedAndClean,
+            workCompleted,
+            managerAgreesWorkCompleted,
+            inhibitedSystemsRestored,
+            areaHandedBackAndSafeguardsRestored,
+            evidenceReadable);
         MoveTo(PermitStatus.Closed, "permit_closed", now, new
         {
             ClosedBy = actorId.Trim(),
             Statement = statement.Trim(),
+            ClosureDecision.OfficerName,
+            ClosureDecision.WorkAreaInspectedAndClean,
+            ClosureDecision.WorkCompleted,
+            ClosureDecision.ManagerAgreesWorkCompleted,
+            ClosureDecision.InhibitedSystemsRestored,
+            ClosureDecision.AreaHandedBackAndSafeguardsRestored,
+            ClosureDecision.EvidenceReadable,
             ClosureRequest.PrintPackageId,
             ClosureRequest.AttachmentIds
         });
@@ -886,6 +1114,7 @@ public sealed class Permit
     private void ClearReviewEvidence()
     {
         HseValidation = null;
+        AreaOperationsReview = null;
         Approval = null;
         Draft = Draft with { SafetyEquipmentCodes = [] };
     }

@@ -12,7 +12,7 @@ describe('PermitValidationProgress', () => {
     fixture = TestBed.createComponent(PermitValidationProgress);
   });
 
-  it('presents the single completed HSE validation and atomic issuance decision', () => {
+  it('presents HSE, Senior Officer, and Manager as a three-stage workflow', () => {
     const workflow: PermitWorkflow = {
       hse: {
         code: 'HSE',
@@ -22,6 +22,17 @@ describe('PermitValidationProgress', () => {
         statement: 'Sesuai.',
         completedAt: '2026-09-02T00:00:00Z',
         safetyEquipmentCodes: ['SAFETY_FIRE_EXTINGUISHER'],
+      },
+      areaOperations: {
+        completed: true,
+        actorId: 'area.senior-officer.orf.demo',
+        actorName: 'Senior Officer ORF Demo',
+        actorPosition: 'Senior Officer Distribusi Gas dan Manajemen ORF',
+        authorizationId: 'senior-officer-authorization-id',
+        conditionCodes: ['OPS_DEPRESSURIZED'],
+        otherConditionDetail: null,
+        statement: 'Kondisi operasi telah diperiksa.',
+        reviewedAt: '2026-09-02T00:01:00Z',
       },
       approval: {
         completed: true,
@@ -64,7 +75,8 @@ describe('PermitValidationProgress', () => {
     fixture.detectChanges();
 
     const text = fixture.nativeElement.textContent.replace(/\s+/g, ' ').trim();
-    expect(text).toContain('1/1 selesai');
+    expect(text).toContain('3/3 selesai');
+    expect(text).toContain('Senior Officer ORF Demo');
     expect(text).not.toContain('Distribusi Gas & Pengelolaan ORF');
     expect(text).toContain('area.owner.orf.demo');
     expect(text).toContain('Diterbitkan');

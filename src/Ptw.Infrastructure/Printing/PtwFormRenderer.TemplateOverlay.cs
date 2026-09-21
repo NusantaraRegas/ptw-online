@@ -92,20 +92,13 @@ internal sealed partial class PtwFormRenderer
             layout.SafetySecondaryX,
             layout.ChecklistYs);
 
-        for (var index = 0; index < PrintTemplateCatalog.IsolationOptions.Length; index++)
-        {
-            if (IsSelected(draft.IsolationPrecautionCodes, PrintTemplateCatalog.IsolationOptions[index]))
-            {
-                DrawTick(canvas, layout.IsolationChecks[index]);
-            }
-        }
-
         OverlayText(canvas, layout.ValidFromDate, FormCanvas.Wib(draft.ValidFrom, "dd/MM/yy"), 3.8, align: TextAlign.Center);
         OverlayText(canvas, layout.ValidFromTime, FormCanvas.Wib(draft.ValidFrom, "HH:mm"), 3.8, align: TextAlign.Center);
         OverlayText(canvas, layout.ValidUntilDate, FormCanvas.Wib(draft.ValidUntil, "dd/MM/yy"), 3.8, align: TextAlign.Center);
         OverlayText(canvas, layout.ValidUntilTime, FormCanvas.Wib(draft.ValidUntil, "HH:mm"), 3.8, align: TextAlign.Center);
 
-        DrawApprovalEvidence(canvas, layout, snapshot.Approval);
+        DrawOperationalConditionEvidence(canvas, layout, snapshot.AreaOperationsReview);
+        DrawApprovalEvidence(canvas, layout, snapshot.AreaOperationsReview, snapshot.Approval);
 
         // The official COLD worksheet builds the Bagian 3/4 divider from adjacent PDF segments.
         // Chromium can round those segment endpoints differently at common zoom levels, leaving
@@ -114,6 +107,27 @@ internal sealed partial class PtwFormRenderer
         {
             canvas.Line(Pt(rule.Start.X), Pt(rule.Start.Y), Pt(rule.End.X), Pt(rule.End.Y));
         }
+
+        ReplaceTemplateLabel(
+            canvas,
+            layout.Section10OwnerLabel,
+            "(Diisi oleh Pemilik Wilayah)",
+            4.0,
+            3.2,
+            TextAlign.Center);
+        ReplaceTemplateLabel(
+            canvas,
+            layout.Section10OfficerLabel,
+            "Officer : ....................................",
+            3.8,
+            3.0);
+        ReplaceTemplateLabel(canvas, layout.Section10OfficerReference, " Officer.", 3.8, 3.0);
+        ReplaceTemplateLabel(
+            canvas,
+            layout.Section10ManagerLabel,
+            "Manager Pemilik Wilayah : ................",
+            3.8,
+            2.8);
 
         var reference = snapshotHash.Length >= 12 ? snapshotHash[..12] : snapshotHash;
         OverlayText(
@@ -185,44 +199,107 @@ internal sealed partial class PtwFormRenderer
         }
     }
 
-    private static void DrawApprovalEvidence(
+    private static void DrawOperationalConditionEvidence(
         FormCanvas canvas,
         TemplateOverlayLayout layout,
-        PermitApprovalEvidence? approval)
+        AreaOperationsReviewEvidence? review)
     {
-        if (approval is null)
+        if (review is null)
         {
             return;
         }
 
-        var row = -1;
-        for (var index = 0; index < PrintTemplateCatalog.OperationsAuthorityPositions.Length; index++)
+        var selected = new HashSet<string>(review.ConditionCodes, StringComparer.OrdinalIgnoreCase);
+        string[] mainCodes =
+        [
+            PermitOperationalConditionCatalog.Isolation,
+            PermitOperationalConditionCatalog.Depressurized,
+            PermitOperationalConditionCatalog.Drained,
+            PermitOperationalConditionCatalog.Ventilated,
+            PermitOperationalConditionCatalog.Flushing,
+            PermitOperationalConditionCatalog.Other
+        ];
+        for (var index = 0; index < mainCodes.Length && index < layout.IsolationChecks.Count; index++)
         {
-            if (PositionMatches(approval.ActorPosition, PrintTemplateCatalog.OperationsAuthorityPositions[index]))
+            if (selected.Contains(mainCodes[index]))
             {
-                row = index;
-                break;
+                DrawTick(canvas, layout.IsolationChecks[index]);
             }
         }
 
-        if (row < 0 || row >= layout.ApprovalRows.Count)
+        string[] childCodes =
+        [
+            PermitOperationalConditionCatalog.IsolationClosedLockValves,
+            PermitOperationalConditionCatalog.IsolationBlind,
+            PermitOperationalConditionCatalog.IsolationDisconnect,
+            PermitOperationalConditionCatalog.FlushingN2Purge,
+            PermitOperationalConditionCatalog.FlushingWater
+        ];
+        for (var index = 0; index < childCodes.Length && index < layout.OperationalSubConditionChecks.Count; index++)
         {
-            return;
+            if (selected.Contains(childCodes[index]))
+            {
+                DrawParentheticalTick(canvas, layout.OperationalSubConditionChecks[index]);
+            }
         }
 
-        var target = layout.ApprovalRows[row];
-        OverlayText(canvas, target.Name, approval.ActorId, 3.6, align: TextAlign.Center);
-        OverlayText(canvas, target.Signature, "Disetujui elektronik", 3.4, align: TextAlign.Center);
+        OverlayFittedText(
+            canvas,
+            layout.OtherOperationalConditionDetail,
+            review.OtherConditionDetail,
+            3.6,
+            2.6);
+    }
+
+    private static void DrawApprovalEvidence(
+        FormCanvas canvas,
+        TemplateOverlayLayout layout,
+        AreaOperationsReviewEvidence? review,
+        PermitApprovalEvidence? approval)
+    {
+        if (review is not null && layout.ApprovalRows.Count > 0)
+        {
+            DrawApprovalRow(
+                canvas,
+                layout.ApprovalRows[0],
+                review.ActorName,
+                review.ReviewedAt,
+                "Diverifikasi elektronik");
+        }
+
+        if (approval is not null && layout.ApprovalRows.Count > 1)
+        {
+            DrawApprovalRow(
+                canvas,
+                layout.ApprovalRows[1],
+                approval.ActorName ?? approval.ActorId,
+                approval.ApprovedAt,
+                "Disetujui elektronik");
+        }
+    }
+
+    private static void DrawApprovalRow(
+        FormCanvas canvas,
+        ApprovalOverlayRow target,
+        string actorName,
+        DateTimeOffset decidedAt,
+        string signatureLabel)
+    {
+        OverlayText(canvas, target.Name, actorName, 3.6, align: TextAlign.Center);
+        OverlayText(canvas, target.Signature, signatureLabel, 3.2, align: TextAlign.Center);
         OverlayText(
             canvas,
             target.Date,
-            FormCanvas.Wib(approval.ApprovedAt, "dd/MM/yy HH:mm"),
+            FormCanvas.Wib(decidedAt, "dd/MM/yy HH:mm"),
             3.6,
             align: TextAlign.Center);
     }
 
     private static void DrawTick(FormCanvas canvas, PdfPoint point) =>
         canvas.CheckMark(Pt(point.X + 0.45), Pt(point.Y + 4.8), Pt(4.2));
+
+    private static void DrawParentheticalTick(FormCanvas canvas, PdfPoint point) =>
+        canvas.CheckMark(Pt(point.X + 1.9), Pt(point.Y + 2.1), Pt(3.2));
 
     private static void OverlayText(
         FormCanvas canvas,
@@ -294,6 +371,24 @@ internal sealed partial class PtwFormRenderer
         canvas.Text(Pt(rect.X), Pt(rect.Y), Pt(rect.Width), Pt(rect.Height), text, size);
     }
 
+    private static void ReplaceTemplateLabel(
+        FormCanvas canvas,
+        PdfRect rect,
+        string text,
+        double preferredSize,
+        double minimumSize,
+        TextAlign align = TextAlign.Left)
+    {
+        var size = preferredSize;
+        while (size > minimumSize && canvas.MeasureMm(text, size, bold: false) > Pt(rect.Width))
+        {
+            size -= 0.2;
+        }
+
+        canvas.Fill(Pt(rect.X), Pt(rect.Y), Pt(rect.Width), Pt(rect.Height), XColors.White);
+        canvas.Text(Pt(rect.X), Pt(rect.Y), Pt(rect.Width), Pt(rect.Height), text, size, align: align);
+    }
+
     private static double Pt(double points) => points * PointToMillimetre;
 }
 
@@ -331,12 +426,20 @@ internal sealed record TemplateOverlayLayout(
     double SafetySecondaryX,
     IReadOnlyList<double> ChecklistYs,
     IReadOnlyList<PdfPoint> IsolationChecks,
+    IReadOnlyList<PdfPoint> OperationalSubConditionChecks,
+    PdfRect OtherOperationalConditionDetail,
     PdfRect ValidFromDate,
     PdfRect ValidFromTime,
     PdfRect ValidUntilDate,
     PdfRect ValidUntilTime,
     IReadOnlyList<ApprovalOverlayRow> ApprovalRows,
+    PdfRect Section10OwnerLabel,
+    PdfRect Section10OfficerLabel,
+    PdfRect Section10OfficerReference,
+    PdfRect Section10ManagerLabel,
     PdfRect ReconciliationReference);
+
+internal sealed record TemplatePageSplitLayout(PdfRect PageOne, PdfRect PageTwo);
 
 internal static class TemplateOverlayCatalog
 {
@@ -374,6 +477,11 @@ internal static class TemplateOverlayCatalog
             new(383.4, 516.5), new(383.4, 528.2), new(504.4, 528.2),
             new(383.4, 539.8), new(504.4, 539.8), new(383.4, 551.3)
         ],
+        [
+            new(419.7, 522.3), new(478.5, 522.3), new(511.6, 522.3),
+            new(548.9, 545.4), new(581.7, 545.4)
+        ],
+        new(448, 553, 318, 10),
         new(480, 575, 55, 7),
         new(571, 575, 76, 7),
         new(480, 582, 55, 7),
@@ -382,6 +490,10 @@ internal static class TemplateOverlayCatalog
             new(new(373, 628, 78, 14), new(543, 628, 89, 14), new(634, 628, 138, 14)),
             new(new(373, 643, 78, 14), new(543, 643, 89, 14), new(634, 643, 138, 14))
         ],
+        new(954, 479, 220, 8),
+        new(978.5, 541.5, 94, 8),
+        new(1076.5, 550.8, 33, 8),
+        new(978.5, 630.5, 94, 8),
         new(782, 672, 393, 8));
 
     private static readonly TemplateOverlayLayout ColdWork = new(
@@ -413,6 +525,11 @@ internal static class TemplateOverlayCatalog
             new(381.5, 509.8), new(381.5, 521.5), new(515.8, 521.5),
             new(381.5, 533.0), new(515.8, 533.0), new(381.5, 544.6)
         ],
+        [
+            new(422.1, 515.6), new(480.9, 515.6), new(514.0, 515.6),
+            new(555.9, 538.6), new(588.6, 538.6)
+        ],
+        new(450, 546, 290, 10),
         new(490, 573, 61, 7),
         new(570, 573, 70, 7),
         new(490, 584, 61, 7),
@@ -421,6 +538,10 @@ internal static class TemplateOverlayCatalog
             new(new(367, 630, 84, 14), new(544, 630, 88, 14), new(634, 630, 110, 14)),
             new(new(367, 645, 84, 14), new(544, 645, 88, 14), new(634, 645, 110, 14))
         ],
+        new(944, 478.5, 210, 8),
+        new(961, 534.8, 94, 8),
+        new(1059, 544.2, 33, 8),
+        new(961, 648.3, 94, 8),
         new(764, 674, 394, 8));
 
     private static readonly TemplateOverlayLayout ConfinedSpaceEntry = new(
@@ -452,6 +573,11 @@ internal static class TemplateOverlayCatalog
             new(340.6, 515.5), new(340.6, 526.3), new(484.7, 526.3),
             new(340.6, 537.3), new(484.7, 537.3), new(340.6, 548.1)
         ],
+        [
+            new(375.5, 520.9), new(428.7, 520.9), new(458.6, 520.9),
+            new(522.5, 542.6), new(552.4, 542.6)
+        ],
+        new(405, 549, 348, 10),
         new(452, 570, 69, 7),
         new(543, 570, 73, 7),
         new(452, 581, 69, 7),
@@ -460,7 +586,26 @@ internal static class TemplateOverlayCatalog
             new(new(329, 634, 86, 14), new(527, 634, 88, 14), new(618, 634, 141, 14)),
             new(new(329, 648, 86, 14), new(527, 648, 88, 14), new(618, 648, 141, 14))
         ],
+        new(937, 467.5, 205, 8),
+        new(959.2, 527.9, 89, 8),
+        new(1047, 536.8, 30, 8),
+        new(959.2, 625.9, 89, 8),
         new(774, 674, 371, 8));
+
+    // Tight vector crops measured from the controlled source pages. Page one ends after Bagian 7;
+    // page two starts at the left rule of Bagian 8. A small two-point padding keeps the outer rules
+    // intact without carrying fragments from the neighbouring half of the original A3 sheet.
+    private static readonly TemplatePageSplitLayout HotWorkPages = new(
+        new(70, 172, 707, 497),
+        new(780, 172, 397, 512));
+
+    private static readonly TemplatePageSplitLayout ColdWorkPages = new(
+        new(54, 170, 705, 501),
+        new(762, 170, 398, 514));
+
+    private static readonly TemplatePageSplitLayout ConfinedSpaceEntryPages = new(
+        new(25, 171, 735, 502),
+        new(774, 171, 373, 513));
 
     internal static TemplateOverlayLayout Resolve(PermitClass permitClass) => permitClass switch
     {
@@ -468,6 +613,14 @@ internal static class TemplateOverlayCatalog
         PermitClass.ColdWork => ColdWork,
         PermitClass.ConfinedSpaceEntry => ConfinedSpaceEntry,
         _ => throw new ArgumentOutOfRangeException(nameof(permitClass), permitClass, "Template overlay PTW tidak tersedia.")
+    };
+
+    internal static TemplatePageSplitLayout PageSplit(PermitClass permitClass) => permitClass switch
+    {
+        PermitClass.HotWork => HotWorkPages,
+        PermitClass.ColdWork => ColdWorkPages,
+        PermitClass.ConfinedSpaceEntry => ConfinedSpaceEntryPages,
+        _ => throw new ArgumentOutOfRangeException(nameof(permitClass), permitClass, "Pemisahan halaman PTW tidak tersedia.")
     };
 
     internal static IReadOnlyList<PdfLine> StructuralRepairRules(PermitClass permitClass) => permitClass switch

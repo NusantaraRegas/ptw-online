@@ -522,36 +522,6 @@ h3 {
   }
 }
 
-/* Keep the CLSR control and its label together instead of inheriting full-width text-input styles. */
-form label.clsr-option {
-  min-height: 42px;
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  align-self: end;
-  gap: 9px;
-  border: 1px solid #d7e0e2;
-  border-radius: 8px;
-  color: #38535c;
-  background: #fbfcfc;
-  cursor: pointer;
-}
-form label.clsr-option:has(input:checked) {
-  border-color: #91bdca;
-  background: #eef8fa;
-}
-form label.clsr-option > input[type='checkbox'] {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  padding: 0;
-  flex: 0 0 auto;
-  accent-color: var(--nr-blue);
-}
-form label.clsr-option > span {
-  line-height: 1.35;
-}
-
 /* Bagian 4 document readiness is shared by the attachment panel without consuming its style budget. */
 .document-readiness {
   margin-top: 18px;
@@ -658,5 +628,442 @@ form label.clsr-option > span {
   }
   .document-readiness-list li {
     min-height: 56px;
+  }
+}
+
+/* Area-owner closure decision: global to keep the feature stylesheet within Angular's budget. */
+app-permit-detail .closure-workflow-action {
+  gap: 16px;
+  border-color: #cbdfe4;
+  box-shadow: 0 16px 38px rgb(22 73 89 / 10%);
+}
+app-permit-detail .closure-follow-up-card {
+  border-color: #e3bc82;
+  background: linear-gradient(180deg, #fffdf8 0%, #ffffff 100%);
+}
+app-permit-detail .closure-follow-up-card h2,
+app-permit-detail .closure-owner-waiting h2 {
+  margin: 2px 0 0;
+}
+app-permit-detail .closure-follow-up-card > p,
+app-permit-detail .closure-owner-waiting > p {
+  margin: 0;
+  color: #4d656c;
+  font-size: 11px;
+  line-height: 1.5;
+}
+app-permit-detail .closure-follow-up-safety {
+  padding: 10px 11px;
+  border: 1px solid #efd6ad;
+  border-radius: 9px;
+  color: #714c17;
+  background: #fff8ea;
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+app-permit-detail .closure-owner-waiting {
+  border-color: #dbe6e9;
+  background: #f9fbfc;
+}
+app-permit-detail .closure-owner-waiting > small {
+  color: #71868d;
+  font-size: 9px;
+  line-height: 1.45;
+}
+app-permit-detail .closure-resubmission-package {
+  padding: 11px 12px;
+  display: grid;
+  gap: 3px;
+  border: 1px solid #d9e6e9;
+  border-radius: 10px;
+  background: #f7fafb;
+}
+app-permit-detail .closure-resubmission-package > span {
+  color: #66818a;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+app-permit-detail .closure-resubmission-package > strong {
+  color: #294650;
+  font-size: 11px;
+}
+app-permit-detail .closure-resubmission-package > small {
+  color: #748990;
+  font-size: 8px;
+  line-height: 1.4;
+}
+app-permit-detail .workflow-action-header {
+  padding-bottom: 15px;
+  border-bottom: 1px solid #e4edef;
+}
+app-permit-detail .workflow-action-kicker,
+app-permit-detail .decision-context-label {
+  color: #66858e;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+app-permit-detail .workflow-action .workflow-action-header h2 {
+  margin: 5px 0 7px;
+  color: var(--nr-ink);
+  font-size: 18px;
+  line-height: 1.3;
+}
+app-permit-detail .workflow-action .workflow-action-header p {
+  margin: 0;
+  color: #607980;
+  font-size: 11px;
+  line-height: 1.55;
+}
+app-permit-detail .decision-context {
+  padding: 13px 14px;
+  display: grid;
+  gap: 7px;
+  border: 1px solid #dce8eb;
+  border-radius: 11px;
+  background: #f8fbfc;
+}
+app-permit-detail .decision-context > strong {
+  color: #294650;
+  font-size: 12px;
+}
+app-permit-detail .decision-context > span:not(.decision-context-label) {
+  color: #587078;
+  font-size: 11px;
+  line-height: 1.5;
+}
+app-permit-detail .workflow-action .closure-context p {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 3px solid #8cc7d4;
+  color: #294650;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+app-permit-detail .confirmation-list {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  border: 0;
+}
+app-permit-detail .confirmation-list legend {
+  padding: 0;
+  color: #294650;
+  font-size: 12px;
+  font-weight: 800;
+}
+app-permit-detail .closure-verification-form {
+  display: grid;
+  gap: 16px;
+}
+app-permit-detail .workflow-action .confirmation-help {
+  margin: -2px 0 2px;
+  color: #738990;
+  font-size: 10px;
+  line-height: 1.45;
+}
+app-permit-detail .closure-outcome {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+app-permit-detail .closure-outcome-option {
+  min-width: 0;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  border: 1px solid #dce7ea;
+  border-radius: 10px;
+  background: #fbfdfd;
+  cursor: pointer;
+}
+app-permit-detail .closure-outcome-option:has(input:checked) {
+  border-color: #8dbfc9;
+  background: #edf7f9;
+  box-shadow: 0 0 0 2px rgb(0 117 191 / 8%);
+}
+app-permit-detail .closure-outcome-option.incomplete:has(input:checked) {
+  border-color: #e4b176;
+  background: #fff8ed;
+  box-shadow: 0 0 0 2px rgb(192 113 25 / 8%);
+}
+app-permit-detail .closure-outcome-option input {
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: var(--nr-blue);
+}
+app-permit-detail .closure-outcome-option > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+app-permit-detail .closure-outcome-option strong {
+  color: #294650;
+  font-size: 10px;
+  line-height: 1.35;
+}
+app-permit-detail .closure-outcome-option small {
+  color: #72878e;
+  font-size: 8px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+app-permit-detail .closure-incomplete-status,
+app-permit-detail .closure-officer-field {
+  padding: 11px;
+  border: 1px solid #dce7ea;
+  border-radius: 10px;
+  background: white;
+}
+app-permit-detail .closure-incomplete-status > span:first-child,
+app-permit-detail .closure-officer-field > span:first-child {
+  color: #38535c;
+  font-size: 10px;
+  font-weight: 800;
+}
+app-permit-detail .closure-incomplete-status textarea {
+  min-height: 82px;
+  line-height: 1.45;
+}
+app-permit-detail .closure-officer-field small {
+  color: #748a91;
+  font-size: 8px;
+  font-weight: 500;
+}
+app-permit-detail .owner-confirmations {
+  padding-top: 15px;
+  border-top: 1px solid #e4edef;
+}
+app-permit-detail .closure-manager-identity {
+  padding: 10px 11px;
+  display: grid;
+  gap: 3px;
+  border-radius: 9px;
+  background: #eef5f7;
+}
+app-permit-detail .closure-manager-identity span {
+  color: #66818a;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+app-permit-detail .closure-manager-identity strong {
+  color: #294650;
+  font-size: 10px;
+  line-height: 1.35;
+}
+app-permit-detail .closure-manager-identity small {
+  color: #748990;
+  font-size: 8px;
+}
+app-permit-detail .workflow-action .closure-check {
+  padding: 11px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  border: 1px solid #dce7ea;
+  border-radius: 10px;
+  background: #fbfdfd;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+app-permit-detail .workflow-action .closure-check:has(input:checked) {
+  border-color: #9fcfc0;
+  background: #eff8f4;
+}
+app-permit-detail .workflow-action .closure-check input {
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  accent-color: #17805d;
+}
+app-permit-detail .closure-check > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+app-permit-detail .closure-check strong {
+  color: #294650;
+  font-size: 11px;
+  line-height: 1.35;
+}
+app-permit-detail .closure-check small {
+  color: #6f858c;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+app-permit-detail .decision-statement > span:first-child {
+  color: #38535c;
+  font-size: 11px;
+  font-weight: 800;
+}
+app-permit-detail .decision-statement textarea {
+  min-height: 104px;
+  line-height: 1.5;
+}
+app-permit-detail .closure-secondary-action {
+  margin-top: 4px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e0e9eb;
+  border-radius: 11px;
+  background: #fafcfc;
+}
+app-permit-detail .closure-secondary-action > div {
+  display: grid;
+  gap: 3px;
+}
+app-permit-detail .closure-secondary-action strong {
+  color: #38535c;
+  font-size: 10px;
+}
+app-permit-detail .closure-secondary-action span {
+  color: #71878e;
+  font-size: 9px;
+  line-height: 1.4;
+}
+app-permit-detail .closure-secondary-action .secondary-button {
+  width: 100%;
+  justify-content: center;
+  background: white;
+}
+@media (max-width: 650px) {
+  app-permit-detail .closure-workflow-action {
+    padding: 18px;
+  }
+  app-permit-detail .workflow-action .workflow-action-header h2 {
+    font-size: 17px;
+  }
+  app-permit-detail .workflow-action .closure-check {
+    padding: 12px 10px;
+  }
+  app-permit-detail .closure-outcome {
+    grid-template-columns: 1fr;
+  }
+}
+app-permit-detail .area-operation-review {
+  display: grid;
+  gap: 12px;
+}
+app-permit-detail .operational-condition-selector {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+app-permit-detail .operational-condition-selector legend {
+  color: #294650;
+  font-size: 12px;
+  font-weight: 800;
+}
+app-permit-detail .operational-condition-selector > small {
+  display: block;
+  margin-top: 4px;
+  color: var(--nr-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+app-permit-detail .operational-condition-options {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+app-permit-detail .operational-condition-group {
+  padding: 11px;
+  border: 1px solid #d8e3e5;
+  border-radius: 10px;
+  background: #fbfcfc;
+}
+app-permit-detail .operational-condition-group.selected {
+  border-color: #9fd1c1;
+  background: #f1faf6;
+}
+app-permit-detail .operational-subconditions {
+  padding: 10px 0 0 23px;
+  display: grid;
+  gap: 8px;
+}
+app-permit-detail .operational-other-detail {
+  margin-top: 10px;
+}
+app-permit-detail .operational-review-confirmation {
+  padding: 12px;
+  border: 1px solid #bddbd1;
+  border-radius: 10px;
+  background: #f3faf7;
+}
+app-permit-detail .operational-review-confirmation span,
+app-permit-detail .operational-review-confirmation small {
+  display: block;
+}
+app-permit-detail .area-operation-summary {
+  padding: 13px;
+  border: 1px solid #c9ded7;
+  border-radius: 11px;
+  background: #f6fbf9;
+}
+app-permit-detail .area-operation-summary-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+app-permit-detail .area-operation-summary-heading span:first-child {
+  color: var(--nr-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+app-permit-detail .area-operation-summary-heading h3 {
+  margin: 4px 0 0;
+  color: #294650;
+  font-size: 12px;
+}
+app-permit-detail .operational-condition-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+app-permit-detail .operational-condition-summary span {
+  padding: 5px 7px;
+  border-radius: 999px;
+  color: #236751;
+  background: #e2f3eb;
+  font-size: 9px;
+  font-weight: 700;
+}
+app-permit-detail .area-operation-summary > small {
+  display: block;
+  margin-top: 10px;
+  color: var(--nr-muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+@media (max-width: 650px) {
+  app-permit-detail .operational-condition-options {
+    grid-template-columns: 1fr;
+  }
+  app-permit-detail .operational-condition-group {
+    padding: 13px;
+  }
+  app-permit-detail .operational-subconditions {
+    padding-left: 8px;
   }
 }

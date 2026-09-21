@@ -113,7 +113,7 @@ Frontend:
 Printing:
 
 - `PrintTemplateDescriptor` adalah transkripsi formulir terkontrol. Jangan merapikan teks, urutan item, atau kolomnya tanpa decision record yang disahkan.
-- `PermitHeaderClassificationCatalog`, `PermitWorkTypeCatalog`, `PermitSupportingDocumentCatalog`, dan `PermitSafetyEquipmentCatalog` di `Ptw.Domain` adalah transkripsi kotak klasifikasi header (HOT: `Api Terbuka`/`Percikan Api` multi-select; COLD: tepat satu `Low Risk`/`High Risk`; CSE tanpa kotak), Bagian 1, 4, dan 5 dengan koordinat template. Perlakukan sama seperti descriptor: tanpa decision record, jangan mengubah label, urutan, mode pemilihan, kewajiban item, atau kelas izin yang memuatnya.
+- `PermitHeaderClassificationCatalog`, `PermitWorkTypeCatalog`, `PermitSupportingDocumentCatalog`, `PermitSafetyEquipmentCatalog`, dan `PermitOperationalConditionCatalog` di `Ptw.Domain` adalah transkripsi kotak klasifikasi header (HOT: `Api Terbuka`/`Percikan Api` multi-select; COLD: tepat satu `Low Risk`/`High Risk`; CSE tanpa kotak), Bagian 1, 4, 5, dan 7 dengan koordinat template. Bagian 7 memakai enam kotak induk (`Isolasi` dan `Bilas` mewajibkan minimal satu rincian; `Lainnya` mewajibkan detail maksimum 200 karakter). Perlakukan sama seperti descriptor: tanpa decision record, jangan mengubah label, urutan, mode pemilihan, kewajiban item, atau kelas izin yang memuatnya.
 - `PermitMandatoryDocumentCatalog` (JSA, ID, BPJS TK, FTW, E-SIMI) **bukan** transkripsi formulir; ia adalah evidence pengajuan yang wajib berlampiran sebelum submit. Hanya JSA yang juga tercetak di Bagian 4 — jangan menambahkan empat dokumen lainnya ke checklist PDF.
 - `PtwFormRenderer.RendererVersion` harus dinaikkan bila output dokumen berubah.
 - Font dan logo di-embed sebagai `EmbeddedResource` agar render deterministik pada image runtime tanpa font sistem.
@@ -129,7 +129,7 @@ disamarkan sebagai selesai.
 - [ ] Perubahan tidak membuat `ISSUED`/**Diterbitkan** tampak sebagai izin otomatis memulai pekerjaan; peringatan hardcopy tetap ada.
 - [ ] Tidak ada status di luar sebelas status aktif (`DRAFT`, `UNDER_VALIDATION`, `REVISION_REQUIRED`, `AWAITING_AREA_APPROVAL`, `ISSUED`, `SUSPENDED`, `CLOSURE_REQUESTED`, `CLOSED`, `REJECTED`, `CANCELLED`, `EXPIRED`).
 - [ ] `CLOSED`, `REJECTED`, `CANCELLED`, `EXPIRED` tetap terminal; validity maksimum tujuh hari; renewal membuat permit dan nomor baru.
-- [ ] Renewal tidak mengubah status PTW asal dan tidak membuat permit saat request: Sponsor mengajukan signed field copy `CLEAN` yang cocok dengan exact PrintPackage/PermitVersion, task `AREA_RENEWAL_REVIEW` dibuat, dan draft penerus hanya lahir atomik saat Manager pemilik area menyetujui. Draft penerus tetap melewati submit, validasi HSE, dan approve-and-issue normal.
+- [ ] Renewal tidak mengubah status PTW asal dan tidak membuat permit saat request: Sponsor mengajukan signed field copy `CLEAN` yang cocok dengan exact PrintPackage/PermitVersion, task `AREA_RENEWAL_REVIEW` dibuat, dan draft penerus hanya lahir atomik saat Manager pemilik area menyetujui. Draft penerus tetap melewati submit, validasi HSE, review Bagian 7 Senior Officer, dan approve-and-issue normal.
 - [ ] Suspend tetap menghentikan hak kerja seketika; resolve hanya kembali ke `ISSUED`.
 - [ ] Tidak ada endpoint atau helper generik bergaya `setStatus`.
 - [ ] Tidak ada kebijakan OPN-001–012 yang dikarang: location authority, risk/approval matrix, checklist final, ambang/umur gas test, urutan review, contractor acknowledgement, kontrak SSO/E-SIMI produksi, retention, RPO/RTO, topologi HA. Tanpa decision record, jalur tersebut fail-closed. Klasifikasi header HOT/COLD hanya merepresentasikan checklist formulir (dan memetakan `RiskLevel` legacy pada COLD), bukan matriks routing risiko OPN-002.
@@ -160,6 +160,7 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 - [ ] Scope filter diterapkan pada query, termasuk pengecekan parent permit untuk resource turunan dan attachment. Menyembunyikan tombol di UI tidak dihitung.
 - [ ] Identitas actor dan Sponsor aktif berasal dari `/api/v1/me`, bukan profil demo yang di-hard-code ke payload domain.
 - [ ] Bagian 5 hanya dapat ditetapkan PIC HSE saat validasi; payload draft Sponsor yang membawa Bagian 5 ditolak, dan approval tanpa evidence Bagian 5 diarahkan ke revisi.
+- [ ] Bagian 7 hanya dapat ditetapkan Senior Officer pemilik wilayah pada task `AREA_OPERATION_REVIEW` setelah validasi HSE, dengan assignment yang terverifikasi server. Sponsor dan validator HSE tidak boleh menjadi reviewer; Manager yang menerbitkan harus berbeda dari Sponsor, validator HSE, dan reviewer; approve-and-issue tanpa evidence Bagian 7 ditolak. Field bebas CLSR dan isolation/precaution tidak lagi diterima dari Sponsor.
 - [ ] Bagian 4: JSA wajib, setiap dokumen terpilih memerlukan lampiran bertaut, dan metadata lampiran JSA harus cocok dengan draft sebelum submit. Validasi ini di server, bukan di UI.
 - [ ] Dokumen dasar JSA, ID, BPJS TK, FTW, dan E-SIMI (`PermitMandatoryDocumentCatalog`) masing-masing memiliki lampiran bertaut sebelum submit; JSA harus diunggah dengan kategori `JSA`.
 - [ ] Development identity header hanya aktif pada environment `Development`.
@@ -172,8 +173,8 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 
 ### Gate E — Paket cetak
 
-- [ ] Output tetap setia pada formulir terkontrol FM-001/002/003-B-002-NR-B220, satu lembar A3 landscape. Jangan mengganti dengan layout digital yang lebih rapi, template placeholder, atau menunda layout.
-- [ ] Sistem mengisi Bagian 1–5 dan Bagian 7; Bagian 6 dan Bagian 8–10 dicetak kosong dengan ruang tulis yang memadai.
+- [ ] Output tetap setia pada formulir terkontrol FM-001/002/003-B-002-NR-B220 sebagai dua halaman A3: halaman 1 landscape untuk Bagian 1–7 dan halaman 2 portrait yang dimulai pada Bagian 8. Jangan mengganti dengan layout digital yang lebih rapi, template placeholder, atau menunda layout.
+- [ ] Sistem mengisi Bagian 1–5 dan evidence Bagian 7 (checklist kondisi operasi Senior Officer serta baris persetujuan Senior Officer/Manager) dari snapshot immutable; Bagian 6 dan Bagian 8–10 dicetak kosong dengan ruang tulis yang memadai.
 - [ ] Perubahan output menaikkan `RendererVersion` dan disertai test regresi di `tests/Ptw.Printing.Tests`.
 - [ ] Kegagalan render tidak membatalkan keputusan penerbitan: `RETRYING` dengan backoff, lalu `FAILED`, dengan retry administrator yang idempotent.
 - [ ] Pratinjau draft selalu ber-watermark `DRAFT / TIDAK BERLAKU` dan tidak pernah disimpan; setiap unduhan dokumen resmi menghasilkan audit event.

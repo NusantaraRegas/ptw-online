@@ -54,7 +54,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         Assert.Equal("READY", snapshot.RenderStatus);
         var document = await db.GeneratedDocuments.AsNoTracking()
             .SingleAsync(x => x.PrintPackageSnapshotId == snapshot.Id);
-        Assert.Equal("ptw-form-renderer/2.4.0", document.RendererVersion);
+        Assert.Equal("ptw-form-renderer/3.2.0", document.RendererVersion);
         // Sensitive downloads are material audit events under BR-AUD-001.
         Assert.True(await db.AuditEvents.AsNoTracking().AnyAsync(
             x => x.PermitId == issued.Id && x.EventType == "print_package_downloaded"));
@@ -173,6 +173,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
     private async Task<PermitResponse> IssueAsync(string sponsorId, HttpClient sponsor)
     {
         using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
+        using var seniorOfficer = Client(Unique("senior-officer"), "AreaOwnerSeniorOfficer", "ORF");
         using var manager = Client(Unique("manager"), "AreaOwnerManager", "ORF");
 
         var draft = await CreateAsync(sponsor, sponsorId, "ORF");
@@ -196,11 +197,24 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         validateResponse.EnsureSuccessStatusCode();
         var validated = Required(await validateResponse.Content.ReadFromJsonAsync<PermitResponse>());
 
-        var approvalTask = await PendingTaskAsync(validated.Id, "AREA_APPROVE_AND_ISSUE");
+        var areaTask = await PendingTaskAsync(validated.Id, "AREA_OPERATION_REVIEW");
+        using var areaResponse = await seniorOfficer.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{areaTask.Id}/review-area-operations",
+            validated.ETag,
+            new ReviewAreaOperationsRequest(
+                "Kondisi operasi telah diperiksa.",
+                ["OPS_ISOLATION", "OPS_ISOLATION_CLOSED_LOCK_VALVES", "OPS_DEPRESSURIZED"],
+                null,
+                true)));
+        areaResponse.EnsureSuccessStatusCode();
+        var reviewed = Required(await areaResponse.Content.ReadFromJsonAsync<PermitResponse>());
+
+        var approvalTask = await PendingTaskAsync(reviewed.Id, "AREA_APPROVE_AND_ISSUE");
         using var issueResponse = await manager.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/tasks/{approvalTask.Id}/approve-and-issue",
-            validated.ETag,
+            reviewed.ETag,
             new ApproveAndIssuePermitRequest("Saya menyetujui dan menerbitkan PTW ini.", null)));
         issueResponse.EnsureSuccessStatusCode();
         return Required(await issueResponse.Content.ReadFromJsonAsync<PermitResponse>());

@@ -438,6 +438,7 @@ public sealed class OperationalPolicyApiTests(PtwApiFactory factory)
                 [PermitPolicyOperations.Submit] = $"{actionCode}.submit",
                 [PermitPolicyOperations.ValidateSubmission] = $"{actionCode}.validate-hse",
                 [PermitPolicyOperations.EscalateValidation] = $"{actionCode}.escalate-validation",
+                [PermitPolicyOperations.ReviewAreaOperations] = $"{actionCode}.review-area-operations",
                 [PermitPolicyOperations.ApproveAndIssue] = $"{actionCode}.approve-and-issue",
                 [PermitPolicyOperations.RequestRevision] = $"{actionCode}.request-revision",
                 [PermitPolicyOperations.Reject] = $"{actionCode}.reject",
@@ -445,6 +446,7 @@ public sealed class OperationalPolicyApiTests(PtwApiFactory factory)
                 [PermitPolicyOperations.ResolveSuspension] = $"{actionCode}.resolve-suspension",
                 [PermitPolicyOperations.RequestClosure] = $"{actionCode}.request-closure",
                 [PermitPolicyOperations.RequestClosureEvidenceReplacement] = $"{actionCode}.request-evidence",
+                [PermitPolicyOperations.ResubmitClosure] = $"{actionCode}.resubmit-closure",
                 [PermitPolicyOperations.Close] = $"{actionCode}.close",
                 [PermitPolicyOperations.Cancel] = $"{actionCode}.cancel",
                 [PermitPolicyOperations.Expire] = $"{actionCode}.expire"

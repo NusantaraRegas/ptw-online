@@ -17,6 +17,7 @@ public sealed class PermitService(
     IssuancePolicySettings issuancePolicy)
 {
     private const string HseValidatorRole = "HSEValidator";
+    private const string AreaOwnerSeniorOfficerRole = "AreaOwnerSeniorOfficer";
     private const string AreaOwnerManagerRole = "AreaOwnerManager";
 
     public async Task<PermitResponse> CreateAsync(
@@ -55,7 +56,7 @@ public sealed class PermitService(
     {
         var actor = actorContext.Current;
         var sponsorFilter = actor.Roles.Overlaps(
-            ["Auditor", "Administrator", HseValidatorRole, AreaOwnerManagerRole])
+            ["Auditor", "Administrator", HseValidatorRole, AreaOwnerSeniorOfficerRole, AreaOwnerManagerRole])
             ? null
             : actor.Id;
         var items = (await store.ListAsync(sponsorFilter, cancellationToken))
@@ -593,15 +594,66 @@ public sealed class PermitService(
 
                 permit.ApproveAndIssue(new PermitApprovalEvidence(
                     actor.Id,
-                    actor.IsDevelopment ? "Manager pemilik area (Development)" : AreaOwnerManagerRole,
+                    AreaManagerPosition(permit.Draft.LocationId),
                     ApprovalCapacity.Manager,
                     actor.Id,
-                    actor.IsDevelopment ? "Manager pemilik area (Development)" : AreaOwnerManagerRole,
+                    AreaManagerPosition(permit.Draft.LocationId),
                     authorizationId,
                     null,
                     issuancePolicy.RuleVersion,
                     issuancePolicy.PrintTemplateVersion,
                     issuancePolicy.CampaignAssetVersion,
+                    request.Statement,
+                    now,
+                    actor.DisplayName), now);
+            },
+            cancellationToken);
+
+    public Task<PermitResponse> ReviewAreaOperationsAsync(
+        Guid taskId,
+        ReviewAreaOperationsRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken) =>
+        ExecuteTaskCommandAsync(
+            taskId,
+            "AREA_OPERATION_REVIEW",
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.ReviewAreaOperations,
+            [AreaOwnerSeniorOfficerRole],
+            (permit, actor, now, authorization) =>
+            {
+                if (!request.ConditionsReviewed)
+                {
+                    throw new DomainRuleViolationException(
+                        "permit.area_operations.confirmation_required",
+                        "Senior Officer wajib mengonfirmasi bahwa seluruh kondisi operasi yang relevan telah diperiksa.");
+                }
+
+                var authorizationId = authorization?.AssignmentIds.SingleOrDefault() ?? Guid.Empty;
+                if (authorizationId == Guid.Empty && actor.IsDevelopment)
+                {
+                    authorizationId = DevelopmentAuthorizationId(actor.Id);
+                }
+
+                if (authorizationId == Guid.Empty)
+                {
+                    throw new PolicyAuthorizationDeniedException(
+                        "authorization.senior_officer_assignment_required",
+                        "Assignment Senior Officer aktif yang terverifikasi server wajib tersedia.");
+                }
+
+                permit.ReviewAreaOperations(new AreaOperationsReviewEvidence(
+                    actor.Id,
+                    actor.DisplayName,
+                    AreaOperationsPosition(permit.Draft.LocationId),
+                    authorizationId,
+                    request.ConditionCodes,
+                    request.OtherConditionDetail,
                     request.Statement,
                     now), now);
             },
@@ -685,50 +737,7 @@ public sealed class PermitService(
         string correlationId,
         CancellationToken cancellationToken)
     {
-        if (!request.AllPagesReviewed || !request.ReadableAndCompleteAcknowledged)
-        {
-            throw new InvalidRequestException(
-                "permit.closure.acknowledgement_required",
-                "Sponsor wajib meninjau semua halaman dan mengakui hardcopy terbaca serta lengkap.");
-        }
-
-
-        var printPackage = await store.FindPrintPackageAsync(request.PrintPackageId, cancellationToken);
-        if (printPackage is null
-            || printPackage.PermitId != id
-            || !string.Equals(printPackage.RenderStatus, "READY", StringComparison.Ordinal))
-        {
-            throw new InvalidRequestException(
-                "permit.closure.print_package_invalid",
-                "PrintPackage resmi harus READY dan berasal dari PTW yang sama.");
-        }
-
-        if (request.SignedFieldCopyAttachmentIds.Count == 0
-            || request.SignedFieldCopyAttachmentIds.Count != request.SignedFieldCopyAttachmentIds.Distinct().Count())
-        {
-            throw new InvalidRequestException(
-                "permit.closure.evidence_required",
-                "Sedikitnya satu SIGNED_FIELD_COPY unik wajib dipilih.");
-        }
-
-        var attachments = await attachmentStore.ListActiveAsync(id, cancellationToken);
-        var selected = attachments
-            .Where(x => request.SignedFieldCopyAttachmentIds.Contains(x.Id))
-            .ToArray();
-        if (selected.Length != request.SignedFieldCopyAttachmentIds.Count
-            || selected.Any(x => !string.Equals(x.Category, "SIGNED_FIELD_COPY", StringComparison.Ordinal)
-                || !string.Equals(x.ScanStatus, "CLEAN", StringComparison.Ordinal)
-                || x.TargetPermitVersion != printPackage.PermitVersion
-                || x.PrintPackageId != printPackage.Id
-                || string.IsNullOrWhiteSpace(x.DocumentNumber)
-                || string.IsNullOrWhiteSpace(x.DocumentRevision)
-                || x.DocumentDate is null)
-            || selected.Any(x => attachments.Any(candidate => candidate.SupersedesAttachmentId == x.Id)))
-        {
-            throw new InvalidRequestException(
-                "permit.closure.evidence_invalid",
-                "SIGNED_FIELD_COPY harus CLEAN, aktif, tidak superseded, bermetadata lengkap, dan cocok dengan PermitVersion serta PrintPackage.");
-        }
+        await ValidateClosureEvidenceAsync(id, request, cancellationToken);
 
         return await ExecuteOwnedSponsorCommandAsync(
             id,
@@ -738,6 +747,32 @@ public sealed class PermitService(
             correlationId,
             PermitPolicyOperations.RequestClosure,
             (permit, actor, now) => permit.RequestClosure(
+                request.PrintPackageId,
+                request.SignedFieldCopyAttachmentIds,
+                actor.Id,
+                request.CompletionStatement,
+                now),
+            cancellationToken);
+    }
+
+    public async Task<PermitResponse> ResubmitClosureAsync(
+        Guid id,
+        RequestClosureRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        await ValidateClosureEvidenceAsync(id, request, cancellationToken);
+
+        return await ExecuteOwnedSponsorCommandAsync(
+            id,
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.ResubmitClosure,
+            (permit, actor, now) => permit.ResubmitClosure(
                 request.PrintPackageId,
                 request.SignedFieldCopyAttachmentIds,
                 actor.Id,
@@ -773,11 +808,17 @@ public sealed class PermitService(
         string correlationId,
         CancellationToken cancellationToken)
     {
-        if (!request.CompletionConfirmed || !request.HandbackConfirmed || !request.EvidenceReadable)
+        if (string.IsNullOrWhiteSpace(request.OfficerName)
+            || !request.WorkAreaInspectedAndClean
+            || !request.WorkCompleted
+            || !request.ManagerAgreesWorkCompleted
+            || !request.InhibitedSystemsRestored
+            || !request.AreaHandedBackAndSafeguardsRestored
+            || !request.EvidenceReadable)
         {
             throw new InvalidRequestException(
                 "permit.closure.verification_incomplete",
-                "Completion, handback, dan keterbacaan evidence wajib dikonfirmasi sebelum menutup PTW.");
+                "Seluruh checklist Bagian 10, nama Officer, dan keterbacaan hardcopy wajib dikonfirmasi sebelum menutup PTW.");
         }
 
         return ExecuteTaskCommandAsync(
@@ -789,7 +830,17 @@ public sealed class PermitService(
             correlationId,
             PermitPolicyOperations.Close,
             [AreaOwnerManagerRole],
-            (permit, actor, now, _) => permit.Close(actor.Id, request.Statement, now),
+            (permit, actor, now, _) => permit.Close(
+                actor.Id,
+                request.Statement,
+                request.OfficerName,
+                request.WorkAreaInspectedAndClean,
+                request.WorkCompleted,
+                request.ManagerAgreesWorkCompleted,
+                request.InhibitedSystemsRestored,
+                request.AreaHandedBackAndSafeguardsRestored,
+                request.EvidenceReadable,
+                now),
             cancellationToken);
     }
 
@@ -826,6 +877,58 @@ public sealed class PermitService(
             ["Administrator"],
             (permit, _, now) => permit.Expire(now),
             cancellationToken);
+
+    private async Task ValidateClosureEvidenceAsync(
+        Guid permitId,
+        RequestClosureRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!request.AllPagesReviewed || !request.ReadableAndCompleteAcknowledged)
+        {
+            throw new InvalidRequestException(
+                "permit.closure.acknowledgement_required",
+                "Sponsor wajib meninjau semua halaman dan mengakui hardcopy terbaca serta lengkap.");
+        }
+
+        var printPackage = await store.FindPrintPackageAsync(request.PrintPackageId, cancellationToken);
+        if (printPackage is null
+            || printPackage.PermitId != permitId
+            || !string.Equals(printPackage.RenderStatus, "READY", StringComparison.Ordinal))
+        {
+            throw new InvalidRequestException(
+                "permit.closure.print_package_invalid",
+                "PrintPackage resmi harus READY dan berasal dari PTW yang sama.");
+        }
+
+        if (request.SignedFieldCopyAttachmentIds is null
+            || request.SignedFieldCopyAttachmentIds.Count == 0
+            || request.SignedFieldCopyAttachmentIds.Count
+                != request.SignedFieldCopyAttachmentIds.Distinct().Count())
+        {
+            throw new InvalidRequestException(
+                "permit.closure.evidence_required",
+                "Sedikitnya satu SIGNED_FIELD_COPY unik wajib dipilih.");
+        }
+
+        var attachments = await attachmentStore.ListActiveAsync(permitId, cancellationToken);
+        var selected = attachments
+            .Where(x => request.SignedFieldCopyAttachmentIds.Contains(x.Id))
+            .ToArray();
+        if (selected.Length != request.SignedFieldCopyAttachmentIds.Count
+            || selected.Any(x => !string.Equals(x.Category, "SIGNED_FIELD_COPY", StringComparison.Ordinal)
+                || !string.Equals(x.ScanStatus, "CLEAN", StringComparison.Ordinal)
+                || x.TargetPermitVersion != printPackage.PermitVersion
+                || x.PrintPackageId != printPackage.Id
+                || string.IsNullOrWhiteSpace(x.DocumentNumber)
+                || string.IsNullOrWhiteSpace(x.DocumentRevision)
+                || x.DocumentDate is null)
+            || selected.Any(x => attachments.Any(candidate => candidate.SupersedesAttachmentId == x.Id)))
+        {
+            throw new InvalidRequestException(
+                "permit.closure.evidence_invalid",
+                "SIGNED_FIELD_COPY harus CLEAN, aktif, tidak superseded, bermetadata lengkap, dan cocok dengan PermitVersion serta PrintPackage.");
+        }
+    }
 
     private async Task EnsureSignedFieldCopyEvidenceAsync(
         Guid permitId,
@@ -882,6 +985,7 @@ public sealed class PermitService(
         var role = task.Type switch
         {
             "HSE_VALIDATION" => HseValidatorRole,
+            "AREA_OPERATION_REVIEW" => AreaOwnerSeniorOfficerRole,
             "AREA_APPROVE_AND_ISSUE" => AreaOwnerManagerRole,
             _ => throw new InvalidRequestException("task.type.invalid", "Task tidak mendukung keputusan revisi atau penolakan.")
         };
@@ -1060,6 +1164,16 @@ public sealed class PermitService(
 
     private static Guid DevelopmentAuthorizationId(string actorId) =>
         new(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"ptw-development:{actorId}"))[..16]);
+
+    private static string AreaOperationsPosition(string locationId) =>
+        string.Equals(locationId, "ORF", StringComparison.OrdinalIgnoreCase)
+            ? "Senior Officer Distribusi Gas dan Manajemen ORF"
+            : "Senior Officer Pemilik Wilayah";
+
+    private static string AreaManagerPosition(string locationId) =>
+        string.Equals(locationId, "ORF", StringComparison.OrdinalIgnoreCase)
+            ? "Kepala Departemen Distribusi Gas dan Manajemen ORF"
+            : "Manager Pemilik Wilayah";
 
     private static void EnsureSponsorOrAdmin(Actor actor)
     {

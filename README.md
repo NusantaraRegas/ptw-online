@@ -44,16 +44,16 @@ Increment P0 lifecycle v1.7 telah tersedia:
 - lifecycle aktif: `DRAFT`, `UNDER_VALIDATION`, `REVISION_REQUIRED`, `AWAITING_AREA_APPROVAL`, `ISSUED`, `SUSPENDED`, `CLOSURE_REQUESTED`, `CLOSED`, `REJECTED`, `CANCELLED`, `EXPIRED`;
 - submit membuat tepat satu task `HSE_VALIDATION`; tidak ada validator Distribusi Gas;
 - Sponsor yang juga PIC HSE tidak dapat memvalidasi PTW miliknya sendiri;
-- satu task `AREA_APPROVE_AND_ISSUE` dan satu command atomik menyimpan decision, status `ISSUED`, audit, outbox, `PrintPackageSnapshot`, serta placeholder `GeneratedDocument` dalam satu `SaveChanges` transaction;
+- setelah validasi HSE, Development/UAT membuat task `AREA_OPERATION_REVIEW` untuk Senior Officer pemilik wilayah. Senior Officer menetapkan checklist kondisi operasi Bagian 7; hanya setelah review itu selesai sistem membuat task `AREA_APPROVE_AND_ISSUE` untuk Manager pemilik wilayah. Command Manager tetap atomik dan menyimpan decision, status `ISSUED`, audit, outbox, `PrintPackageSnapshot`, serta placeholder `GeneratedDocument` dalam satu `SaveChanges` transaction;
 - release lokasi dikonfigurasi server-side; Development mengaktifkan ORF, Site-Office, dan Water-Based Activity, sedangkan lokasi lain ditolak fail-closed;
 - suspend berlaku langsung dan resolve kembali ke `ISSUED`; request renewal Sponsor memerlukan signed field copy exact package/version dan baru membuat permit penerus tanpa overlap setelah Pemilik Wilayah menyetujui;
-- closure memakai task pemilik area dan memerlukan signed field copy yang `CLEAN`, bermetadata lengkap, tidak superseded, serta cocok dengan exact PermitVersion dan PrintPackage;
+- closure memakai task Pemilik Wilayah dan memerlukan signed field copy yang `CLEAN`, bermetadata lengkap, tidak superseded, serta cocok dengan exact PermitVersion dan PrintPackage. Pemilik Wilayah kemudian mengisi verifikasi Bagian 10: nama Officer, hasil inspeksi area, status selesai, pemulihan sistem inhibited, handback/pengamanan area, dan keterbacaan evidence. Pekerjaan yang belum selesai dikembalikan kepada Sponsor tanpa menutup PTW atau memulihkan hak kerja; Sponsor dapat mengunggah hardcopy pengganti untuk paket cetak yang sama dan mengajukan ulang melalui command khusus;
 - lampiran privat mengenali signature PDF/JPEG/PNG, menyimpan SHA-256, kategori, metadata dokumen, target version, PrintPackage, replacement lineage, serta evidence malware scan; file selain `CLEAN` tidak dapat diunduh;
-- form draft Sponsor memuat tipe pengaju, klasifikasi header resmi (HOT: `Api Terbuka`/`Percikan Api` multi-select; COLD: tepat satu `Low Risk`/`High Risk`; CSE tanpa pilihan tambahan), work type multi-select (opsi `Lain-lain` mewajibkan detail yang ikut tercetak), nomor dan nama equipment, Work Order No., plant/area, CLSR, SIMOPS, isolation/precaution, serta nomor/revisi/tanggal JSA. Referensi bahaya tambahan bersifat opsional dan informatif; JSA tetap menjadi sumber resmi identifikasi bahaya dan pengendalian;
+- form draft Sponsor memuat tipe pengaju, klasifikasi header resmi (HOT: `Api Terbuka`/`Percikan Api` multi-select; COLD: tepat satu `Low Risk`/`High Risk`; CSE tanpa pilihan tambahan), work type multi-select (opsi `Lain-lain` mewajibkan detail yang ikut tercetak), nomor dan nama equipment, Work Order No., plant/area, SIMOPS, serta nomor/revisi/tanggal JSA. Referensi bahaya tambahan bersifat opsional dan informatif; JSA tetap menjadi sumber resmi identifikasi bahaya dan pengendalian. Field bebas CLSR dan isolation/precaution tidak ditampilkan pada form Sponsor karena bukan kewenangan Sponsor; checklist kondisi operasi Bagian 7 ditetapkan Senior Officer setelah validasi HSE;
 - dokumen dasar JSA, ID, BPJS TK, FTW, dan E-SIMI wajib memiliki lampiran bertaut sebelum submit; dokumen selain JSA menjadi evidence pengajuan dan tidak ditambahkan ke checklist Bagian 4 pada PDF resmi;
 - Bagian 4 memakai 15 pilihan dokumen sesuai template resmi: JSA wajib dan pilihan lain opsional. Setiap pilihan harus memiliki lampiran yang tertaut sebelum submit, metadata lampiran JSA harus cocok dengan draft, dan hasil checklist dicetak dari immutable snapshot;
 - APD/perlengkapan safety Bagian 5 dipilih secara multi-select oleh PIC HSE pada tahap validasi dan tidak dapat diisi bebas oleh Sponsor; approval permit lama tanpa evidence Bagian 5 diblokir dan diarahkan melalui revisi; input hazards/controls bebas telah dihapus dari UI;
-- paket cetak resmi dirender Worker dari `PrintPackageSnapshot` yang immutable dengan halaman resmi FM-001/002/003-B-002-NR-B220 sebagai template vektor A3 landscape; sistem mengisi Bagian 1-5 dan 7, sedangkan Bagian 6 dan Bagian 8-10 tetap kosong untuk diisi manual di lapangan;
+- paket cetak resmi dirender Worker dari `PrintPackageSnapshot` yang immutable dengan halaman resmi FM-001/002/003-B-002-NR-B220 sebagai template vektor. Hasil unduhan terdiri dari dua halaman A3: halaman 1 landscape untuk Bagian 1-7 dan halaman 2 portrait yang dimulai dari Bagian 8; sistem mengisi Bagian 1-5 serta evidence Bagian 7 (checklist Senior Officer dan baris persetujuan Senior Officer/Manager), sedangkan Bagian 6 dan Bagian 8-10 tetap kosong untuk diisi manual di lapangan;
 - kegagalan render tidak membatalkan keputusan penerbitan: status paket menjadi `RETRYING` dengan exponential backoff, lalu `FAILED` setelah batas percobaan, dan Administrator dapat menjadwalkan render ulang secara idempotent;
 - hanya paket berstatus `READY` yang dapat diunduh; setiap unduhan menghasilkan audit event, dan pratinjau draft selalu diberi watermark `DRAFT / TIDAK BERLAKU` serta tidak pernah disimpan.
 - deploy web menjaga `index.html` tetap tervalidasi, tidak mengalihkan chunk JavaScript yang hilang ke SPA shell, dan melakukan satu reload terbatas ketika lazy chunk lama gagal dimuat.
@@ -163,6 +163,7 @@ stateDiagram-v2
   ISSUED --> SUSPENDED: suspend
   SUSPENDED --> ISSUED: resolve
   ISSUED --> CLOSURE_REQUESTED: request closure
+  CLOSURE_REQUESTED --> CLOSURE_REQUESTED: request follow-up / resubmit closure
   CLOSURE_REQUESTED --> CLOSED: close (signed field copy CLEAN)
   ISSUED --> EXPIRED: expire (validity maks. 7 hari)
   DRAFT --> CANCELLED: cancel
@@ -190,6 +191,7 @@ sequenceDiagram
   autonumber
   actor Sponsor
   actor HSE as PIC HSE (HSEValidator)
+  actor SO as Senior Officer pemilik wilayah
   actor Mgr as Manager pemilik area
   participant SPA as Angular SPA
   participant API as Ptw.Api
@@ -210,8 +212,12 @@ sequenceDiagram
     Note over Sponsor,SPA: Sponsor memperbaiki draft lalu submit ulang
   else valid
     SPA->>API: POST /api/v1/tasks/{taskId}/validate
-    SVC->>DB: status AWAITING_AREA_APPROVAL,<br/>task AREA_APPROVE_AND_ISSUE
+    SVC->>DB: status AWAITING_AREA_APPROVAL,<br/>task AREA_OPERATION_REVIEW
   end
+
+  SO->>SPA: Tinjau kondisi operasi Bagian 7
+  SPA->>API: POST /api/v1/tasks/{taskId}/review-area-operations
+  SVC->>DB: evidence Senior Officer,<br/>task AREA_APPROVE_AND_ISSUE
 
   Mgr->>SPA: Tinjau task persetujuan
   alt ditolak
@@ -262,7 +268,7 @@ sequenceDiagram
     DB-->>W: job + SnapshotJson
     W->>R: Render(snapshot, watermark = false)
     alt render berhasil
-      R-->>W: PDF A3 landscape + RendererVersion
+      R-->>W: PDF dua halaman A3 + RendererVersion
       W->>FS: StoreAsync(content)
       W->>DB: CompleteRenderAsync → READY
     else render gagal
@@ -287,6 +293,7 @@ Pratinjau draft (`GET .../print-packages/preview`) merender langsung dari state 
 | --- | --- | --- |
 | `POST` | `/api/v1/permits/{id}/submit` | `SubmitPermit` |
 | `POST` | `/api/v1/tasks/{taskId}/validate` | `ValidateSubmission` |
+| `POST` | `/api/v1/tasks/{taskId}/review-area-operations` | `ReviewAreaOperations` oleh Senior Officer pemilik wilayah |
 | `POST` | `/api/v1/tasks/{taskId}/escalate` | eskalasi HSE dengan catatan |
 | `POST` | `/api/v1/tasks/{taskId}/revision` | `RequestRevision` |
 | `POST` | `/api/v1/tasks/{taskId}/reject` | `RejectPermit` |
@@ -298,6 +305,7 @@ Pratinjau draft (`GET .../print-packages/preview`) merender langsung dari state 
 | `POST` | `/api/v1/renewal-tasks/{taskId}/reject` | `RejectRenewal` |
 | `POST` | `/api/v1/renewal-tasks/{taskId}/approve` | `ApproveRenewal` dan pembuatan draft penerus atomik |
 | `POST` | `/api/v1/permits/{id}/closure-requests` | `RequestClosure` |
+| `POST` | `/api/v1/permits/{id}/closure-requests/resubmit` | `ResubmitClosure` setelah tindak lanjut Pemilik Wilayah |
 | `POST` | `/api/v1/closure-tasks/{taskId}/request-evidence` | `RequestClosureEvidenceReplacement` |
 | `POST` | `/api/v1/closure-tasks/{taskId}/close` | `ClosePermit` |
 | `POST` | `/api/v1/permits/{id}/cancel` | `CancelPermit` |
@@ -309,7 +317,7 @@ Pratinjau draft (`GET .../print-packages/preview`) merender langsung dari state 
 
 Task command memakai `taskId`, bukan permit ID. Semua transition memerlukan `If-Match` dan `Idempotency-Key`. Tidak ada endpoint generik `setStatus`.
 
-Endpoint baca/create draft, attachment (multipart dengan `supportingDocumentCode` untuk dokumen wajib dan Bagian 4), history, master lokasi, authorization, policy readiness/simulation/UAT, dan health tetap tersedia. Katalog dokumen wajib dibaca dari `GET /api/v1/reference-data/mandatory-documents`; katalog checklist formulir dibaca dari `/header-classifications`, `/work-types`, `/supporting-documents`, dan `/safety-equipment`. Nilai dikontrol dan divalidasi ulang di server. OpenAPI hanya diekspos pada Development melalui `/openapi/v1.json`.
+Endpoint baca/create draft, attachment (multipart dengan `supportingDocumentCode` untuk dokumen wajib dan Bagian 4), history, master lokasi, authorization, policy readiness/simulation/UAT, dan health tetap tersedia. Katalog dokumen wajib dibaca dari `GET /api/v1/reference-data/mandatory-documents`; katalog checklist formulir dibaca dari `/header-classifications`, `/work-types`, `/supporting-documents`, `/safety-equipment`, dan `/operational-conditions`. Nilai dikontrol dan divalidasi ulang di server. OpenAPI hanya diekspos pada Development melalui `/openapi/v1.json`.
 
 Renewal tidak mengubah status PTW asal. Request Sponsor membuat task `AREA_RENEWAL_REVIEW` untuk Manager pemilik area; permit penerus (`DRAFT`, terhubung lewat `RenewedFromPermitId`) baru dibuat secara atomik saat task tersebut disetujui, dan selama review masih `PENDING` lampiran PTW asal tidak dapat diubah serta closure tidak dapat diajukan.
 
@@ -356,7 +364,7 @@ npm ci
 npm start
 ```
 
-Development identity hanya aktif pada environment `Development`. Profil yang relevan untuk flow v1.7 adalah Sponsor, PIC HSE (`HSEValidator`), dan Manager pemilik area (`AreaOwnerManager`). Identitas dan Sponsor aktif berasal dari `/api/v1/me`; header development diabaikan di luar Development.
+Development identity hanya aktif pada environment `Development`. Profil yang relevan untuk flow v1.7 adalah Sponsor, PIC HSE (`HSEValidator`), Senior Officer pemilik wilayah (`AreaOwnerSeniorOfficer`), dan Manager pemilik area (`AreaOwnerManager`). Identitas dan Sponsor aktif berasal dari `/api/v1/me`; header development diabaikan di luar Development.
 
 Pada Development dengan `Attachments:RequireMalwareScan=false` (nilai default `appsettings.Development.json`), upload lokal langsung diberi evidence internal `CLEAN` oleh adapter tepercaya agar submit, closure, dan renewal dapat diuji end-to-end tanpa scanner eksternal. Adapter ini tidak pernah terdaftar di luar Development; production tetap memakai adapter unavailable yang fail-closed sampai scanner resmi tersedia.
 

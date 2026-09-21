@@ -7,20 +7,23 @@ using Ptw.Domain;
 namespace Ptw.Infrastructure.Printing;
 
 /// <summary>
-/// Renders one controlled Nusantara Regas PTW form on a single A3 landscape sheet.
+/// Renders one controlled Nusantara Regas PTW form as two A3 portrait pages.
 /// </summary>
 /// <remarks>
-/// Bagian 1 to 5 and Bagian 7 are populated from the approved snapshot. Bagian 6 (initial gas test) and
-/// Bagian 8 to 10 (daily revalidation, completion, inspection and handback) are printed as blank
-/// scaffolding because they are completed by hand in the field under the v1.6 hybrid model.
+/// Page one contains Bagian 1 to 7. Page two starts at Bagian 8 and contains the blank field-work
+/// scaffolding for daily revalidation, completion, inspection and handback. Bagian 1 to 5 and the
+/// validity, operational-condition checks, and both approval rows in Bagian 7 are populated from
+/// the approved snapshot; Bagian 6 and Bagian 8 to 10 remain completed by hand.
 /// </remarks>
 internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
 {
-    internal const string RendererVersion = "ptw-form-renderer/2.4.0";
+    internal const string RendererVersion = "ptw-form-renderer/3.2.0";
 
     private const double PageWidth = 420;
     private const double PageHeight = 297;
     private const double Margin = 6;
+
+    private const double OutputMargin = 8;
 
     private const double LeftX = 6;
     private const double LeftWidth = 256;
@@ -53,23 +56,82 @@ internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
         using var template = XPdfForm.FromStream(templateStream);
         template.PageNumber = TemplateOverlayCatalog.Resolve(descriptor.PermitClass).PageNumber;
 
-        var page = document.AddPage();
-        page.Width = XUnit.FromPoint(template.PointWidth);
-        page.Height = XUnit.FromPoint(template.PointHeight);
-        using var graphics = XGraphics.FromPdfPage(page);
-        graphics.DrawImage(template, 0, 0, page.Width.Point, page.Height.Point);
-        using var canvas = new FormCanvas(graphics, ParseColor(descriptor.AccentColorHex));
-
-        DrawControlledTemplateOverlay(canvas, descriptor, snapshot, request.SnapshotHash);
-
-        if (request.Watermark)
-        {
-            canvas.Watermark(PageWidth, PageHeight, "DRAFT / TIDAK BERLAKU");
-        }
+        // Keep the controlled source sheet intact and expose it as two more legible pages. The first
+        // crop ends after Bagian 7; the second starts exactly at the Bagian 8 column. Drawing the source
+        // PDF through a transform preserves its vector text and rules instead of rasterising the form.
+        var pageSplit = TemplateOverlayCatalog.PageSplit(descriptor.PermitClass);
+        DrawCroppedPage(
+            document,
+            template,
+            descriptor,
+            snapshot,
+            request.SnapshotHash,
+            request.Watermark,
+            pageSplit.PageOne,
+            outputPageWidth: 420,
+            outputPageHeight: 297);
+        DrawCroppedPage(
+            document,
+            template,
+            descriptor,
+            snapshot,
+            request.SnapshotHash,
+            request.Watermark,
+            pageSplit.PageTwo,
+            outputPageWidth: 297,
+            outputPageHeight: 420);
 
         using var buffer = new MemoryStream();
         document.Save(buffer, false);
         return new PrintPackageRenderResult(buffer.ToArray(), "application/pdf", RendererVersion);
+    }
+
+    private static void DrawCroppedPage(
+        PdfDocument document,
+        XPdfForm template,
+        PrintTemplateDescriptor descriptor,
+        PrintPackageSnapshotPayload snapshot,
+        string snapshotHash,
+        bool watermark,
+        PdfRect sourceBounds,
+        double outputPageWidth,
+        double outputPageHeight)
+    {
+        var sourceX = Pt(sourceBounds.X);
+        var sourceY = Pt(sourceBounds.Y);
+        var sourceWidth = Pt(sourceBounds.Width);
+        var sourceHeight = Pt(sourceBounds.Height);
+        var availableWidth = outputPageWidth - (OutputMargin * 2);
+        var availableHeight = outputPageHeight - (OutputMargin * 2);
+        var scale = Math.Min(availableWidth / sourceWidth, availableHeight / sourceHeight);
+        var renderedWidth = sourceWidth * scale;
+        var renderedHeight = sourceHeight * scale;
+        var destinationX = (outputPageWidth - renderedWidth) / 2;
+        var destinationY = (outputPageHeight - renderedHeight) / 2;
+
+        var page = document.AddPage();
+        page.Width = XUnit.FromMillimeter(outputPageWidth);
+        page.Height = XUnit.FromMillimeter(outputPageHeight);
+        using var graphics = XGraphics.FromPdfPage(page);
+        using var canvas = new FormCanvas(graphics, ParseColor(descriptor.AccentColorHex));
+
+        var state = graphics.Save();
+        graphics.IntersectClip(new XRect(
+            FormCanvas.Mm(destinationX),
+            FormCanvas.Mm(destinationY),
+            FormCanvas.Mm(renderedWidth),
+            FormCanvas.Mm(renderedHeight)));
+        graphics.TranslateTransform(FormCanvas.Mm(destinationX), FormCanvas.Mm(destinationY));
+        graphics.ScaleTransform(scale);
+        graphics.TranslateTransform(-FormCanvas.Mm(sourceX), -FormCanvas.Mm(sourceY));
+        graphics.DrawImage(template, 0, 0, template.PointWidth, template.PointHeight);
+        DrawControlledTemplateOverlay(canvas, descriptor, snapshot, snapshotHash);
+        graphics.Restore(state);
+
+        if (watermark)
+        {
+            canvas.Watermark(outputPageWidth, outputPageHeight, "DRAFT / TIDAK BERLAKU");
+        }
     }
 
     private static void DrawHeader(

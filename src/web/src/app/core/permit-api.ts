@@ -70,6 +70,14 @@ export interface PermitSafetyEquipmentCatalog {
   options: PermitSafetyEquipmentOption[];
 }
 
+export interface PermitOperationalConditionOption {
+  code: string;
+  label: string;
+  templateIndex: number;
+  parentCode: string | null;
+  requiresDetail: boolean;
+}
+
 export interface PermitSupportingDocumentOption {
   code: string;
   label: string;
@@ -113,10 +121,23 @@ export interface PermitValidation {
 
 export interface PermitWorkflow {
   hse: PermitValidation;
+  areaOperations: AreaOperationsReview;
   approval: PermitApproval;
   suspension: PermitSuspension;
   renewal?: PermitRenewalWorkflow;
   closure: PermitClosure;
+}
+
+export interface AreaOperationsReview {
+  completed: boolean;
+  actorId: string | null;
+  actorName: string | null;
+  actorPosition: string | null;
+  authorizationId: string | null;
+  conditionCodes: string[];
+  otherConditionDetail: string | null;
+  statement: string | null;
+  reviewedAt: string | null;
 }
 
 export interface PermitRenewalWorkflow {
@@ -147,6 +168,7 @@ export interface PermitApproval {
   actingAssignmentId: string | null;
   statement: string | null;
   approvedAt: string | null;
+  actorName?: string | null;
 }
 
 export interface PermitSuspension {
@@ -172,6 +194,13 @@ export interface PermitClosure {
   closedBy: string | null;
   closeStatement: string | null;
   closedAt: string | null;
+  officerName?: string | null;
+  workAreaInspectedAndClean?: boolean;
+  workCompleted?: boolean;
+  managerAgreesWorkCompleted?: boolean;
+  inhibitedSystemsRestored?: boolean;
+  areaHandedBackAndSafeguardsRestored?: boolean;
+  evidenceReadable?: boolean;
 }
 
 export interface SubmitPermitRequest {
@@ -282,6 +311,12 @@ export class PermitApi {
     return this.http.get<PermitSafetyEquipmentCatalog[]>('/api/v1/reference-data/safety-equipment');
   }
 
+  listOperationalConditions(): Observable<PermitOperationalConditionOption[]> {
+    return this.http.get<PermitOperationalConditionOption[]>(
+      '/api/v1/reference-data/operational-conditions',
+    );
+  }
+
   listSupportingDocuments(): Observable<PermitSupportingDocumentOption[]> {
     return this.http.get<PermitSupportingDocumentOption[]>(
       '/api/v1/reference-data/supporting-documents',
@@ -352,6 +387,10 @@ export class PermitApi {
     return this.command(id, 'closure-requests', eTag, request);
   }
 
+  resubmitClosure(id: string, eTag: string, request: RequestPermitClosure): Observable<Permit> {
+    return this.command(id, 'closure-requests/resubmit', eTag, request);
+  }
+
   requestClosureEvidence(taskId: string, eTag: string, reason: string): Observable<Permit> {
     return this.taskCommand(taskId, 'request-evidence', eTag, { reason }, '/api/v1/closure-tasks');
   }
@@ -361,8 +400,12 @@ export class PermitApi {
     eTag: string,
     request: {
       statement: string;
-      completionConfirmed: boolean;
-      handbackConfirmed: boolean;
+      officerName: string;
+      workAreaInspectedAndClean: boolean;
+      workCompleted: boolean;
+      managerAgreesWorkCompleted: boolean;
+      inhibitedSystemsRestored: boolean;
+      areaHandedBackAndSafeguardsRestored: boolean;
       evidenceReadable: boolean;
     },
   ): Observable<Permit> {
@@ -371,6 +414,19 @@ export class PermitApi {
 
   validate(taskId: string, eTag: string, request: ValidateSubmissionRequest): Observable<Permit> {
     return this.taskCommand(taskId, 'validate', eTag, request);
+  }
+
+  reviewAreaOperations(
+    taskId: string,
+    eTag: string,
+    request: {
+      statement: string;
+      conditionCodes: string[];
+      otherConditionDetail: string | null;
+      conditionsReviewed: boolean;
+    },
+  ): Observable<Permit> {
+    return this.taskCommand(taskId, 'review-area-operations', eTag, request);
   }
 
   approveAndIssue(

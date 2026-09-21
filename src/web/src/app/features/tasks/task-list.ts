@@ -38,6 +38,7 @@ export class TaskList {
     return (
       {
         HSE_VALIDATION: 'HSE',
+        AREA_OPERATION_REVIEW: 'BAGIAN 7',
         AREA_APPROVE_AND_ISSUE: 'TERBIT',
         AREA_CLOSE_VERIFICATION: 'TUTUP',
       }[type] ?? 'PTW'

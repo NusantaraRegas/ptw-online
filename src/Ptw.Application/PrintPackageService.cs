@@ -113,7 +113,8 @@ public sealed class PrintPackageService(
             string.Empty,
             string.Empty,
             string.Empty,
-            clock.UtcNow);
+            clock.UtcNow,
+            AreaOperationsReview: permit.AreaOperationsReview);
         var result = renderer.Render(new PrintPackageRenderRequest(snapshot, "PREVIEW", Watermark: true));
         return new PrintPackageDownload(
             new MemoryStream(result.Content, writable: false),

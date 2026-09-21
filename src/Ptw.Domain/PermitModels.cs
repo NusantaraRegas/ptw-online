@@ -21,6 +21,16 @@ public sealed record PermitValidationEvidence(
     DateTimeOffset ValidatedAt,
     IReadOnlyList<string>? SafetyEquipmentCodes = null);
 
+public sealed record AreaOperationsReviewEvidence(
+    string ActorId,
+    string ActorName,
+    string ActorPosition,
+    Guid AuthorizationId,
+    IReadOnlyList<string> ConditionCodes,
+    string? OtherConditionDetail,
+    string Statement,
+    DateTimeOffset ReviewedAt);
+
 public enum ApprovalCapacity
 {
     Manager,
@@ -39,7 +49,8 @@ public sealed record PermitApprovalEvidence(
     string PrintTemplateVersion,
     string CampaignAssetVersion,
     string Statement,
-    DateTimeOffset ApprovedAt);
+    DateTimeOffset ApprovedAt,
+    string? ActorName = null);
 
 public sealed record PermitSuspensionEvidence(
     string SuspendedBy,
@@ -61,7 +72,14 @@ public sealed record PermitClosureEvidence(
 public sealed record PermitClosureDecisionEvidence(
     string ActorId,
     string Statement,
-    DateTimeOffset ClosedAt);
+    DateTimeOffset ClosedAt,
+    string OfficerName = "",
+    bool WorkAreaInspectedAndClean = false,
+    bool WorkCompleted = false,
+    bool ManagerAgreesWorkCompleted = false,
+    bool InhibitedSystemsRestored = false,
+    bool AreaHandedBackAndSafeguardsRestored = false,
+    bool EvidenceReadable = false);
 
 public enum PermitRenewalReviewStatus
 {

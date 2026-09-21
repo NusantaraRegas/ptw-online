@@ -1,6 +1,7 @@
 using Ptw.Application;
 using Ptw.Domain;
 using Ptw.Infrastructure.Printing;
+using PdfSharp.Pdf.IO;
 
 namespace Ptw.Printing.Tests;
 
@@ -26,6 +27,10 @@ public sealed class PtwFormRendererTests
         Assert.Equal(PtwFormRenderer.RendererVersion, result.RendererVersion);
         Assert.StartsWith("%PDF-", System.Text.Encoding.ASCII.GetString(result.Content, 0, 5), StringComparison.Ordinal);
         Assert.Equal(expectedFormCode, PrintTemplateCatalog.Resolve(permitClass).FormCode);
+        using var pdf = PdfReader.Open(new MemoryStream(result.Content), PdfDocumentOpenMode.Import);
+        Assert.Equal(2, pdf.PageCount);
+        Assert.True(pdf.Pages[0].Width.Point > pdf.Pages[0].Height.Point);
+        Assert.True(pdf.Pages[1].Width.Point < pdf.Pages[1].Height.Point);
         DumpForVisualReview(result.Content, expectedFormCode);
     }
 
@@ -55,6 +60,23 @@ public sealed class PtwFormRendererTests
         var emptyDocument = renderer.Render(new(withoutSelection, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
 
         Assert.NotEqual(Canonicalise(selectedDocument.Content), Canonicalise(emptyDocument.Content));
+    }
+
+    [Fact]
+    public void Bagian7ChecklistAndAuthorityRowsComeFromAreaDecisions()
+    {
+        var renderer = new PtwFormRenderer();
+        var populated = Snapshot(PermitClass.HotWork);
+        var withoutDecisions = populated with
+        {
+            AreaOperationsReview = null,
+            Approval = null
+        };
+
+        var populatedDocument = renderer.Render(new(populated, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var emptyDocument = renderer.Render(new(withoutDecisions, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+
+        Assert.NotEqual(Canonicalise(populatedDocument.Content), Canonicalise(emptyDocument.Content));
     }
 
     [Fact]
@@ -235,11 +257,29 @@ public sealed class PtwFormRendererTests
             "FM-B-002-NR-B220/1",
             "campaign-2026.09",
             "Saya menyetujui penerbitan PTW ini.",
-            IssuedAt),
+            IssuedAt,
+            "Siti Rahmawati"),
         "ruleset-2026.09",
         "FM-B-002-NR-B220/1",
         "campaign-2026.09",
-        IssuedAt);
+        IssuedAt,
+        AreaOperationsReview: new AreaOperationsReviewEvidence(
+            "senior.officer.orf.demo",
+            "Andi Pratama",
+            "Senior Officer Distribusi Gas dan Manajemen ORF",
+            Guid.Parse("0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d"),
+            [
+                PermitOperationalConditionCatalog.Isolation,
+                PermitOperationalConditionCatalog.IsolationClosedLockValves,
+                PermitOperationalConditionCatalog.Depressurized,
+                PermitOperationalConditionCatalog.Drained,
+                PermitOperationalConditionCatalog.Flushing,
+                PermitOperationalConditionCatalog.FlushingN2Purge,
+                PermitOperationalConditionCatalog.Other
+            ],
+            "Verifikasi valve lokal sebelum pekerjaan dimulai",
+            "Kondisi operasi Bagian 7 telah ditinjau.",
+            IssuedAt.AddMinutes(-15)));
 
     private static PermitDraft Draft(PermitClass permitClass) => new(
         "Penggantian gasket pada line 8 inch",

@@ -358,6 +358,25 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                         cancellationToken);
                     AddTask(
                         permit,
+                        "AREA_OPERATION_REVIEW",
+                        "Verifikasi kondisi operasi Bagian 7",
+                        "AreaOwnerSeniorOfficer",
+                        domainEvent.OccurredAt);
+                    break;
+                case "area_operations_review_completed":
+                    await AddAreaOperationsReviewDecisionAsync(
+                        permit,
+                        domainEvent.OccurredAt,
+                        cancellationToken);
+                    await CompleteTaskAsync(
+                        permit.Id,
+                        permit.Version,
+                        "AREA_OPERATION_REVIEW",
+                        actorId,
+                        domainEvent.OccurredAt,
+                        cancellationToken);
+                    AddTask(
+                        permit,
                         "AREA_APPROVE_AND_ISSUE",
                         "Setujui dan terbitkan PTW",
                         "AreaOwnerManager",
@@ -380,6 +399,13 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                         "Verifikasi hardcopy dan tutup PTW",
                         "AreaOwnerManager",
                         domainEvent.OccurredAt);
+                    break;
+                case "closure_resubmitted":
+                    await RefreshPendingTaskVersionAsync(
+                        permit.Id,
+                        permit.Version,
+                        "AREA_CLOSE_VERIFICATION",
+                        cancellationToken);
                     break;
                 case "permit_renewal_requested":
                     AddTask(
@@ -480,6 +506,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             Status = "ISSUED",
             Permit = permit.Draft,
             HseValidation = permit.HseValidation,
+            AreaOperationsReview = permit.AreaOperationsReview,
             Approval = approval,
             approval.RuleVersion,
             approval.PrintTemplateVersion,
@@ -507,6 +534,40 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             Id = Guid.CreateVersion7(),
             PrintPackageSnapshotId = snapshotId,
             RenderStatus = "PENDING"
+        });
+    }
+
+    private async Task AddAreaOperationsReviewDecisionAsync(
+        Permit permit,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken)
+    {
+        var review = permit.AreaOperationsReview ?? throw new InvalidOperationException(
+            "Bukti review Senior Officer wajib tersedia ketika task Bagian 7 diselesaikan.");
+        var taskId = await dbContext.PermitTasks
+            .Where(x => x.PermitId == permit.Id
+                && x.PermitVersion == permit.Version
+                && x.Type == "AREA_OPERATION_REVIEW"
+                && x.Status == "PENDING")
+            .Select(x => x.Id)
+            .SingleAsync(cancellationToken);
+        var evidenceJson = JsonSerializer.Serialize(review, JsonOptions);
+        dbContext.PermitDecisions.Add(new PermitDecisionRecord
+        {
+            Id = Guid.CreateVersion7(),
+            PermitId = permit.Id,
+            PermitVersion = permit.Version,
+            TaskId = taskId,
+            Decision = "AREA_OPERATION_REVIEW",
+            ActorId = review.ActorId,
+            ActorPosition = review.ActorPosition,
+            ApprovalCapacity = "SENIOR_OFFICER",
+            PrincipalManagerUserId = review.ActorId,
+            PrincipalPosition = review.ActorPosition,
+            AuthorizationId = review.AuthorizationId,
+            Statement = review.Statement,
+            DecidedAt = occurredAt,
+            EvidenceHash = Hash(evidenceJson)
         });
     }
 
@@ -549,6 +610,20 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         task.Status = "COMPLETED";
         task.CompletedAt = completedAt;
         task.CompletedBy = actorId;
+    }
+
+    private async Task RefreshPendingTaskVersionAsync(
+        Guid permitId,
+        int permitVersion,
+        string type,
+        CancellationToken cancellationToken)
+    {
+        var task = await dbContext.PermitTasks.SingleAsync(
+            x => x.PermitId == permitId
+                && x.Type == type
+                && x.Status == "PENDING",
+            cancellationToken);
+        task.PermitVersion = permitVersion;
     }
 
     private async Task CancelPendingTasksAsync(
@@ -648,6 +723,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         WorkflowEvidenceJson = JsonSerializer.Serialize(
             new PermitWorkflowSnapshot(
                 permit.HseValidation,
+                permit.AreaOperationsReview,
                 permit.Approval,
                 permit.Suspension,
                 permit.ClosureRequest,
@@ -661,7 +737,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         var draft = JsonSerializer.Deserialize<PermitDraft>(record.DraftJson, JsonOptions)
             ?? throw new InvalidOperationException("Snapshot draft PTW tidak valid.");
         var workflow = string.IsNullOrWhiteSpace(record.WorkflowEvidenceJson)
-            ? new PermitWorkflowSnapshot(null, null, null, null, null, null)
+            ? new PermitWorkflowSnapshot(null, null, null, null, null, null, null)
             : JsonSerializer.Deserialize<PermitWorkflowSnapshot>(record.WorkflowEvidenceJson, JsonOptions)
                 ?? throw new InvalidOperationException("Bukti workflow PTW tidak valid.");
         var permit = Permit.Rehydrate(
@@ -680,12 +756,14 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             workflow.ClosureDecision,
             workflow.RenewalRequest,
             record.RenewedFromPermitId,
-            renewalPermitId);
+            renewalPermitId,
+            workflow.AreaOperationsReview);
         return new StoredPermit(permit, EncodeETag(record.RowVersion));
     }
 
     private sealed record PermitWorkflowSnapshot(
         PermitValidationEvidence? HseValidation,
+        AreaOperationsReviewEvidence? AreaOperationsReview,
         PermitApprovalEvidence? Approval,
         PermitSuspensionEvidence? Suspension = null,
         PermitClosureEvidence? ClosureRequest = null,

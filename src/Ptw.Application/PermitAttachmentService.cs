@@ -552,11 +552,24 @@ public sealed class PermitAttachmentService(
     {
         if (category == "SIGNED_FIELD_COPY")
         {
-            if (permit.Status is not (PermitStatus.Issued or PermitStatus.Suspended or PermitStatus.Expired))
+            if (permit.Status is not (
+                PermitStatus.Issued
+                or PermitStatus.Suspended
+                or PermitStatus.Expired
+                or PermitStatus.ClosureRequested))
             {
                 throw new InvalidRequestException(
                     "attachment.signed_copy_state_invalid",
-                    "SIGNED_FIELD_COPY hanya dapat diunggah untuk PTW Diterbitkan, Ditangguhkan, atau Kedaluwarsa.");
+                    "SIGNED_FIELD_COPY hanya dapat diunggah untuk PTW Diterbitkan, Ditangguhkan, Kedaluwarsa, atau saat tindak lanjut penutupan diminta.");
+            }
+
+            if (permit.Status == PermitStatus.ClosureRequested
+                && (permit.ClosureRequest is null
+                    || string.IsNullOrWhiteSpace(permit.ClosureRequest.ReplacementReason)))
+            {
+                throw new InvalidRequestException(
+                    "permit.closure.evidence_replacement_not_requested",
+                    "Pemilik Wilayah belum meminta tindak lanjut atau salinan lapangan pengganti.");
             }
             return;
         }
