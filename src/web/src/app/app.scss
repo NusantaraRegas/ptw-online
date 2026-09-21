@@ -259,6 +259,21 @@ main {
   border-color: var(--nr-border);
   background: var(--nr-blue-soft);
 }
+
+.top-actions .logout-button {
+  width: auto;
+  padding: 0 11px;
+  color: #60777e;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.local-login-link {
+  color: var(--nr-blue-dark);
+  font-size: 9px;
+  font-weight: 800;
+  text-decoration: none;
+}
 .notification-button svg {
   width: 21px;
   height: 21px;

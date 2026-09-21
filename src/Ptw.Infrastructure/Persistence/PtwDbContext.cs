@@ -23,6 +23,9 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
     public DbSet<UserAuthorizationRecord> UserAuthorizations => Set<UserAuthorizationRecord>();
     public DbSet<UserAuthorizationVersionRecord> UserAuthorizationVersions => Set<UserAuthorizationVersionRecord>();
     public DbSet<AuthorizationCommandReceiptRecord> AuthorizationCommandReceipts => Set<AuthorizationCommandReceiptRecord>();
+    public DbSet<UserAccountRecord> UserAccounts => Set<UserAccountRecord>();
+    public DbSet<UserCredentialRecord> UserCredentials => Set<UserCredentialRecord>();
+    public DbSet<UserSignatureVersionRecord> UserSignatureVersions => Set<UserSignatureVersionRecord>();
     public DbSet<PolicyUatSuiteRecord> PolicyUatSuites => Set<PolicyUatSuiteRecord>();
     public DbSet<PolicyUatRunRecord> PolicyUatRuns => Set<PolicyUatRunRecord>();
     public DbSet<PolicyUatCommandReceiptRecord> PolicyUatCommandReceipts => Set<PolicyUatCommandReceiptRecord>();
@@ -340,6 +343,50 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         authorizationReceipt.HasOne<UserAuthorizationRecord>()
             .WithMany()
             .HasForeignKey(x => x.UserAuthorizationId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var userAccount = modelBuilder.Entity<UserAccountRecord>();
+        userAccount.ToTable("UserAccount", "sec");
+        userAccount.HasKey(x => x.SubjectId);
+        userAccount.Property(x => x.SubjectId).HasMaxLength(200);
+        userAccount.Property(x => x.UserName).HasMaxLength(100);
+        userAccount.Property(x => x.NormalizedUserName).HasMaxLength(100);
+        userAccount.Property(x => x.DisplayName).HasMaxLength(200);
+        userAccount.Property(x => x.Position).HasMaxLength(200);
+        userAccount.Property(x => x.Department).HasMaxLength(200);
+        userAccount.Property(x => x.RowVersion).IsRowVersion();
+        userAccount.HasIndex(x => x.NormalizedUserName).IsUnique();
+        userAccount.HasIndex(x => new { x.IsActive, x.DisplayName });
+
+        var userCredential = modelBuilder.Entity<UserCredentialRecord>();
+        userCredential.ToTable(
+            "UserCredential",
+            "sec",
+            table => table.HasCheckConstraint("CK_UserCredential_Iterations", "[Iterations] >= 100000"));
+        userCredential.HasKey(x => x.SubjectId);
+        userCredential.Property(x => x.SubjectId).HasMaxLength(200);
+        userCredential.HasOne<UserAccountRecord>()
+            .WithOne()
+            .HasForeignKey<UserCredentialRecord>(x => x.SubjectId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var userSignature = modelBuilder.Entity<UserSignatureVersionRecord>();
+        userSignature.ToTable(
+            "UserSignatureVersion",
+            "sec",
+            table => table.HasCheckConstraint("CK_UserSignatureVersion_Content", "DATALENGTH([Content]) > 0 AND DATALENGTH([Content]) <= 262144"));
+        userSignature.HasKey(x => x.Id);
+        userSignature.Property(x => x.SubjectId).HasMaxLength(200);
+        userSignature.Property(x => x.MediaType).HasMaxLength(50);
+        userSignature.Property(x => x.Sha256).HasMaxLength(64).IsFixedLength();
+        userSignature.Property(x => x.UploadedBy).HasMaxLength(200);
+        userSignature.HasIndex(x => new { x.SubjectId, x.Version }).IsUnique();
+        userSignature.HasIndex(x => new { x.SubjectId, x.IsActive })
+            .IsUnique()
+            .HasFilter("[IsActive] = 1");
+        userSignature.HasOne<UserAccountRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.SubjectId)
             .OnDelete(DeleteBehavior.Restrict);
 
         var policyUatSuite = modelBuilder.Entity<PolicyUatSuiteRecord>();

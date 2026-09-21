@@ -18,6 +18,7 @@ internal sealed class ApiExceptionHandler(IProblemDetailsService problemDetailsS
         var (status, code, title) = exception switch
         {
             ResourceNotFoundException => (StatusCodes.Status404NotFound, "resource.not_found", "Data tidak ditemukan"),
+            AuthenticationFailedException => (StatusCodes.Status401Unauthorized, "authentication.invalid_credentials", "Login gagal"),
             UnauthorizedAccessException => (StatusCodes.Status403Forbidden, "authorization.denied", "Akses ditolak"),
             ConcurrencyConflictException => (StatusCodes.Status409Conflict, "concurrency.conflict", "Konflik versi"),
             PolicyAuthorizationDeniedException denied =>

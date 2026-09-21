@@ -1,5 +1,6 @@
 <nav class="admin-tabs" aria-label="Administrasi konfigurasi">
   <a routerLink="/admin">Master lokasi</a>
+  <a routerLink="/admin/users">Pengguna</a>
   <a routerLink="/admin/authorizations" aria-current="page">Otorisasi pengguna</a>
   <a routerLink="/admin/policy">Kesiapan policy</a>
   <a routerLink="/admin/policy-uat">UAT policy</a>
@@ -70,15 +71,26 @@
       <div class="form-grid">
         <label>
           <span>User ID</span>
-          <input
-            formControlName="subjectId"
-            autocomplete="off"
-            placeholder="contoh: operator.satu"
-          />
+          <select formControlName="subjectId">
+            <option value="">Pilih pengguna aktif</option>
+            @for (user of users(); track user.subjectId) {
+              <option [value]="user.subjectId">
+                {{ user.displayName }} — {{ user.subjectId }}
+              </option>
+            }
+          </select>
         </label>
         <label>
           <span>Role code</span>
-          <input formControlName="roleCode" autocomplete="off" placeholder="contoh: PTW_ISSUER" />
+          <select formControlName="roleCode">
+            <option value="">Pilih role</option>
+            <option value="Administrator">Administrator</option>
+            <option value="Sponsor">Sponsor</option>
+            <option value="HSEValidator">PIC HSE</option>
+            <option value="AreaOwnerSeniorOfficer">Senior Officer Pemilik Wilayah</option>
+            <option value="AreaOwnerManager">Manager Pemilik Wilayah</option>
+            <option value="Auditor">Auditor</option>
+          </select>
         </label>
         <label class="wide">
           <span>Action codes <small>pisahkan dengan koma</small></span>

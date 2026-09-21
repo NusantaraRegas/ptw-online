@@ -21,6 +21,7 @@ public static class InfrastructureServices
         services.AddScoped<IPermitAttachmentStore, PermitAttachmentStore>();
         services.AddScoped<ILocationMasterStore, LocationMasterStore>();
         services.AddScoped<IUserAuthorizationStore, UserAuthorizationStore>();
+        services.AddScoped<IUserDirectoryStore, UserDirectoryStore>();
         services.AddScoped<IAuthorizationAssignmentResolver, AuthorizationAssignmentResolver>();
         services.AddScoped<IPolicyUatStore, PolicyUatStore>();
         services.AddSingleton<IClock, SystemClock>();

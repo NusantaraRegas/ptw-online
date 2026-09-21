@@ -29,7 +29,15 @@ public sealed record AreaOperationsReviewEvidence(
     IReadOnlyList<string> ConditionCodes,
     string? OtherConditionDetail,
     string Statement,
-    DateTimeOffset ReviewedAt);
+    DateTimeOffset ReviewedAt,
+    VisualSignatureEvidence? Signature = null);
+
+public sealed record VisualSignatureEvidence(
+    Guid SignatureVersionId,
+    int Version,
+    string MediaType,
+    byte[] Content,
+    string Sha256);
 
 public enum ApprovalCapacity
 {
@@ -50,7 +58,8 @@ public sealed record PermitApprovalEvidence(
     string CampaignAssetVersion,
     string Statement,
     DateTimeOffset ApprovedAt,
-    string? ActorName = null);
+    string? ActorName = null,
+    VisualSignatureEvidence? Signature = null);
 
 public sealed record PermitSuspensionEvidence(
     string SuspendedBy,

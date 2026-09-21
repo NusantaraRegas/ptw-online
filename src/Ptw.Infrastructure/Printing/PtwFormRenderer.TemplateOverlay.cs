@@ -264,7 +264,8 @@ internal sealed partial class PtwFormRenderer
                 layout.ApprovalRows[0],
                 review.ActorName,
                 review.ReviewedAt,
-                "Diverifikasi elektronik");
+                "Diverifikasi elektronik",
+                review.Signature);
         }
 
         if (approval is not null && layout.ApprovalRows.Count > 1)
@@ -274,7 +275,8 @@ internal sealed partial class PtwFormRenderer
                 layout.ApprovalRows[1],
                 approval.ActorName ?? approval.ActorId,
                 approval.ApprovedAt,
-                "Disetujui elektronik");
+                "Disetujui elektronik",
+                approval.Signature);
         }
     }
 
@@ -283,16 +285,64 @@ internal sealed partial class PtwFormRenderer
         ApprovalOverlayRow target,
         string actorName,
         DateTimeOffset decidedAt,
-        string signatureLabel)
+        string signatureLabel,
+        VisualSignatureEvidence? signature)
     {
         OverlayText(canvas, target.Name, actorName, 3.6, align: TextAlign.Center);
-        OverlayText(canvas, target.Signature, signatureLabel, 3.2, align: TextAlign.Center);
+        if (!TryOverlaySignature(canvas, target.Signature, signature))
+        {
+            OverlayText(canvas, target.Signature, signatureLabel, 3.2, align: TextAlign.Center);
+        }
         OverlayText(
             canvas,
             target.Date,
             FormCanvas.Wib(decidedAt, "dd/MM/yy HH:mm"),
             3.6,
             align: TextAlign.Center);
+    }
+
+    private static bool TryOverlaySignature(
+        FormCanvas canvas,
+        PdfRect target,
+        VisualSignatureEvidence? signature)
+    {
+        if (signature is null
+            || !string.Equals(signature.MediaType, "image/png", StringComparison.OrdinalIgnoreCase)
+            || signature.Content.Length == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var stream = new MemoryStream(signature.Content, writable: false);
+            using var image = XImage.FromStream(stream);
+            const double paddingPoints = 2;
+            var availableWidth = target.Width - (paddingPoints * 2);
+            var availableHeight = target.Height - (paddingPoints * 2);
+            var scale = Math.Min(
+                availableWidth / image.PixelWidth,
+                availableHeight / image.PixelHeight);
+            var imageWidth = image.PixelWidth * scale;
+            var imageHeight = image.PixelHeight * scale;
+            canvas.Fill(
+                Pt(target.X),
+                Pt(target.Y),
+                Pt(target.Width),
+                Pt(target.Height),
+                XColors.White);
+            canvas.DrawImage(
+                image,
+                Pt(target.X + ((target.Width - imageWidth) / 2)),
+                Pt(target.Y + ((target.Height - imageHeight) / 2)),
+                Pt(imageWidth),
+                Pt(imageHeight));
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     private static void DrawTick(FormCanvas canvas, PdfPoint point) =>

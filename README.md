@@ -354,7 +354,7 @@ docker compose --env-file .env -f deploy/compose/compose.hotreload.yaml up -d
 docker compose --env-file .env -f deploy/compose/compose.hotreload.yaml logs -f api web
 ```
 
-Buka `http://localhost:8080` (dev server, proxy `/api` dan `/health` ke container `api`). API juga dipublikasikan langsung di `http://localhost:5080` (`PTW_API_PORT`). Start pertama lebih lama karena restore NuGet, `npm ci`, dan kompilasi berjalan di dalam container; hasilnya disimpan di named volume (`nuget-packages`, `api-artifacts`, `worker-artifacts`, `web-node-modules`) sehingga start berikutnya cepat. Output build .NET diarahkan ke `artifacts/` melalui `PTW_USE_ARTIFACTS_OUTPUT` (lihat `Directory.Build.props`) agar tidak bertabrakan dengan `bin/obj` host.
+Buka `http://localhost:8080` (dev server, proxy `/api` dan `/health` ke container `api`). Halaman awal adalah layar login; pengguna harus masuk dengan akun lokal atau memilih **Gunakan mode demo** secara eksplisit sebelum route aplikasi dapat dibuka. API juga dipublikasikan langsung di `http://localhost:5080` (`PTW_API_PORT`). Start pertama lebih lama karena restore NuGet, `npm ci`, dan kompilasi berjalan di dalam container; hasilnya disimpan di named volume (`nuget-packages`, `api-artifacts`, `worker-artifacts`, `web-node-modules`) sehingga start berikutnya cepat. Output build .NET diarahkan ke `artifacts/` melalui `PTW_USE_ARTIFACTS_OUTPUT` (lihat `Directory.Build.props`) agar tidak bertabrakan dengan `bin/obj` host.
 
 Catatan:
 
@@ -383,6 +383,18 @@ npm start
 ```
 
 Development identity hanya aktif pada environment `Development`. Profil yang relevan untuk flow v1.7 adalah Sponsor, PIC HSE (`HSEValidator`), Senior Officer pemilik wilayah (`AreaOwnerSeniorOfficer`), dan Manager pemilik area (`AreaOwnerManager`). Identitas dan Sponsor aktif berasal dari `/api/v1/me`; header development diabaikan di luar Development.
+
+Administrator dapat membuat akun lokal Development melalui **Administrasi > Pengguna**, lalu membuat dan menyetujui assignment role melalui **Otorisasi pengguna** dengan maker dan checker yang berbeda. Layar login memakai cookie HTTP-only; role dan scope tidak disimpan di cookie sebagai authority, tetapi dihitung ulang dari assignment approved/effective pada setiap request. Login lokal sengaja ditolak di luar environment `Development` sampai kontrak IdP/SSO OPN-007 disahkan. Mode dan pemilih akun demo hanya aktif setelah dipilih secara eksplisit pada layar login, sebagai bootstrap dan regression harness Development.
+
+Spesimen tanda tangan pengguna menerima PNG maksimum 256 KB dan 2000×2000 piksel serta dapat dipratinjau oleh Administrator tanpa cache browser. Versi lama tidak ditimpa; exact version, hash, dan byte PNG dibekukan ke evidence review Senior Officer atau approval Manager, kemudian Worker mencetaknya bersama waktu keputusan dalam WIB. Ini adalah bukti visual persetujuan elektronik, bukan tanda tangan digital tersertifikasi. Bagian 3 dan tanda tangan lapangan lain tetap kosong untuk pengisian hardcopy sampai OPN-008 disahkan.
+
+Saat memakai hot reload, perubahan migration/model EF memerlukan restart container API agar langkah `--migrate` sebelum `dotnet watch` dijalankan kembali:
+
+```powershell
+docker compose --env-file .env -f deploy/compose/compose.hotreload.yaml restart api
+```
+
+Named volume `data-protection-keys` mempertahankan cookie login Development ketika container API dibuat ulang. Jangan menghapus volume tersebut atau `sql-data` untuk troubleshooting login/migration.
 
 Pada Development dengan `Attachments:RequireMalwareScan=false` (nilai default `appsettings.Development.json`), upload lokal langsung diberi evidence internal `CLEAN` oleh adapter tepercaya agar submit, closure, dan renewal dapat diuji end-to-end tanpa scanner eksternal. Adapter ini tidak pernah terdaftar di luar Development; production tetap memakai adapter unavailable yang fail-closed sampai scanner resmi tersedia.
 

@@ -124,6 +124,34 @@ export const DEVELOPMENT_IDENTITIES: DevelopmentIdentityProfile[] = [
 ];
 
 const StorageKey = 'ptw.development-identity';
+export const LocalLoginSessionKey = 'ptw.local-login';
+export const DemoSessionKey = 'ptw.demo-session';
+
+export function hasClientAuthMode(): boolean {
+  if (typeof sessionStorage === 'undefined') return false;
+  return (
+    sessionStorage.getItem(LocalLoginSessionKey) === '1' ||
+    sessionStorage.getItem(DemoSessionKey) === '1'
+  );
+}
+
+export function startLocalLoginSession(): void {
+  if (typeof sessionStorage === 'undefined') return;
+  sessionStorage.setItem(LocalLoginSessionKey, '1');
+  sessionStorage.removeItem(DemoSessionKey);
+}
+
+export function startDemoSession(): void {
+  if (typeof sessionStorage === 'undefined') return;
+  sessionStorage.setItem(DemoSessionKey, '1');
+  sessionStorage.removeItem(LocalLoginSessionKey);
+}
+
+export function clearClientAuthMode(): void {
+  if (typeof sessionStorage === 'undefined') return;
+  sessionStorage.removeItem(LocalLoginSessionKey);
+  sessionStorage.removeItem(DemoSessionKey);
+}
 
 @Injectable({ providedIn: 'root' })
 export class DevelopmentIdentityStore {
@@ -165,10 +193,21 @@ export class IdentityApi {
   me(): Observable<CurrentIdentity> {
     return this.currentIdentity;
   }
+
+  login(request: { userName: string; password: string }): Observable<void> {
+    return this.http.post<void>('/api/v1/auth/login', request);
+  }
+
+  logout(): Observable<void> {
+    return this.http.post<void>('/api/v1/auth/logout', {});
+  }
 }
 
 export const developmentIdentityInterceptor: HttpInterceptorFn = (request, next) => {
   if (!request.url.startsWith('/api/')) return next(request);
+  if (typeof sessionStorage === 'undefined' || sessionStorage.getItem(DemoSessionKey) !== '1') {
+    return next(request);
+  }
 
   const identity = inject(DevelopmentIdentityStore).selected();
   return next(

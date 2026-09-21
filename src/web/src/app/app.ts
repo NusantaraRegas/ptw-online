@@ -1,10 +1,13 @@
 import { Component, computed, DestroyRef, HostListener, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs';
 import {
+  clearClientAuthMode,
   CurrentIdentity,
   DEVELOPMENT_IDENTITIES,
   DevelopmentIdentityStore,
+  hasClientAuthMode,
   IdentityApi,
   roleDisplayLabel,
 } from './core/development-identity';
@@ -21,9 +24,13 @@ export class App {
   private readonly identityStore = inject(DevelopmentIdentityStore);
   private readonly permitApi = inject(PermitApi);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
 
   protected readonly menuOpen = signal(false);
   protected readonly notificationsOpen = signal(false);
+  protected readonly loginPage = signal(
+    !hasClientAuthMode() || globalThis.location.pathname.endsWith('/login'),
+  );
   protected readonly pendingTaskCount = signal(0);
   protected readonly pendingTasks = signal<PermitTask[]>([]);
   protected readonly identity = signal<CurrentIdentity>({
@@ -54,6 +61,15 @@ export class App {
   protected readonly attentionTasks = computed(() => this.pendingTasks().slice(0, 5));
 
   constructor() {
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((event) => this.loginPage.set(event.urlAfterRedirects.startsWith('/login')));
+
+    if (!hasClientAuthMode()) return;
+
     this.identityApi
       .me()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -104,5 +120,14 @@ export class App {
 
   protected switchIdentity(key: string): void {
     if (this.identityStore.select(key)) globalThis.location.reload();
+  }
+
+  protected logout(): void {
+    this.identityApi.logout().subscribe({
+      next: () => {
+        clearClientAuthMode();
+        globalThis.location.assign('/login');
+      },
+    });
   }
 }

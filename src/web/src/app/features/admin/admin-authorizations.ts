@@ -8,6 +8,7 @@ import {
   UserAuthorizationApi,
   UserAuthorizationDraft,
 } from '../../core/user-authorization-api';
+import { UserAccount, UserDirectoryApi } from '../../core/user-directory-api';
 
 @Component({
   selector: 'app-admin-authorizations',
@@ -17,10 +18,12 @@ import {
 })
 export class AdminAuthorizations {
   private readonly api = inject(UserAuthorizationApi);
+  private readonly userApi = inject(UserDirectoryApi);
   private readonly destroyRef = inject(DestroyRef);
   private readonly formBuilder = inject(FormBuilder);
 
   protected readonly assignments = signal<UserAuthorization[]>([]);
+  protected readonly users = signal<UserAccount[]>([]);
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly actingId = signal('');
@@ -49,6 +52,10 @@ export class AdminAuthorizations {
 
   constructor() {
     this.load();
+    this.userApi
+      .list()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (page) => this.users.set(page.items.filter((user) => user.isActive)) });
   }
 
   protected toggleForm(): void {

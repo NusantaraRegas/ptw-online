@@ -14,7 +14,8 @@ public sealed class PermitService(
     IPermitAttachmentStore attachmentStore,
     AttachmentPolicy attachmentPolicy,
     LocationReleaseSettings locationRelease,
-    IssuancePolicySettings issuancePolicy)
+    IssuancePolicySettings issuancePolicy,
+    IUserDirectoryStore userDirectoryStore)
 {
     private const string HseValidatorRole = "HSEValidator";
     private const string AreaOwnerSeniorOfficerRole = "AreaOwnerSeniorOfficer";
@@ -541,14 +542,16 @@ public sealed class PermitService(
             (permit, actor, now, _) => permit.EscalateValidation(actor.Id, request.Reason, now),
             cancellationToken);
 
-    public Task<PermitResponse> ApproveAndIssueAsync(
+    public async Task<PermitResponse> ApproveAndIssueAsync(
         Guid taskId,
         ApproveAndIssuePermitRequest request,
         string expectedETag,
         string idempotencyKey,
         string correlationId,
-        CancellationToken cancellationToken) =>
-        ExecuteTaskCommandAsync(
+        CancellationToken cancellationToken)
+    {
+        var signature = await ResolveVisualSignatureAsync(actorContext.Current.Id, cancellationToken);
+        return await ExecuteTaskCommandAsync(
             taskId,
             "AREA_APPROVE_AND_ISSUE",
             request,
@@ -605,18 +608,22 @@ public sealed class PermitService(
                     issuancePolicy.CampaignAssetVersion,
                     request.Statement,
                     now,
-                    actor.DisplayName), now);
+                    actor.DisplayName,
+                    signature), now);
             },
             cancellationToken);
+    }
 
-    public Task<PermitResponse> ReviewAreaOperationsAsync(
+    public async Task<PermitResponse> ReviewAreaOperationsAsync(
         Guid taskId,
         ReviewAreaOperationsRequest request,
         string expectedETag,
         string idempotencyKey,
         string correlationId,
-        CancellationToken cancellationToken) =>
-        ExecuteTaskCommandAsync(
+        CancellationToken cancellationToken)
+    {
+        var signature = await ResolveVisualSignatureAsync(actorContext.Current.Id, cancellationToken);
+        return await ExecuteTaskCommandAsync(
             taskId,
             "AREA_OPERATION_REVIEW",
             request,
@@ -655,9 +662,26 @@ public sealed class PermitService(
                     request.ConditionCodes,
                     request.OtherConditionDetail,
                     request.Statement,
-                    now), now);
+                    now,
+                    signature), now);
             },
             cancellationToken);
+    }
+
+    private async Task<VisualSignatureEvidence?> ResolveVisualSignatureAsync(
+        string actorId,
+        CancellationToken cancellationToken)
+    {
+        var signature = await userDirectoryStore.FindActiveSignatureAsync(actorId, cancellationToken);
+        return signature is null
+            ? null
+            : new VisualSignatureEvidence(
+                signature.Id,
+                signature.Version,
+                signature.MediaType,
+                signature.Content,
+                signature.Sha256);
+    }
 
     public Task<PermitResponse> RequestRevisionAsync(
         Guid taskId,

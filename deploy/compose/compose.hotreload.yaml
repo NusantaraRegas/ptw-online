@@ -54,6 +54,7 @@ services:
       ASPNETCORE_URLS: http://+:8080
       Attachments__StoragePath: /var/lib/ptw/attachments
       GeneratedDocuments__StoragePath: /var/lib/ptw/generated-documents
+      Authentication__DataProtectionPath: /var/lib/ptw/data-protection
     volumes:
       - ../..:/source
       - api-artifacts:/source/artifacts
@@ -61,6 +62,7 @@ services:
       - dotnet-tools:/root/.dotnet
       - attachment-data:/var/lib/ptw/attachments
       - generated-document-data:/var/lib/ptw/generated-documents
+      - data-protection-keys:/var/lib/ptw/data-protection
     ports:
       - "${PTW_API_PORT:-5080}:8080"
     networks: [frontend, backend]
@@ -140,6 +142,7 @@ volumes:
   sql-data: {}
   attachment-data: {}
   generated-document-data: {}
+  data-protection-keys: {}
   api-artifacts: {}
   worker-artifacts: {}
   nuget-packages: {}

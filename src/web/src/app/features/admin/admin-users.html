@@ -1,0 +1,145 @@
+<nav class="admin-tabs" aria-label="Administrasi konfigurasi">
+  <a routerLink="/admin">Master lokasi</a>
+  <a routerLink="/admin/users" aria-current="page">Pengguna</a>
+  <a routerLink="/admin/authorizations">Otorisasi pengguna</a>
+  <a routerLink="/admin/policy">Kesiapan policy</a>
+  <a routerLink="/admin/policy-uat">UAT policy</a>
+</nav>
+
+<div class="page-title">
+  <div>
+    <p class="eyebrow">Identitas aplikasi</p>
+    <h1>Pengguna</h1>
+    <p class="subtitle">
+      Buat akun Development, kelola status, dan simpan spesimen tanda tangan berversi.
+    </p>
+  </div>
+  @if (!accessDenied()) {
+    <button class="primary-action" type="button" (click)="toggleForm()">
+      {{ formOpen() ? 'Tutup form' : '+ Pengguna baru' }}
+    </button>
+  }
+</div>
+
+<section class="boundary-note" aria-label="Batas tanda tangan elektronik">
+  <span aria-hidden="true">i</span>
+  <p>
+    Gambar ini hanya bukti visual persetujuan elektronik pada baris approval digital. Tanda tangan
+    lapangan pada Bagian 3 tetap diisi pada hardcopy sampai OPN-008 disahkan.
+  </p>
+</section>
+
+@if (accessDenied()) {
+  <section class="card access-card">
+    <h2>Akses Administrator diperlukan</h2>
+    <p>{{ error() }}</p>
+  </section>
+} @else {
+  @if (error()) {
+    <p class="error-summary" role="alert">{{ error() }}</p>
+  }
+
+  @if (formOpen()) {
+    <form class="card user-form" [formGroup]="form" (ngSubmit)="create()">
+      <header>
+        <div>
+          <h2>Pengguna baru</h2>
+          <p>Role diberikan terpisah melalui assignment maker-checker.</p>
+        </div>
+      </header>
+      <div class="form-grid">
+        <label
+          ><span>Subject ID</span><input formControlName="subjectId" autocomplete="off"
+        /></label>
+        <label
+          ><span>Username</span><input formControlName="userName" autocomplete="username"
+        /></label>
+        <label
+          ><span>Nama lengkap</span><input formControlName="displayName" autocomplete="name"
+        /></label>
+        <label
+          ><span>Jabatan</span><input formControlName="position" autocomplete="organization-title"
+        /></label>
+        <label
+          ><span>Departemen</span><input formControlName="department" autocomplete="organization"
+        /></label>
+        <label
+          ><span>Password awal</span
+          ><input type="password" formControlName="password" autocomplete="new-password"
+        /></label>
+      </div>
+      <footer>
+        <button type="button" class="secondary-action" (click)="toggleForm()">Batal</button
+        ><button class="primary-action" type="submit" [disabled]="saving()">Simpan pengguna</button>
+      </footer>
+    </form>
+  }
+
+  <section class="card catalog-card" aria-labelledby="user-catalog-title">
+    <header>
+      <div>
+        <h2 id="user-catalog-title">Direktori pengguna</h2>
+        <p>{{ users().length }} pengguna</p>
+      </div>
+    </header>
+    @if (loading()) {
+      <p class="empty">Memuat pengguna…</p>
+    } @else if (users().length === 0) {
+      <p class="empty">Belum ada pengguna lokal.</p>
+    } @else {
+      <div class="user-list">
+        @for (user of users(); track user.subjectId) {
+          <article>
+            <div class="identity">
+              <strong>{{ user.displayName }}</strong
+              ><span>{{ user.userName }} · {{ user.subjectId }}</span
+              ><small
+                >{{ user.position || 'Jabatan belum diisi' }} ·
+                {{ user.department || 'Departemen belum diisi' }}</small
+              >
+            </div>
+            <div class="signature-state">
+              @if (user.signature) {
+                <img
+                  class="signature-preview"
+                  [src]="signatureUrl(user)"
+                  [alt]="'Tanda tangan ' + user.displayName"
+                />
+              }
+              <strong>{{
+                user.signature
+                  ? 'Tanda tangan v' + user.signature.version
+                  : 'Belum ada tanda tangan'
+              }}</strong>
+              @if (user.signature) {
+                <small
+                  >{{ user.signature.uploadedAt | date: 'dd/MM/yyyy HH:mm' : 'Asia/Jakarta' }} WIB ·
+                  {{ user.signature.sha256.slice(0, 12) }}</small
+                >
+              }
+            </div>
+            <span class="status" [class.inactive]="!user.isActive">{{
+              user.isActive ? 'Aktif' : 'Nonaktif'
+            }}</span>
+            <div class="row-actions">
+              <label class="upload-action"
+                >Unggah PNG<input
+                  type="file"
+                  accept="image/png"
+                  (change)="selectSignature(user, $event)"
+                  [disabled]="actingId() === user.subjectId"
+              /></label>
+              <button
+                type="button"
+                (click)="setActive(user)"
+                [disabled]="actingId() === user.subjectId"
+              >
+                {{ user.isActive ? 'Nonaktifkan' : 'Aktifkan' }}
+              </button>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  </section>
+}

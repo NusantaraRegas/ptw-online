@@ -80,6 +80,33 @@ public sealed class PtwFormRendererTests
     }
 
     [Fact]
+    public void VersionedVisualSignatureChangesApprovalRowAndRemainsDeterministic()
+    {
+        var renderer = new PtwFormRenderer();
+        var snapshot = Snapshot(PermitClass.HotWork);
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+        var signature = new VisualSignatureEvidence(
+            Guid.Parse("01994DCE-0000-7000-8000-000000000001"),
+            1,
+            "image/png",
+            png,
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(png)));
+        var signed = snapshot with
+        {
+            AreaOperationsReview = snapshot.AreaOperationsReview! with { Signature = signature },
+            Approval = snapshot.Approval! with { Signature = signature }
+        };
+
+        var first = renderer.Render(new(signed, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var second = renderer.Render(new(signed, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var unsigned = renderer.Render(new(snapshot, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+
+        Assert.Equal(Canonicalise(first.Content), Canonicalise(second.Content));
+        Assert.NotEqual(Canonicalise(first.Content), Canonicalise(unsigned.Content));
+    }
+
+    [Fact]
     public void DraftPreviewIsWatermarkedAndDiffersFromTheOfficialDocument()
     {
         var renderer = new PtwFormRenderer();

@@ -211,6 +211,8 @@ public sealed record IdempotencyContext(string ActorId, string Operation, string
 
 public sealed class ResourceNotFoundException(string resource, object id) : Exception($"{resource} '{id}' tidak ditemukan.");
 
+public sealed class AuthenticationFailedException() : Exception("Username atau password tidak valid.");
+
 public sealed class ConcurrencyConflictException() : Exception("Data PTW telah berubah. Muat ulang sebelum mengulangi aksi.");
 
 public sealed class InvalidRequestException(string code, string message) : Exception(message)

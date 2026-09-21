@@ -31,6 +31,7 @@ describe('developmentIdentityInterceptor', () => {
   });
 
   it('sends the selected maker identity on API requests', () => {
+    sessionStorage.setItem('ptw.demo-session', '1');
     expect(identityStore.select('admin-maker')).toBe(true);
 
     httpClient.get('/api/v1/me').subscribe();
@@ -47,6 +48,26 @@ describe('developmentIdentityInterceptor', () => {
   it('rejects unknown identity keys', () => {
     expect(identityStore.select('unknown')).toBe(false);
     expect(identityStore.selectedKey()).toBe('sponsor-admin');
+  });
+
+  it('does not send impersonation headers after local login', () => {
+    sessionStorage.setItem('ptw.local-login', '1');
+
+    httpClient.get('/api/v1/me').subscribe();
+    const request = httpTesting.expectOne('/api/v1/me');
+
+    expect(request.request.headers.has('X-Dev-User')).toBe(false);
+    expect(request.request.headers.has('X-Dev-Roles')).toBe(false);
+    request.flush({});
+  });
+
+  it('does not silently authenticate as a demo user before demo mode is selected', () => {
+    httpClient.get('/api/v1/me').subscribe();
+    const request = httpTesting.expectOne('/api/v1/me');
+
+    expect(request.request.headers.has('X-Dev-User')).toBe(false);
+    expect(request.request.headers.has('X-Dev-Roles')).toBe(false);
+    request.flush({});
   });
 
   it('keeps Senior Officer review separate from Manager approval and issuance', () => {

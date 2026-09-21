@@ -1,178 +1,189 @@
-<div class="app-shell" [class.menu-open]="menuOpen()">
-  <aside id="main-navigation" class="sidebar" aria-label="Navigasi utama">
-    <a class="brand" routerLink="/" aria-label="NR PTW Online" (click)="closeMenu()">
-      <img src="/assets/brand/logo-regas.png" alt="" />
-      <span class="brand-product"><strong>PTW Online</strong><small>Permit to Work</small></span>
-    </a>
-    <nav>
-      <p class="nav-label">Workspace</p>
-      <a
-        routerLink="/"
-        [routerLinkActiveOptions]="{ exact: true }"
-        routerLinkActive="active"
-        (click)="closeMenu()"
-      >
-        <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
-          <path d="m3 10 9-7 9 7" />
-          <path d="M5 9v11h14V9M9 20v-6h6v6" />
-        </svg>
-        <span>Beranda</span>
+@if (loginPage()) {
+  <router-outlet />
+} @else {
+  <div class="app-shell" [class.menu-open]="menuOpen()">
+    <aside id="main-navigation" class="sidebar" aria-label="Navigasi utama">
+      <a class="brand" routerLink="/" aria-label="NR PTW Online" (click)="closeMenu()">
+        <img src="/assets/brand/logo-regas.png" alt="" />
+        <span class="brand-product"><strong>PTW Online</strong><small>Permit to Work</small></span>
       </a>
-      <a routerLink="/permits" routerLinkActive="active" (click)="closeMenu()">
-        <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
-          <path d="M7 3h10v4H7zM5 5H4v16h16V5h-1" />
-          <path d="M8 12h8M8 16h5" />
-        </svg>
-        <span>PTW Saya</span>
-      </a>
-      <a
-        routerLink="/tasks"
-        routerLinkActive="active"
-        [attr.aria-label]="taskLinkLabel()"
-        (click)="closeMenu()"
-      >
-        <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
-          <path d="M9 11 11 13 15 9" />
-          <path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
-        </svg>
-        <span>Tugas Saya</span>
-        @if (pendingTaskCount() > 0) {
-          <em class="task-attention-badge" aria-hidden="true">{{ taskBadgeText() }}</em>
-        }
-      </a>
-      <a routerLink="/operations" routerLinkActive="active" (click)="closeMenu()">
-        <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
-          <path d="M4 19V9M10 19V5M16 19v-7M22 19V3" />
-          <path d="M2 19h20" />
-        </svg>
-        <span>Papan Operasi</span>
-      </a>
-      <a routerLink="/reports" routerLinkActive="active" (click)="closeMenu()">
-        <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-4-4M8 11h6M11 8v6" />
-        </svg>
-        <span>Pencarian & Laporan</span>
-      </a>
-      <p class="nav-label">Pengaturan</p>
-      @if (isAdministrator()) {
-        <a routerLink="/admin" routerLinkActive="active" (click)="closeMenu()">
+      <nav>
+        <p class="nav-label">Workspace</p>
+        <a
+          routerLink="/"
+          [routerLinkActiveOptions]="{ exact: true }"
+          routerLinkActive="active"
+          (click)="closeMenu()"
+        >
           <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="3" />
-            <path
-              d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"
-            />
+            <path d="m3 10 9-7 9 7" />
+            <path d="M5 9v11h14V9M9 20v-6h6v6" />
           </svg>
-          <span>Administrasi</span>
+          <span>Beranda</span>
         </a>
-      }
-    </nav>
-    <div class="sidebar-foot">
-      <span class="pulse" aria-hidden="true"></span>
-      <div><strong>Sistem normal</strong><small>Sinkronisasi aktif</small></div>
-    </div>
-  </aside>
-
-  <button
-    class="menu-backdrop"
-    type="button"
-    aria-label="Tutup navigasi"
-    (click)="closeMenu()"
-  ></button>
-
-  <main>
-    <header class="topbar">
-      <button
-        class="menu-button"
-        type="button"
-        (click)="toggleMenu()"
-        aria-label="Buka navigasi"
-        aria-controls="main-navigation"
-        [attr.aria-expanded]="menuOpen()"
-      >
-        <svg aria-hidden="true" viewBox="0 0 24 24">
-          <path d="M4 7h16M4 12h16M4 17h16" />
-        </svg>
-      </button>
-      <div class="environment"><span>Lingkungan</span><strong>Development</strong></div>
-      <div class="top-actions">
-        @if (identity().isDevelopmentIdentity) {
-          <label class="identity-switcher">
-            <span>Akun demo</span>
-            <select
-              #identitySelector
-              [value]="selectedIdentityKey()"
-              (change)="switchIdentity(identitySelector.value)"
-            >
-              @for (profile of developmentProfiles; track profile.key) {
-                <option [value]="profile.key" [selected]="profile.key === selectedIdentityKey()">
-                  {{ profile.displayName }}
-                </option>
-              }
-            </select>
-          </label>
-        }
-        <div class="notification-menu" (click)="keepNotificationsOpen($event)">
-          <button
-            class="notification-button"
-            type="button"
-            [attr.aria-label]="taskLinkLabel()"
-            aria-haspopup="dialog"
-            aria-controls="task-notifications"
-            [attr.aria-expanded]="notificationsOpen()"
-            title="Tugas yang perlu perhatian"
-            (click)="toggleNotifications($event)"
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-              <path d="M10 21h4" />
+        <a routerLink="/permits" routerLinkActive="active" (click)="closeMenu()">
+          <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M7 3h10v4H7zM5 5H4v16h16V5h-1" />
+            <path d="M8 12h8M8 16h5" />
+          </svg>
+          <span>PTW Saya</span>
+        </a>
+        <a
+          routerLink="/tasks"
+          routerLinkActive="active"
+          [attr.aria-label]="taskLinkLabel()"
+          (click)="closeMenu()"
+        >
+          <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M9 11 11 13 15 9" />
+            <path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+          </svg>
+          <span>Tugas Saya</span>
+          @if (pendingTaskCount() > 0) {
+            <em class="task-attention-badge" aria-hidden="true">{{ taskBadgeText() }}</em>
+          }
+        </a>
+        <a routerLink="/operations" routerLinkActive="active" (click)="closeMenu()">
+          <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M4 19V9M10 19V5M16 19v-7M22 19V3" />
+            <path d="M2 19h20" />
+          </svg>
+          <span>Papan Operasi</span>
+        </a>
+        <a routerLink="/reports" routerLinkActive="active" (click)="closeMenu()">
+          <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-4-4M8 11h6M11 8v6" />
+          </svg>
+          <span>Pencarian & Laporan</span>
+        </a>
+        <p class="nav-label">Pengaturan</p>
+        @if (isAdministrator()) {
+          <a routerLink="/admin" routerLinkActive="active" (click)="closeMenu()">
+            <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"
+              />
             </svg>
-            @if (pendingTaskCount() > 0) {
-              <span class="unread-dot" aria-hidden="true"></span>
-            }
-          </button>
-          @if (notificationsOpen()) {
-            <section
-              id="task-notifications"
-              class="notification-popover"
-              role="dialog"
-              aria-label="Tugas yang perlu perhatian"
+            <span>Administrasi</span>
+          </a>
+        }
+      </nav>
+      <div class="sidebar-foot">
+        <span class="pulse" aria-hidden="true"></span>
+        <div><strong>Sistem normal</strong><small>Sinkronisasi aktif</small></div>
+      </div>
+    </aside>
+
+    <button
+      class="menu-backdrop"
+      type="button"
+      aria-label="Tutup navigasi"
+      (click)="closeMenu()"
+    ></button>
+
+    <main>
+      <header class="topbar">
+        <button
+          class="menu-button"
+          type="button"
+          (click)="toggleMenu()"
+          aria-label="Buka navigasi"
+          aria-controls="main-navigation"
+          [attr.aria-expanded]="menuOpen()"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+        <div class="environment"><span>Lingkungan</span><strong>Development</strong></div>
+        <div class="top-actions">
+          @if (identity().isDevelopmentIdentity) {
+            <label class="identity-switcher">
+              <span>Akun demo</span>
+              <select
+                #identitySelector
+                [value]="selectedIdentityKey()"
+                (change)="switchIdentity(identitySelector.value)"
+              >
+                @for (profile of developmentProfiles; track profile.key) {
+                  <option [value]="profile.key" [selected]="profile.key === selectedIdentityKey()">
+                    {{ profile.displayName }}
+                  </option>
+                }
+              </select>
+            </label>
+            <a class="local-login-link" routerLink="/login">Login akun</a>
+          }
+          <div class="notification-menu" (click)="keepNotificationsOpen($event)">
+            <button
+              class="notification-button"
+              type="button"
+              [attr.aria-label]="taskLinkLabel()"
+              aria-haspopup="dialog"
+              aria-controls="task-notifications"
+              [attr.aria-expanded]="notificationsOpen()"
+              title="Tugas yang perlu perhatian"
+              (click)="toggleNotifications($event)"
             >
-              <header>
-                <strong>Perlu perhatian</strong>
-                <span>{{ pendingTaskCount() }} tugas aktif</span>
-              </header>
-              @if (attentionTasks().length > 0) {
-                <ul>
-                  @for (task of attentionTasks(); track task.id) {
-                    <li>
-                      <a [routerLink]="['/permits', task.permitId]" (click)="closeNotifications()">
-                        <strong>{{ task.label }}</strong>
-                        <span>{{ task.permitTitle }}</span>
-                        <small
-                          >{{ task.locationId }} · {{ task.permitNumber || 'Draft PTW' }}</small
-                        >
-                      </a>
-                    </li>
-                  }
-                </ul>
-              } @else {
-                <p>Belum ada tugas aktif untuk akun ini.</p>
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+                <path d="M10 21h4" />
+              </svg>
+              @if (pendingTaskCount() > 0) {
+                <span class="unread-dot" aria-hidden="true"></span>
               }
-              <a class="notification-all" routerLink="/tasks" (click)="closeNotifications()">
-                Lihat semua tugas
-              </a>
-            </section>
+            </button>
+            @if (notificationsOpen()) {
+              <section
+                id="task-notifications"
+                class="notification-popover"
+                role="dialog"
+                aria-label="Tugas yang perlu perhatian"
+              >
+                <header>
+                  <strong>Perlu perhatian</strong>
+                  <span>{{ pendingTaskCount() }} tugas aktif</span>
+                </header>
+                @if (attentionTasks().length > 0) {
+                  <ul>
+                    @for (task of attentionTasks(); track task.id) {
+                      <li>
+                        <a
+                          [routerLink]="['/permits', task.permitId]"
+                          (click)="closeNotifications()"
+                        >
+                          <strong>{{ task.label }}</strong>
+                          <span>{{ task.permitTitle }}</span>
+                          <small
+                            >{{ task.locationId }} · {{ task.permitNumber || 'Draft PTW' }}</small
+                          >
+                        </a>
+                      </li>
+                    }
+                  </ul>
+                } @else {
+                  <p>Belum ada tugas aktif untuk akun ini.</p>
+                }
+                <a class="notification-all" routerLink="/tasks" (click)="closeNotifications()">
+                  Lihat semua tugas
+                </a>
+              </section>
+            }
+          </div>
+          <span class="profile-divider" aria-hidden="true"></span>
+          <span class="avatar" aria-hidden="true">{{ initials() }}</span>
+          <span class="user" [attr.title]="identity().displayName">
+            <strong>{{ identity().displayName }}</strong>
+            <small>{{ roleLabel() }}</small>
+          </span>
+          @if (!identity().isDevelopmentIdentity) {
+            <button class="logout-button" type="button" (click)="logout()">Keluar</button>
           }
         </div>
-        <span class="profile-divider" aria-hidden="true"></span>
-        <span class="avatar" aria-hidden="true">{{ initials() }}</span>
-        <span class="user" [attr.title]="identity().displayName">
-          <strong>{{ identity().displayName }}</strong>
-          <small>{{ roleLabel() }}</small>
-        </span>
-      </div>
-    </header>
-    <section class="content"><router-outlet /></section>
-  </main>
-</div>
+      </header>
+      <section class="content"><router-outlet /></section>
+    </main>
+  </div>
+}

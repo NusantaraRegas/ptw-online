@@ -7,6 +7,7 @@ import { App } from './app';
 describe('App', () => {
   it('creates the PTW application shell', async () => {
     sessionStorage.clear();
+    sessionStorage.setItem('ptw.demo-session', '1');
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
@@ -67,9 +68,25 @@ describe('App', () => {
     expect(fixture.nativeElement.querySelector('.notification-all')?.getAttribute('href')).toBe(
       '/tasks',
     );
+    sessionStorage.clear();
+  });
+
+  it('does not render the application shell before an authentication mode is selected', async () => {
+    sessionStorage.clear();
+    await TestBed.configureTestingModule({
+      imports: [App],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.app-shell')).toBeNull();
+    TestBed.inject(HttpTestingController).expectNone('/api/v1/me');
+    TestBed.inject(HttpTestingController).expectNone('/api/v1/tasks');
   });
 
   it('shows the persisted demo identity in the account selector', async () => {
+    sessionStorage.setItem('ptw.demo-session', '1');
     sessionStorage.setItem('ptw.development-identity', 'admin-checker');
     await TestBed.configureTestingModule({
       imports: [App],
@@ -102,6 +119,7 @@ describe('App', () => {
   });
 
   it('shows a readable business label instead of an internal role code', async () => {
+    sessionStorage.setItem('ptw.demo-session', '1');
     sessionStorage.setItem('ptw.development-identity', 'area-owner-site-office');
     await TestBed.configureTestingModule({
       imports: [App],

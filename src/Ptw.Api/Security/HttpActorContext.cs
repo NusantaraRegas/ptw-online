@@ -18,7 +18,9 @@ internal sealed class HttpActorContext(IHttpContextAccessor accessor) : IActorCo
                 principal.FindAll(ClaimTypes.Role).Select(x => x.Value).ToHashSet(StringComparer.OrdinalIgnoreCase),
                 principal.FindAll("location_scope").Select(x => x.Value).ToHashSet(StringComparer.OrdinalIgnoreCase),
                 principal.FindAll("competency").Select(x => x.Value).ToHashSet(StringComparer.OrdinalIgnoreCase),
-                string.Equals(principal.FindFirstValue("identity_source"), "development", StringComparison.Ordinal));
+                principal.FindFirstValue("identity_source")?.StartsWith(
+                    "development",
+                    StringComparison.Ordinal) == true);
         }
     }
 }

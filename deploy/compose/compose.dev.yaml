@@ -42,9 +42,11 @@ services:
       ConnectionStrings__PtwDb: Server=db;Database=PtwOnline;User Id=sa;Password=${PTW_SQL_BOOTSTRAP_PASSWORD};TrustServerCertificate=True;Encrypt=True
       Attachments__StoragePath: /var/lib/ptw/attachments
       GeneratedDocuments__StoragePath: /var/lib/ptw/generated-documents
+      Authentication__DataProtectionPath: /var/lib/ptw/data-protection
     volumes:
       - attachment-data:/var/lib/ptw/attachments
       - generated-document-data:/var/lib/ptw/generated-documents
+      - data-protection-keys:/var/lib/ptw/data-protection
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -92,3 +94,4 @@ volumes:
   sql-data: {}
   attachment-data: {}
   generated-document-data: {}
+  data-protection-keys: {}

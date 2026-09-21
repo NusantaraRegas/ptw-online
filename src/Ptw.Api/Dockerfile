@@ -8,8 +8,8 @@ USER root
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /var/lib/ptw/attachments /var/lib/ptw/generated-documents \
-    && chown -R "$APP_UID:$APP_UID" /var/lib/ptw/attachments /var/lib/ptw/generated-documents
+    && mkdir -p /var/lib/ptw/attachments /var/lib/ptw/generated-documents /var/lib/ptw/data-protection \
+    && chown -R "$APP_UID:$APP_UID" /var/lib/ptw/attachments /var/lib/ptw/generated-documents /var/lib/ptw/data-protection
 WORKDIR /app
 COPY --from=build /app .
 ENV ASPNETCORE_URLS=http://+:8080

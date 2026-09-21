@@ -281,6 +281,46 @@ public sealed class AuthorizationCommandReceiptRecord
     public DateTimeOffset ExpiresAt { get; set; }
 }
 
+public sealed class UserAccountRecord
+{
+    public string SubjectId { get; set; } = null!;
+    public string UserName { get; set; } = null!;
+    public string NormalizedUserName { get; set; } = null!;
+    public string DisplayName { get; set; } = null!;
+    public string? Position { get; set; }
+    public string? Department { get; set; }
+    public bool IsActive { get; set; }
+    public int Version { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public byte[] RowVersion { get; set; } = [];
+}
+
+public sealed class UserCredentialRecord
+{
+    public string SubjectId { get; set; } = null!;
+    public byte[] PasswordSalt { get; set; } = [];
+    public byte[] PasswordHash { get; set; } = [];
+    public int Iterations { get; set; }
+    public int FailedAttempts { get; set; }
+    public DateTimeOffset? LockedUntil { get; set; }
+    public DateTimeOffset PasswordChangedAt { get; set; }
+}
+
+public sealed class UserSignatureVersionRecord
+{
+    public Guid Id { get; set; }
+    public string SubjectId { get; set; } = null!;
+    public int Version { get; set; }
+    public string MediaType { get; set; } = null!;
+    public byte[] Content { get; set; } = [];
+    public string Sha256 { get; set; } = null!;
+    public string UploadedBy { get; set; } = null!;
+    public DateTimeOffset UploadedAt { get; set; }
+    public bool IsActive { get; set; }
+    public DateTimeOffset? SupersededAt { get; set; }
+}
+
 public sealed class PolicyUatSuiteRecord
 {
     public Guid Id { get; set; }

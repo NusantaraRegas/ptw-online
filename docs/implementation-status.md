@@ -21,6 +21,8 @@ Tanggal pemeriksaan: 21 September 2026. Dokumen requirement v1.7 diperlakukan se
 | Renewal hardcopy | Selesai untuk vertical slice | Sponsor wajib memilih signed field copy exact package/version; Pemilik Wilayah dapat meminta evidence, menolak, atau menyetujui; draft penerus dibuat atomik hanya setelah approval dan kembali ke workflow normal |
 | E-SIMI minimum | Belum tersedia | Draft hanya menyimpan nomor/external ID; verification model/port/endpoint belum ada |
 | Contractor identity/company scope | Belum tersedia | OIDC/BFF dan ExternalUserCompany belum tersedia |
+| User management dan login lokal | Selesai untuk Development | Layar awal login dan route guard tersedia; akun demo memerlukan pilihan eksplisit. User profile/status/password hash/lockout, cookie HTTP-only, dynamic role/location dari assignment effective-dated, dan data-protection volume tersedia; production tetap fail-closed menunggu OPN-007 |
+| Spesimen tanda tangan visual | Partial/Development | Admin dapat mengunggah PNG berversi; exact image/hash dibekukan pada evidence Senior Officer/Manager dan dicetak bersama waktu WIB. Bukan PSrE; Bagian 3/tanda tangan lapangan tetap hardcopy menunggu OPN-008 |
 | P1 operations/report/SLA/notification/admin | Belum dimulai untuk v1.7 | Fondasi outbox dan sebagian admin lama dapat dipakai ulang |
 
 ## Traceability increment ini
@@ -28,6 +30,8 @@ Tanggal pemeriksaan: 21 September 2026. Dokumen requirement v1.7 diperlakukan se
 | Requirement v1.7 | Komponen | Endpoint/data | Migration | Test |
 | --- | --- | --- | --- | --- |
 | Lifecycle 11 status | `Ptw.Domain/PermitStatus.cs`, `Permit.cs` | seluruh explicit command | `AlignPermitLifecycleV16` | `PermitStateMachineTests` |
+| User lokal Development dan role dinamis | `UserAccount`, `UserDirectoryService`, cookie authentication, `UserDirectoryStore` | `/api/v1/auth/login`, `/logout`, `/admin/users`; `/me` mengambil role/scope assignment approved/effective | `AddUserAccountsAndSignatures` | domain user invariant + API create/signature/login/role resolution + Angular interceptor regression |
+| Spesimen signature immutable | `UserSignatureVersion`, `VisualSignatureEvidence`, `PtwFormRenderer` | upload PNG admin; exact version/hash/content disimpan pada workflow/print snapshot dan baris approval Bagian 7 | `AddUserAccountsAndSignatures` | invalid PNG integration + deterministic signed/unsigned printing regression |
 | Tepat satu task HSE | `PermitStore.ApplyWorkflowTasksAsync` | `GET /api/v1/tasks`, `POST /tasks/{id}/validate` | rename legacy HSSE dan rekonsiliasi task | `SubmitCreatesExactlyOneHseTaskAndNoGasValidatorTask` |
 | Sponsor HSE tidak self-validate | `Permit.ValidateSubmission` | task validate | n/a | domain + `SponsorCannotSelfValidateButAnotherHseValidatorCan` |
 | Bagian 5 ditetapkan PIC HSE | `PermitSafetyEquipmentCatalog`, `Permit.ValidateSubmission`, `Permit.ApproveAndIssue`, `PtwFormRenderer*` | `GET /reference-data/safety-equipment`, selector responsif desktop/mobile, evidence HSE, dan immutable print snapshot; approval legacy tanpa pilihan diblokir dan diarahkan ke revisi | n/a (tersimpan dalam JSON evidence/snapshot yang sudah ada) | domain negative/positive, API integration, Angular flow, dan printing regression |
@@ -85,11 +89,11 @@ Penggantinya adalah task HSE tunggal, atomic approve-and-issue, direct suspend, 
 | Pemeriksaan | Hasil |
 | --- | --- |
 | .NET 10 solution build Release | Lulus, 0 warning/0 error |
-| Domain tests | 54/54 lulus |
-| Print/document regression tests | 23/23 lulus |
+| Domain tests | 56/56 lulus |
+| Print/document regression tests | 24/24 lulus |
 | API integration + SQL Server 2025 database test terisolasi | 52/52 lulus |
 | Angular production build | Lulus |
-| Angular tests | 71/71 lulus |
+| Angular tests | 76/76 lulus |
 | Prettier check | Lulus |
 | `dotnet format --verify-no-changes` | Lulus |
 | NuGet vulnerable audit | Lulus; tidak ada package rentan |

@@ -54,7 +54,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         Assert.Equal("READY", snapshot.RenderStatus);
         var document = await db.GeneratedDocuments.AsNoTracking()
             .SingleAsync(x => x.PrintPackageSnapshotId == snapshot.Id);
-        Assert.Equal("ptw-form-renderer/3.2.0", document.RendererVersion);
+        Assert.Equal("ptw-form-renderer/3.3.0", document.RendererVersion);
         // Sensitive downloads are material audit events under BR-AUD-001.
         Assert.True(await db.AuditEvents.AsNoTracking().AnyAsync(
             x => x.PermitId == issued.Id && x.EventType == "print_package_downloaded"));
