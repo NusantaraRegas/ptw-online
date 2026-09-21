@@ -345,6 +345,24 @@ docker compose --env-file .env -f deploy/compose/compose.dev.yaml down
 
 Jangan menambahkan `--volumes` kecuali memang bermaksud menghapus seluruh data development.
 
+### Docker Compose dengan hot reload
+
+`deploy/compose/compose.hotreload.yaml` menjalankan API, Worker, dan Angular dev server langsung dari repository yang di-bind-mount, bukan dari image hasil publish. Perubahan source diterapkan tanpa rebuild image: `dotnet watch` memakai .NET Hot Reload dan me-restart proses otomatis pada *rude edit* (startup, registrasi DI, model EF, atribut routing), sedangkan `ng serve` memakai HMR untuk template/style dan live reload untuk perubahan TypeScript. SDK .NET 10 tidak perlu terpasang di host.
+
+```powershell
+docker compose --env-file .env -f deploy/compose/compose.hotreload.yaml up -d
+docker compose --env-file .env -f deploy/compose/compose.hotreload.yaml logs -f api web
+```
+
+Buka `http://localhost:8080` (dev server, proxy `/api` dan `/health` ke container `api`). API juga dipublikasikan langsung di `http://localhost:5080` (`PTW_API_PORT`). Start pertama lebih lama karena restore NuGet, `npm ci`, dan kompilasi berjalan di dalam container; hasilnya disimpan di named volume (`nuget-packages`, `api-artifacts`, `worker-artifacts`, `web-node-modules`) sehingga start berikutnya cepat. Output build .NET diarahkan ke `artifacts/` melalui `PTW_USE_ARTIFACTS_OUTPUT` (lihat `Directory.Build.props`) agar tidak bertabrakan dengan `bin/obj` host.
+
+Catatan:
+
+- file ini memakai nama project compose yang sama dengan `compose.dev.yaml` sehingga database dan volume lampiran/paket cetak dipakai bersama; hanya satu mode yang berjalan pada satu waktu, dan berpindah mode me-recreate `api`/`web`/`worker` tanpa menyentuh `db`;
+- bind mount dari filesystem Windows tidak meneruskan event inotify ke container Linux, sehingga kedua watcher memakai polling (`DOTNET_USE_POLLING_FILE_WATCHER`, `--poll`; interval frontend diatur `PTW_WEB_POLL_MS`). Bila repository dipindahkan ke filesystem WSL2, set `PTW_DOTNET_POLLING=false` dan naikkan/kosongkan poll untuk menghemat CPU;
+- migration baru tetap dibuat lewat `docker compose ... exec api dotnet tool restore` lalu `docker compose ... exec api dotnet ef migrations add <Nama> --project src/Ptw.Infrastructure --startup-project src/Ptw.Api`;
+- mode ini bukan pengganti `compose.dev.yaml`: aturan cache Nginx, CSP, `404` chunk hilang, dan image runtime unprivileged hanya diverifikasi pada stack production-like tersebut. Container SDK berjalan sebagai root dan hanya untuk development lokal.
+
 ### Development lokal
 
 Backend memerlukan SDK sesuai [global.json](global.json):

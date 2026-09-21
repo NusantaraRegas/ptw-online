@@ -1,0 +1,148 @@
+# Hot-reload development stack.
+#
+# Runs the API, the Worker, and the Angular dev server straight from the bind-mounted repository
+# instead of from published images, so a source edit is picked up without rebuilding any image:
+#   - .NET: `dotnet watch` applies Hot Reload in place and restarts the process on rude edits;
+#   - Angular: `ng serve` applies HMR for templates/styles and live-reloads on TypeScript edits.
+#
+# This file shares the compose project name with compose.dev.yaml on purpose so the SQL Server
+# container and the attachment / generated-document volumes are the same in both modes. Only one
+# mode can run at a time; switching mode recreates api/web/worker and keeps db.
+#
+# It is a development loop only. It is not a substitute for compose.dev.yaml, which is the
+# production-like stack (Nginx caching rules, CSP, missing-chunk 404, unprivileged runtime images)
+# that quality gates are verified against.
+name: nr-ptw-dev
+
+x-dotnet-watch: &dotnet-watch
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  working_dir: /source
+  environment: &dotnet-watch-env
+    ConnectionStrings__PtwDb: Server=db;Database=PtwOnline;User Id=sa;Password=${PTW_SQL_BOOTSTRAP_PASSWORD:?copy .env.example to .env and set a development password};TrustServerCertificate=True;Encrypt=True
+    # Route bin/obj into artifacts/ so a named volume can shadow it (see Directory.Build.props).
+    PTW_USE_ARTIFACTS_OUTPUT: "true"
+    # Windows bind mounts do not deliver inotify events into Linux containers; poll instead.
+    DOTNET_USE_POLLING_FILE_WATCHER: "${PTW_DOTNET_POLLING:-true}"
+    # Edits Hot Reload cannot apply (startup, DI, EF model, attributes) restart without a prompt.
+    DOTNET_WATCH_RESTART_ON_RUDE_EDIT: "true"
+    DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    DOTNET_NOLOGO: "1"
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  db:
+    extends:
+      file: compose.dev.yaml
+      service: db
+
+  api:
+    <<: *dotnet-watch
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        dotnet run --project src/Ptw.Api --no-launch-profile -- --migrate
+        exec dotnet watch --project src/Ptw.Api --non-interactive run --no-launch-profile
+    environment:
+      <<: *dotnet-watch-env
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      Attachments__StoragePath: /var/lib/ptw/attachments
+      GeneratedDocuments__StoragePath: /var/lib/ptw/generated-documents
+    volumes:
+      - ../..:/source
+      - api-artifacts:/source/artifacts
+      - nuget-packages:/root/.nuget/packages
+      - dotnet-tools:/root/.dotnet
+      - attachment-data:/var/lib/ptw/attachments
+      - generated-document-data:/var/lib/ptw/generated-documents
+    ports:
+      - "${PTW_API_PORT:-5080}:8080"
+    networks: [frontend, backend]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      # First start restores NuGet packages and compiles the solution inside the container.
+      start_period: 600s
+
+  worker:
+    <<: *dotnet-watch
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        exec dotnet watch --project src/Ptw.Worker --non-interactive run --no-launch-profile
+    environment:
+      <<: *dotnet-watch-env
+      DOTNET_ENVIRONMENT: Development
+      GeneratedDocuments__StoragePath: /var/lib/ptw/generated-documents
+    volumes:
+      - ../..:/source
+      # Separate from api-artifacts: both services compile the shared projects and must not race.
+      - worker-artifacts:/source/artifacts
+      - nuget-packages:/root/.nuget/packages
+      - dotnet-tools:/root/.dotnet
+      - generated-document-data:/var/lib/ptw/generated-documents
+    depends_on:
+      api:
+        condition: service_healthy
+    # The SDK container restores NuGet packages itself, so unlike the published Worker image it
+    # needs outbound access; `backend` alone is internal-only.
+    networks: [frontend, backend]
+
+  web:
+    image: node:22-alpine
+    working_dir: /source
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        # node_modules lives in a named volume (Linux binaries, native speed). Reinstall only when
+        # the lockfile changed since the last install, so restarts stay fast.
+        # `$$` keeps these shell expansions out of compose's own variable interpolation.
+        stamp=node_modules/.ptw-lockfile-sha256
+        current=$$(sha256sum package-lock.json | cut -d' ' -f1)
+        if [ ! -f "$$stamp" ] || [ "$$(cat "$$stamp")" != "$$current" ]; then
+          npm ci --no-audit --no-fund
+          echo "$$current" > "$$stamp"
+        fi
+        exec npx ng serve --host 0.0.0.0 --port 8080 --poll "$${PTW_WEB_POLL_MS:-1000}" --proxy-config proxy.docker.json
+    environment:
+      NG_CLI_ANALYTICS: "false"
+      PTW_WEB_POLL_MS: "${PTW_WEB_POLL_MS:-1000}"
+    volumes:
+      - ../../src/web:/source
+      - web-node-modules:/source/node_modules
+      - web-angular-cache:/source/.angular
+    ports:
+      - "${PTW_HTTP_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [frontend, backend]
+    restart: unless-stopped
+
+networks:
+  frontend: {}
+  backend:
+    internal: true
+
+volumes:
+  sql-data: {}
+  attachment-data: {}
+  generated-document-data: {}
+  api-artifacts: {}
+  worker-artifacts: {}
+  nuget-packages: {}
+  dotnet-tools: {}
+  web-node-modules: {}
+  web-angular-cache: {}

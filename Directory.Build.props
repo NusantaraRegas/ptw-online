@@ -7,4 +7,15 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
   </PropertyGroup>
+
+  <!--
+    The hot-reload compose stack (deploy/compose/compose.hotreload.yaml) bind-mounts the repository
+    into Linux SDK containers while the host may hold Windows-built bin/obj output. Routing every
+    project's output into a single artifacts/ folder lets one named volume shadow it per service so
+    host and container builds, and the api and worker builds of shared projects, never collide.
+    UseArtifactsOutput has to be decided here, before restore, which is why it is not a CLI flag.
+  -->
+  <PropertyGroup Condition="'$(PTW_USE_ARTIFACTS_OUTPUT)' == 'true'">
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+  </PropertyGroup>
 </Project>

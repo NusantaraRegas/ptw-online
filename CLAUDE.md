@@ -37,7 +37,7 @@ src/Ptw.Infrastructure  EF Core, storage, audit, outbox, Printing/ (renderer + t
 src/Ptw.Api             mapping HTTP, DevelopmentAuthenticationHandler, ApiExceptionHandler
 src/Ptw.Worker          job idempotent dan bounded
 src/web                 Angular: core/*-api.ts (HTTP) + features/* (komponen)
-deploy/compose, deploy/nginx  compose.dev.yaml dan reverse proxy (cache index.html, 404 chunk hilang)
+deploy/compose, deploy/nginx  compose.dev.yaml (production-like), compose.hotreload.yaml (bind mount + dotnet watch/ng serve), reverse proxy (cache index.html, 404 chunk hilang)
 tests/Ptw.Domain.Tests           unit state machine
 tests/Ptw.Api.IntegrationTests   end-to-end via PtwApiFactory + Testcontainers
 tests/Ptw.Printing.Tests         regresi layout dokumen (akses internal via InternalsVisibleTo)
