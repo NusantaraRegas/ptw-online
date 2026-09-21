@@ -60,10 +60,38 @@ internal sealed partial class PtwFormRenderer
             preferredSize: 3.8,
             minimumSize: 2.6);
 
-        OverlayText(canvas, layout.SponsorName, draft.SponsorId, 4.0, clearBackground: true);
+        var sponsorName = snapshot.Sponsor?.ActorName ?? draft.SponsorId;
+        OverlayFittedText(canvas, layout.SponsorName, sponsorName, 4.0, 2.8);
+        OverlayFittedText(
+            canvas,
+            layout.SponsorPosition,
+            snapshot.Sponsor?.ActorPosition is { } position ? $"Posisi : {position}" : null,
+            3.8,
+            2.6);
+        OverlayFittedText(
+            canvas,
+            layout.SponsorDepartment,
+            snapshot.Sponsor?.Department is { } department ? $"Dept : {department}" : null,
+            3.8,
+            2.6);
         OverlayText(canvas, layout.Company, draft.Company, 4.0, clearBackground: true);
         OverlayText(canvas, layout.PerformingAuthority, draft.PerformingAuthority, 3.8, clearBackground: true);
-        OverlayText(canvas, layout.SponsorRole, draft.SponsorId, 3.8, clearBackground: true);
+        OverlayFittedText(canvas, layout.SponsorRole, sponsorName, 3.8, 2.6);
+        if (snapshot.Sponsor is not null)
+        {
+            _ = TryOverlaySignature(canvas, layout.SponsorSignature, snapshot.Sponsor.Signature);
+            canvas.Fill(
+                Pt(layout.SponsorSignedAt.X - 1),
+                Pt(layout.SponsorSignedAt.Y - 1),
+                Pt(layout.SponsorSignedAt.Width + 2),
+                Pt(layout.SponsorSignedAt.Height + 2),
+                XColors.White);
+            OverlayText(
+                canvas,
+                layout.SponsorSignedAt,
+                $"Tanggal : {FormCanvas.Wib(snapshot.Sponsor.SubmittedAt, "dd/MM/yy HH:mm")}",
+                3.5);
+        }
 
         var selectedDocuments = BuildDocumentSelection(snapshot);
         var selectedSafetyEquipment = SelectedSafetyEquipmentLabels(snapshot);
@@ -464,9 +492,13 @@ internal sealed record TemplateOverlayLayout(
     PdfRect Description,
     PdfRect AdditionalHazardReference,
     PdfRect SponsorName,
+    PdfRect SponsorPosition,
+    PdfRect SponsorDepartment,
     PdfRect Company,
     PdfRect PerformingAuthority,
     PdfRect SponsorRole,
+    PdfRect SponsorSignature,
+    PdfRect SponsorSignedAt,
     IReadOnlyList<double> WorkTypeCheckXs,
     IReadOnlyList<double> WorkTypeCheckYs,
     PdfRect OtherWorkTypeDescription,
@@ -512,9 +544,13 @@ internal static class TemplateOverlayCatalog
         new(125, 302, 645, 18),
         new(223, 331, 549, 7),
         new(116, 354, 177, 7),
+        new(74, 363, 82, 7),
+        new(156, 363, 137, 7),
         new(162, 372, 131, 7),
         new(123, 412, 169, 7),
         new(119, 450, 174, 7),
+        new(110, 421, 68, 27),
+        new(187, 440, 106, 7),
         [87.3, 217.6, 309.6, 383.4, 462.9],
         [231.8, 244.2, 256.2, 267.5],
         new(505, 244, 263, 8),
@@ -560,9 +596,13 @@ internal static class TemplateOverlayCatalog
         new(110, 300, 634, 18),
         new(207, 329, 537, 7),
         new(100, 352, 195, 7),
+        new(58, 361, 83, 7),
+        new(140, 361, 155, 7),
         new(146, 370, 149, 7),
         new(107, 410, 188, 7),
         new(103, 448, 192, 7),
+        new(94, 419, 69, 27),
+        new(171, 438, 124, 7),
         [71.4, 201.7, 300.6, 381.5, 475.9, 556.5],
         [229.4, 241.8, 253.8, 265.1],
         new(602, 253.5, 139, 8),
@@ -608,9 +648,13 @@ internal static class TemplateOverlayCatalog
         new(76, 298, 682, 18),
         new(162, 325, 597, 7),
         new(67, 346, 187, 7),
+        new(29, 355, 76, 7),
+        new(104, 355, 150, 7),
         new(108, 364, 146, 7),
         new(74, 401, 180, 7),
         new(70, 436, 184, 7),
+        new(66, 408, 63, 26),
+        new(135, 427, 119, 7),
         [41.5, 163.8, 256.7, 340.6, 440.2, 526.3],
         [227.5, 239.2, 250.5, 263.2],
         new(564, 238.8, 190, 8),

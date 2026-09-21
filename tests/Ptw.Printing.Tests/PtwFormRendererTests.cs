@@ -12,6 +12,8 @@ namespace Ptw.Printing.Tests;
 public sealed class PtwFormRendererTests
 {
     private static readonly DateTimeOffset IssuedAt = new(2026, 9, 15, 2, 30, 0, TimeSpan.Zero);
+    private static readonly byte[] SignaturePng = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAKAAAAA8CAYAAADha7EVAAACxElEQVR4nO2cQY6DMAxFaTQXyL1m07P0HD1LN3OvHKGjLpAQgpIQ2z82/0mommmxifPjxIH29n6/J0JQJJhnQihAgoYCJFAoQAKFAiRQKEAChQIkUChAAoUCJFAoQAKFAiRQ3Aow35/vb38TH/xMjqHo/JMiCY+C9IdLAZI4uBMgs1wsUrTiIJJAc6C2mAhwDtjndT407C8pr8dtCkhexHL9v0iYTMFagYsuvpnlYI4mQjEBagemxX60ToqMuyJkK/tFyoS5YvBEGmDJQ9AiBfxMO0ugAWaSAT8B0wxajW0N0WoWBLlRfFEGZYqy9tPOEusKv+Xaam1fZZmhmgG/BU2iwxAd8e26kRV+DpAFU4Tsp3W+lI1W+2VHfBGzYLLeFO7p0CP70h1U28azbcoOBoibKVh61KID2zrAWq/3bMVbgmXB5EUcloE/El9vZdq73VIU1tauM2CrOI4CJhlQicy01b6zItTa68tORZgsGtob3Jbze3y1TrtSWbmcsDPSVNwj/u5H8i0W/hacLao+n9l6eKC2WCmC8dvzO3L/NGVAxNQoEVBE1rZ4LrIYiG19SPuoFmDv6LXcWO1dk7aef7QetLzHmzvvuWuKTXQKtliDWPiQFP2WLW3xlR2/yP1YcQFqjYblmsXijkPN9kVPcGvFYDF1loWPUcS2xa3mR8p7p6gaW5I+jnxtvSflc8+2tI81Xu+zH2ZAi7XACF9cGmlbw4oR2nyYAS0yEyITafg78o3cIikDiK25Cva6u966j6fpe/2qSVn4Wh/ToKQrVr5WvizFNzOy2JoEqJn9RgjSCNdAGqpg1LN2Gr4oPmdTcIQOQ0yHJPD3glug+MYFJkBElUicrgEJ0eISUzC50G9E5/vzT9omGZPyevz22mAGJFC4BiRQmAEJFAqQQKEACRQKkEChAAkUCpBAoQAJFAqQTEj+AcBfDu2Urk5nAAAAAElFTkSuQmCC");
 
     [Theory]
     [InlineData(PermitClass.HotWork, "FM-001-B-002-NR-B220")]
@@ -84,14 +86,12 @@ public sealed class PtwFormRendererTests
     {
         var renderer = new PtwFormRenderer();
         var snapshot = Snapshot(PermitClass.HotWork);
-        var png = Convert.FromBase64String(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
         var signature = new VisualSignatureEvidence(
             Guid.Parse("01994DCE-0000-7000-8000-000000000001"),
             1,
             "image/png",
-            png,
-            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(png)));
+            SignaturePng,
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(SignaturePng)));
         var signed = snapshot with
         {
             AreaOperationsReview = snapshot.AreaOperationsReview! with { Signature = signature },
@@ -104,6 +104,20 @@ public sealed class PtwFormRendererTests
 
         Assert.Equal(Canonicalise(first.Content), Canonicalise(second.Content));
         Assert.NotEqual(Canonicalise(first.Content), Canonicalise(unsigned.Content));
+    }
+
+    [Fact]
+    public void SponsorProfileSignatureAndSubmissionDateChangeSection3Overlay()
+    {
+        var renderer = new PtwFormRenderer();
+        var populated = Snapshot(PermitClass.HotWork);
+        var withoutSponsorEvidence = populated with { Sponsor = null };
+
+        var signed = renderer.Render(new(populated, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var legacy = renderer.Render(new(withoutSponsorEvidence, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+
+        Assert.NotEqual(Canonicalise(signed.Content), Canonicalise(legacy.Content));
+        DumpForVisualReview(signed.Content, "SPONSOR-EVIDENCE");
     }
 
     [Fact]
@@ -306,7 +320,19 @@ public sealed class PtwFormRendererTests
             ],
             "Verifikasi valve lokal sebelum pekerjaan dimulai",
             "Kondisi operasi Bagian 7 telah ditinjau.",
-            IssuedAt.AddMinutes(-15)));
+            IssuedAt.AddMinutes(-15)),
+        Sponsor: new SponsorPrintEvidence(
+            "sponsor.demo",
+            "Rina Puspitasari",
+            "Officer Permit to Work",
+            "Operasi",
+            IssuedAt.AddHours(-3),
+            new VisualSignatureEvidence(
+                Guid.Parse("01994DCE-0000-7000-8000-000000000002"),
+                2,
+                "image/png",
+                SignaturePng,
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(SignaturePng)))));
 
     private static PermitDraft Draft(PermitClass permitClass) => new(
         "Penggantian gasket pada line 8 inch",

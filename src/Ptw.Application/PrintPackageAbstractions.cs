@@ -12,6 +12,14 @@ public sealed record SupportingDocumentEvidenceSnapshot(
     string? DocumentRevision,
     DateTimeOffset? DocumentDate);
 
+public sealed record SponsorPrintEvidence(
+    string ActorId,
+    string ActorName,
+    string? ActorPosition,
+    string? Department,
+    DateTimeOffset SubmittedAt,
+    VisualSignatureEvidence? Signature);
+
 /// <summary>
 /// Canonical content of an immutable <c>doc.PrintPackageSnapshot</c>. The renderer consumes only this
 /// payload, never live permit tables, so a retry always reproduces the approved document (FSD ADR-010).
@@ -29,7 +37,8 @@ public sealed record PrintPackageSnapshotPayload(
     string CampaignAssetVersion,
     DateTimeOffset CreatedAt,
     IReadOnlyList<SupportingDocumentEvidenceSnapshot>? SupportingDocuments = null,
-    AreaOperationsReviewEvidence? AreaOperationsReview = null);
+    AreaOperationsReviewEvidence? AreaOperationsReview = null,
+    SponsorPrintEvidence? Sponsor = null);
 
 public sealed record PrintPackageDocumentEntry(
     Guid PrintPackageId,

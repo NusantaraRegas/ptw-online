@@ -19,7 +19,8 @@ public sealed record PermitValidationEvidence(
     string ActorId,
     string Statement,
     DateTimeOffset ValidatedAt,
-    IReadOnlyList<string>? SafetyEquipmentCodes = null);
+    IReadOnlyList<string>? SafetyEquipmentCodes = null,
+    string? ActorName = null);
 
 public sealed record AreaOperationsReviewEvidence(
     string ActorId,

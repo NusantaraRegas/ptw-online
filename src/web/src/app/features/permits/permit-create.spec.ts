@@ -61,6 +61,8 @@ describe('PermitCreate', () => {
     expect(mandatoryCards.length).toBe(5);
     expect(fixture.nativeElement.textContent).toContain('BPJS TK');
     expect(fixture.nativeElement.textContent).toContain('E-SIMI');
+    expect(fixture.nativeElement.textContent).not.toContain('Deklarasi SIMOPS');
+    expect(fixture.nativeElement.querySelector('[formControlName="simopsDeclaration"]')).toBeNull();
 
     const additionalFieldset = Array.from<HTMLElement>(
       fixture.nativeElement.querySelectorAll('fieldset'),

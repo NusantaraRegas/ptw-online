@@ -19,6 +19,7 @@ describe('PermitValidationProgress', () => {
         label: 'Validasi HSE',
         completed: true,
         actorId: 'hsse.validator.demo',
+        actorName: 'Darsono',
         statement: 'Sesuai.',
         completedAt: '2026-09-02T00:00:00Z',
         safetyEquipmentCodes: ['SAFETY_FIRE_EXTINGUISHER'],
@@ -37,6 +38,7 @@ describe('PermitValidationProgress', () => {
       approval: {
         completed: true,
         actorId: 'area.owner.orf.demo',
+        actorName: 'Yosep Ismail Zulkarnain',
         actorPosition: 'Manager',
         capacity: 'MANAGER',
         principalManagerUserId: 'area.owner.orf.demo',
@@ -76,9 +78,12 @@ describe('PermitValidationProgress', () => {
 
     const text = fixture.nativeElement.textContent.replace(/\s+/g, ' ').trim();
     expect(text).toContain('3/3 selesai');
+    expect(text).toContain('Darsono');
     expect(text).toContain('Senior Officer ORF Demo');
     expect(text).not.toContain('Distribusi Gas & Pengelolaan ORF');
-    expect(text).toContain('area.owner.orf.demo');
+    expect(text).toContain('Yosep Ismail Zulkarnain');
+    expect(text).not.toContain('hsse.validator.demo');
+    expect(text).not.toContain('area.owner.orf.demo');
     expect(text).toContain('Diterbitkan');
   });
 });

@@ -139,7 +139,11 @@ export class PermitDetail {
   protected readonly canManageAttachments = computed(
     () => this.canManageDraftAttachments() || this.canUploadFieldCopy(),
   );
-  protected readonly fieldCopyOnly = computed(() => !this.canEdit());
+  protected readonly fieldCopyOnly = computed(() =>
+    ['ISSUED', 'SUSPENDED', 'EXPIRED', 'CLOSURE_REQUESTED', 'CLOSED'].includes(
+      this.permit()?.status ?? '',
+    ),
+  );
   protected readonly fieldCopyUploadPackages = computed(() => {
     const closurePackageId = this.permit()?.workflow.closure.printPackageId;
     if (this.closureReplacementPending() && closurePackageId) {
@@ -292,7 +296,6 @@ export class PermitDetail {
     workOrderNumber: ['', Validators.maxLength(60)],
     additionalHazardReference: ['', Validators.maxLength(160)],
     plantArea: ['', Validators.required],
-    simopsDeclaration: [''],
     jsaDocumentNumber: ['', Validators.required],
     jsaRevision: ['', Validators.required],
     jsaDate: ['', Validators.required],
@@ -425,7 +428,6 @@ export class PermitDetail {
       workOrderNumber: permit.draft.workOrderNumber ?? '',
       additionalHazardReference: permit.draft.additionalHazardReference ?? '',
       plantArea: permit.draft.plantArea ?? '',
-      simopsDeclaration: permit.draft.simopsDeclaration ?? '',
       jsaDocumentNumber: permit.draft.jsaDocumentNumber ?? '',
       jsaRevision: permit.draft.jsaRevision ?? '',
       jsaDate: permit.draft.jsaDate?.slice(0, 10) ?? '',
@@ -475,7 +477,9 @@ export class PermitDetail {
       additionalHazardReference: value.additionalHazardReference.trim() || null,
       plantArea: value.plantArea.trim() || null,
       clsrApplicable: false,
-      simopsDeclaration: value.simopsDeclaration || null,
+      // SIMOPS is not authored in the current controlled template. Preserve legacy data until
+      // the API contract is retired through an explicit compatibility change.
+      simopsDeclaration: permit.draft.simopsDeclaration ?? null,
       isolationPrecautionCodes: [],
       jsaDocumentNumber: value.jsaDocumentNumber || null,
       jsaRevision: value.jsaRevision || null,

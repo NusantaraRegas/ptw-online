@@ -381,7 +381,8 @@ public sealed class Permit
         string actorId,
         string statement,
         IReadOnlyList<string> safetyEquipmentCodes,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? actorName = null)
     {
         EnsureStatus(PermitStatus.UnderValidation);
         EnsureOtherWorkTypeDetailIsComplete(Draft);
@@ -400,10 +401,12 @@ public sealed class Permit
             actorId.Trim(),
             statement.Trim(),
             now.ToUniversalTime(),
-            selectedSafetyEquipment);
+            selectedSafetyEquipment,
+            NormalizeOptional(actorName));
         MoveTo(PermitStatus.AwaitingAreaApproval, "hse_validation_completed", now, new
         {
             HseValidation.ActorId,
+            HseValidation.ActorName,
             HseValidation.Statement,
             HseValidation.SafetyEquipmentCodes,
             PermitVersion = Version

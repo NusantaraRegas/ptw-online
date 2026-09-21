@@ -1,7 +1,7 @@
 import { Component, computed, DestroyRef, HostListener, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { filter } from 'rxjs';
+import { catchError, EMPTY, filter, interval, switchMap } from 'rxjs';
 import {
   clearClientAuthMode,
   CurrentIdentity,
@@ -84,6 +84,15 @@ export class App {
           this.pendingTasks.set(page.items);
           this.pendingTaskCount.set(page.count);
         },
+      });
+    interval(30_000)
+      .pipe(
+        switchMap(() => this.permitApi.listTasks().pipe(catchError(() => EMPTY))),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((page) => {
+        this.pendingTasks.set(page.items);
+        this.pendingTaskCount.set(page.count);
       });
   }
 

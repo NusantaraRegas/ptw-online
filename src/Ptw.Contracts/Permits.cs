@@ -136,6 +136,7 @@ public sealed record PermitValidationResponse(
     string Label,
     bool Completed,
     string? ActorId,
+    string? ActorName,
     string? Statement,
     DateTimeOffset? CompletedAt,
     IReadOnlyList<string> SafetyEquipmentCodes);

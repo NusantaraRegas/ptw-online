@@ -41,6 +41,7 @@ export class TaskList {
         AREA_OPERATION_REVIEW: 'BAGIAN 7',
         AREA_APPROVE_AND_ISSUE: 'TERBIT',
         AREA_CLOSE_VERIFICATION: 'TUTUP',
+        SPONSOR_REVISION: 'REVISI',
       }[type] ?? 'PTW'
     );
   }

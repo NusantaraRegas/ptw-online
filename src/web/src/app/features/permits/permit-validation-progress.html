@@ -30,7 +30,7 @@
           </span>
         </div>
         <span class="actor-label">Validator</span>
-        <span class="actor-id">{{ workflow().hse.actorId || 'Belum ditentukan' }}</span>
+        <span class="actor-id">{{ workflow().hse.actorName || 'Belum ditentukan' }}</span>
         @if (workflow().hse.completedAt) {
           <time [attr.datetime]="workflow().hse.completedAt">
             {{ workflow().hse.completedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
@@ -81,9 +81,7 @@
         <span>Manager pemilik area</span>
         <span class="approval-status">{{ approvalState() }}</span>
       </div>
-      <strong>{{
-        workflow().approval.actorName || workflow().approval.actorId || 'Belum ada approver'
-      }}</strong>
+      <strong>{{ workflow().approval.actorName || 'Belum ada approver' }}</strong>
       <span class="approval-role">Approval dan penerbitan atomik</span>
       @if (workflow().approval.approvedAt) {
         <time [attr.datetime]="workflow().approval.approvedAt">

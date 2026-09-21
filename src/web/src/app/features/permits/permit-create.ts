@@ -208,9 +208,6 @@ function localDate(hoursFromNow: number): string {
             placeholder="Informasi bahaya tambahan yang belum tercantum pada permit"
           ></textarea>
         </label>
-        <label class="wide"
-          >Deklarasi SIMOPS<textarea formControlName="simopsDeclaration" rows="2"></textarea>
-        </label>
         <label>Nomor JSA<input formControlName="jsaDocumentNumber" /></label>
         <label>Revisi JSA<input formControlName="jsaRevision" /></label>
         <label>Tanggal JSA<input type="date" formControlName="jsaDate" /></label>
@@ -453,7 +450,6 @@ export class PermitCreate {
     workOrderNumber: ['', Validators.maxLength(60)],
     additionalHazardReference: ['', Validators.maxLength(160)],
     plantArea: ['', Validators.required],
-    simopsDeclaration: [''],
     jsaDocumentNumber: ['', Validators.required],
     jsaRevision: ['', Validators.required],
     jsaDate: ['', Validators.required],
@@ -672,7 +668,6 @@ export class PermitCreate {
       additionalHazardReference: value.additionalHazardReference.trim() || null,
       plantArea: value.plantArea.trim() || null,
       clsrApplicable: false,
-      simopsDeclaration: value.simopsDeclaration || null,
       isolationPrecautionCodes: [],
       jsaDocumentNumber: value.jsaDocumentNumber || null,
       jsaRevision: value.jsaRevision || null,

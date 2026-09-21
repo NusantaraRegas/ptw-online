@@ -89,7 +89,8 @@ describe('PermitAttachments', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('risk-treatment.pdf');
-    expect(fixture.nativeElement.textContent).toContain('Dokumen dasar wajib');
+    expect(fixture.nativeElement.textContent).toContain('JSA terkontrol');
+    expect(fixture.nativeElement.textContent).toContain('Dokumen wajib pengajuan');
     expect(fixture.nativeElement.textContent).toContain('BPJS TK');
     expect(fixture.nativeElement.textContent).toContain('Dokumen pendukung');
     expect(fixture.nativeElement.textContent).not.toContain('Sedang diperiksa');
@@ -130,9 +131,45 @@ describe('PermitAttachments', () => {
     expect(fixture.nativeElement.textContent).toContain('Belum ada lampiran');
     expect(fixture.nativeElement.textContent).toContain('Tambah lampiran');
     expect((fixture.nativeElement.querySelector('select') as HTMLSelectElement).value).toBe('JSA');
+    expect(fixture.nativeElement.textContent).not.toContain('Salinan lapangan bertanda tangan');
     const metadataValues = Array.from<HTMLInputElement>(
       fixture.nativeElement.querySelectorAll('.upload-metadata input'),
     ).map((input) => input.value);
     expect(metadataValues).toEqual(['JSA-001', '2', '2026-09-16']);
+  });
+
+  it('only offers signed field copy upload in the post-issuance field-copy mode', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PermitAttachments],
+      providers: [
+        {
+          provide: PermitAttachmentApi,
+          useValue: { list: () => of([]) },
+        },
+        {
+          provide: PermitApi,
+          useValue: {
+            listSupportingDocuments: () => of(supportingDocuments),
+            listMandatoryDocuments: () => of(mandatoryDocuments),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(PermitAttachments);
+    fixture.componentRef.setInput('permitId', 'permit-id');
+    fixture.componentRef.setInput('eTag', '"etag-value"');
+    fixture.componentRef.setInput('canManage', true);
+    fixture.componentRef.setInput('fieldCopyOnly', true);
+    fixture.componentRef.setInput('printPackages', [{ id: 'print-package-id', permitVersion: 7 }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Dokumen lapangan');
+    expect(fixture.nativeElement.textContent).toContain('Unggah salinan bertanda tangan');
+    expect(fixture.nativeElement.textContent).not.toContain('Kategori lampiran');
+    expect(fixture.nativeElement.textContent).not.toContain('Dokumen wajib pengajuan');
+    expect((fixture.nativeElement.querySelector('select') as HTMLSelectElement).value).toBe(
+      'print-package-id',
+    );
   });
 });

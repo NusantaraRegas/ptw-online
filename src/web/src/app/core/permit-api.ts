@@ -114,6 +114,7 @@ export interface PermitValidation {
   label: string;
   completed: boolean;
   actorId: string | null;
+  actorName: string | null;
   statement: string | null;
   completedAt: string | null;
   safetyEquipmentCodes: string[];

@@ -63,8 +63,9 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 - Gunakan `datetimeoffset`, `decimal` untuk gas readings, foreign keys/check constraints, dan index scoped yang sesuai.
 - External HTTP call tidak boleh dilakukan di dalam database transaction.
 - Migration harus additive/expand-contract. Jangan memakai `EnsureCreated` atau destructive migration satu langkah.
-- File EF migration adalah generated code; ubah mapping/model lalu generate migration baru.
+- File EF migration adalah generated code; ubah mapping/model lalu generate migration baru. Migration rekonsiliasi data boleh memakai `migrationBuilder.Sql` hanya untuk insert/backfill additive yang menyertakan audit event dan outbox message; `Down` tidak menulis ulang riwayat.
 - Task workflow terikat pada exact `PermitVersion`; command task memakai `taskId`, bukan permit ID. Revisi harus membatalkan evidence/task lama, dan submit ulang menaikkan `PermitVersion` (termasuk saat draft tidak berubah) lalu membuat task baru untuk versi baru; task lama tetap `CANCELLED` sebagai riwayat.
+- Task dengan `AssignedActorId` terisi terlihat berdasarkan identitas actor tanpa filter role; task pool tetap difilter role dan scope lokasi.
 - `PrintPackageSnapshot` dan paket cetak `READY` bersifat immutable. Perubahan renderer tidak boleh merender ulang atau mengganti paket lama in-place; replacement kelak harus command eksplisit dengan lineage dan audit.
 
 ## Authorization dan security
@@ -76,7 +77,7 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 - Separation of duty flow penerbitan harus mempertahankan actor berbeda untuk Sponsor, PIC HSE, reviewer SO/Officer Pemilik Wilayah Bagian 7, dan Manager penerbit. Acting Manager tetap fail-closed sampai assignment v1.7 lengkap dan disahkan.
 - Akun lokal, login cookie HTTP-only, dan `UserAuthorizationApproval:AllowAdministratorSelfApproval=true` hanya untuk environment `Development`. Role dan scope dihitung ulang dari assignment approved/effective pada setiap request; cookie dan klien bukan authority.
 - Assignment role langsung menurunkan action code dan kompetensi dari `UserAuthorizationRoleProfiles` di server. Jangan menerima action code dari klien, dan jangan memperlakukan profil `appsettings.Development.json` sebagai matriks OPN-002 atau menyalinnya ke production.
-- Nama dan jabatan actor pada evidence workflow dan paket cetak diambil dari profil akun aktif di server, bukan dari payload klien.
+- Nama dan jabatan actor pada evidence workflow dan paket cetak diambil dari profil akun aktif di server, bukan dari payload klien. Username/Subject ID tidak boleh menjadi fallback nama di UI atau evidence; evidence lama tanpa nama diperkaya dari direktori pengguna saat dibaca.
 - Jangan commit `.env`, password, token, certificate, connection string ber-secret, PII fixture nyata, atau isi attachment.
 - Jangan log token, secret, document content, atau PII yang tidak diperlukan. Pertahankan correlation ID dan identifier aman.
 - High/critical dependency vulnerability harus ditutup atau memblokir delivery; jangan menonaktifkan NuGet/npm audit untuk membuat build hijau.
@@ -102,6 +103,7 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 - Konfigurasi dasar/produksi tidak merilis lokasi apa pun dan harus fail-closed sampai LocationRelease, assignment effective-dated, dan ConfigurationBundle disahkan. Konfigurasi `Development` saat ini hanya membuka `ORF`, `SITE_OFFICE`, dan `WATER_BASED` untuk pengujian routing; jangan memperlakukannya sebagai pengesahan rollout atau menyalinnya ke produksi.
 - Setelah Sponsor submit, sistem membuat tepat satu task `HSE_VALIDATION` pada PermitVersion yang sama. Distribusi Gas bukan validator.
 - PIC HSE dapat memvalidasi, meminta revisi, menolak, atau mengeskalasi dengan catatan; Sponsor tidak boleh memvalidasi PTW miliknya sendiri.
+- Permintaan revisi membatalkan task pending dan membuat tepat satu task `SPONSOR_REVISION` yang assigned langsung kepada Sponsor PTW. Task itu notifikasi, bukan status lifecycle: mengikuti versi draft selama perbaikan, terlihat berdasarkan identitas actor walaupun role berubah, selesai otomatis saat submit ulang, dan dibatalkan saat cancel/reject.
 - Setelah validasi HSE, sistem membuat tepat satu task `AREA_OPERATION_REVIEW` pada PermitVersion yang sama untuk pool reviewer SO/Officer pemilik wilayah (role `AreaOwnerSeniorOfficer`; kode dipertahankan untuk kompatibilitas data). Pemegang assignment yang scope-nya cocok dan pertama menyelesaikan task menetapkan checklist kondisi operasi Bagian 7; reviewer berikutnya tidak lagi menemukan task tersebut. Sponsor dan validator HSE tidak boleh menjalankan review ini.
 - Setelah review Bagian 7 selesai, sistem menyimpan decision/evidence immutable dan membuat tepat satu task `AREA_APPROVE_AND_ISSUE`. Manager pemilik area yang scope-nya cocok dan berbeda dari Sponsor, validator HSE, serta reviewer SO/Officer menjalankan satu command atomik approval dan penerbitan. Pengganti resmi belum boleh dipakai sebelum model assignment v1.7 lengkap tersedia.
 - Suspend berlaku langsung. Gas test, readiness, revalidasi, completion, inspeksi/restorasi, handback, dan tanda tangan lapangan tidak dimodelkan sebagai active digital work period pada MVP.
@@ -109,12 +111,13 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 - Renewal tidak memperpanjang atau mengubah permit lama. Sponsor mengajukan signed field copy exact package/version; Pemilik Wilayah meninjau task `AREA_RENEWAL_REVIEW`, dan draft penerus baru dibuat atomik hanya setelah approval lalu mengikuti workflow normal dari awal.
 - Klasifikasi header dikontrol server: HOT memilih satu atau lebih `Api Terbuka`/`Percikan Api`, COLD tepat satu `Low Risk`/`High Risk`, dan CSE tidak memiliki pilihan tambahan.
 - Bagian 1 memakai work type multi-select dari katalog; opsi `Lain-lain` mewajibkan detail maksimum 80 karakter yang ikut tercetak.
+- Deklarasi SIMOPS tidak ditampilkan pada form Sponsor karena tidak ada pada template terkontrol; field API `simopsDeclaration` dipertahankan untuk kompatibilitas sampai dihapus lewat perubahan kontrak eksplisit.
 - Bagian 4 memakai 15 pilihan dokumen sesuai template: JSA wajib, lainnya opsional. Setiap pilihan harus memiliki lampiran bertaut (`supportingDocumentCode`) sebelum submit, dan metadata lampiran JSA harus cocok dengan nomor/revisi/tanggal JSA pada draft. Server memvalidasi ini pada submit; UI hanya membantu.
 - Selain pilihan Bagian 4, submit mewajibkan evidence bertaut untuk JSA, ID, BPJS TK, FTW, dan E-SIMI sesuai `PermitMandatoryDocumentCatalog`; dokumen non-JSA tidak dicetak sebagai item Bagian 4.
 - Bagian 5 (APD/perlengkapan safety) hanya ditetapkan PIC HSE saat validasi dari katalog per kelas izin; Sponsor tidak boleh mengirim nilai Bagian 5 dan approval tanpa evidence Bagian 5 ditolak lalu diarahkan ke revisi.
 - Bagian 7 hanya ditetapkan reviewer SO/Officer pemilik wilayah lewat `review-area-operations`, termasuk aturan parent/child untuk Isolasi dan Bilas serta detail wajib untuk `Lainnya`. Manager tidak boleh menerbitkan sebelum evidence ini tersedia.
 - Referensi bahaya tambahan Bagian 2 bersifat opsional dan informatif; JSA tetap sumber resmi identifikasi bahaya dan pengendalian, dan field ini tidak boleh memengaruhi rules atau approval.
-- Penerbitan membuat snapshot cetak dan antrean render secara atomik. Worker menghasilkan PDF resmi dua halaman A3 dari snapshot immutable: halaman 1 landscape untuk Bagian 1-7 dan halaman 2 portrait mulai Bagian 8. Bagian 6 dan Bagian 8-10 tetap untuk pengisian hardcopy; preview selalu ber-watermark dan tidak disimpan.
+- Penerbitan membuat snapshot cetak dan antrean render secara atomik. Worker menghasilkan PDF resmi dua halaman A3 dari snapshot immutable: halaman 1 landscape untuk Bagian 1-7 dan halaman 2 portrait mulai Bagian 8. Bagian 3 mencetak nama, jabatan, departemen, spesimen tanda tangan berversi, dan waktu submit Sponsor dari `SponsorPrintEvidence` dalam snapshot; tanda tangan Pelaksana Pekerjaan, Bagian 6, dan Bagian 8-10 tetap untuk pengisian hardcopy; preview selalu ber-watermark dan tidak disimpan.
 - Profile dan nama actor Development adalah dummy. Assignment PIC konkret, kompetensi, serta
   activation policy production tetap harus melalui konfigurasi effective-dated dan pengesahan.
 

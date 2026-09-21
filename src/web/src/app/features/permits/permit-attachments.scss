@@ -127,6 +127,19 @@ h3 {
   font-weight: 800;
 }
 
+.field-copy-steps {
+  padding-left: 20px;
+  margin: 0 0 16px;
+  color: #49636c;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.jsa-readiness {
+  border-color: #b8dce9;
+  background: #f4fbfe;
+}
+
 .metadata-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -249,17 +249,12 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         CancellationToken cancellationToken)
     {
         var roleCodes = roles.ToArray();
-        if (roleCodes.Length == 0)
-        {
-            return [];
-        }
-
         var query =
             from task in dbContext.PermitTasks.AsNoTracking()
             join permit in dbContext.Permits.AsNoTracking() on task.PermitId equals permit.Id
             where task.Status == "PENDING"
-                && roleCodes.Contains(task.RequiredRole)
-                && (task.AssignedActorId == null || task.AssignedActorId == actorId)
+                && (task.AssignedActorId == actorId
+                    || (task.AssignedActorId == null && roleCodes.Contains(task.RequiredRole)))
             select new { Task = task, Permit = permit };
 
         if (!locationScopes.Contains("*"))
@@ -346,7 +341,22 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             switch (domainEvent.Type)
             {
                 case "permit_submitted":
+                    await CompletePendingTaskIfExistsAsync(
+                        permit.Id,
+                        "SPONSOR_REVISION",
+                        actorId,
+                        domainEvent.OccurredAt,
+                        cancellationToken);
                     AddTask(permit, "HSE_VALIDATION", "Validasi PIC HSE", "HSEValidator", domainEvent.OccurredAt);
+                    break;
+                case "permit_draft_updated":
+                case "permit_attachment_added":
+                case "permit_attachment_removed":
+                    await RefreshPendingTaskVersionIfExistsAsync(
+                        permit.Id,
+                        permit.Version,
+                        "SPONSOR_REVISION",
+                        cancellationToken);
                     break;
                 case "hse_validation_completed":
                     await CompleteTaskAsync(
@@ -436,7 +446,20 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                         cancellationToken);
                     break;
                 case "revision_requested":
+                    await CancelPendingTasksAsync(
+                        permit.Id,
+                        domainEvent.OccurredAt,
+                        cancellationToken);
+                    AddTask(
+                        permit,
+                        "SPONSOR_REVISION",
+                        "Perbaiki dan ajukan ulang PTW",
+                        "Sponsor",
+                        domainEvent.OccurredAt,
+                        permit.Draft.SponsorId);
+                    break;
                 case "permit_rejected":
+                case "permit_cancelled":
                     await CancelPendingTasksAsync(
                         permit.Id,
                         domainEvent.OccurredAt,
@@ -497,6 +520,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                 attachment.DocumentRevision,
                 attachment.DocumentDate))
             .ToArray();
+        var sponsor = await ResolveSponsorPrintEvidenceAsync(permit, cancellationToken);
 
         var snapshotJson = JsonSerializer.Serialize(new
         {
@@ -512,7 +536,8 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             approval.PrintTemplateVersion,
             approval.CampaignAssetVersion,
             CreatedAt = occurredAt,
-            SupportingDocuments = supportingDocuments
+            SupportingDocuments = supportingDocuments,
+            Sponsor = sponsor
         }, JsonOptions);
         var snapshotId = Guid.CreateVersion7();
         dbContext.PrintPackageSnapshots.Add(new PrintPackageSnapshotRecord
@@ -535,6 +560,39 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             PrintPackageSnapshotId = snapshotId,
             RenderStatus = "PENDING"
         });
+    }
+
+    private async Task<SponsorPrintEvidence> ResolveSponsorPrintEvidenceAsync(
+        Permit permit,
+        CancellationToken cancellationToken)
+    {
+        var account = await dbContext.UserAccounts.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.SubjectId == permit.Draft.SponsorId, cancellationToken);
+        var signature = await dbContext.UserSignatureVersions.AsNoTracking()
+            .SingleOrDefaultAsync(
+                x => x.SubjectId == permit.Draft.SponsorId && x.IsActive,
+                cancellationToken);
+        var submittedAt = await dbContext.AuditEvents.AsNoTracking()
+            .Where(x => x.PermitId == permit.Id && x.EventType == "permit_submitted")
+            .OrderByDescending(x => x.OccurredAt)
+            .Select(x => (DateTimeOffset?)x.OccurredAt)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? permit.UpdatedAt;
+
+        return new SponsorPrintEvidence(
+            permit.Draft.SponsorId,
+            account?.DisplayName ?? permit.Draft.SponsorId,
+            account?.Position,
+            account?.Department,
+            submittedAt,
+            signature is null
+                ? null
+                : new VisualSignatureEvidence(
+                    signature.Id,
+                    signature.Version,
+                    signature.MediaType,
+                    signature.Content,
+                    signature.Sha256));
     }
 
     private async Task AddAreaOperationsReviewDecisionAsync(
@@ -624,6 +682,45 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                 && x.Status == "PENDING",
             cancellationToken);
         task.PermitVersion = permitVersion;
+    }
+
+    private async Task RefreshPendingTaskVersionIfExistsAsync(
+        Guid permitId,
+        int permitVersion,
+        string type,
+        CancellationToken cancellationToken)
+    {
+        var task = await dbContext.PermitTasks.SingleOrDefaultAsync(
+            x => x.PermitId == permitId
+                && x.Type == type
+                && x.Status == "PENDING",
+            cancellationToken);
+        if (task is not null)
+        {
+            task.PermitVersion = permitVersion;
+        }
+    }
+
+    private async Task CompletePendingTaskIfExistsAsync(
+        Guid permitId,
+        string type,
+        string actorId,
+        DateTimeOffset completedAt,
+        CancellationToken cancellationToken)
+    {
+        var task = await dbContext.PermitTasks.SingleOrDefaultAsync(
+            x => x.PermitId == permitId
+                && x.Type == type
+                && x.Status == "PENDING",
+            cancellationToken);
+        if (task is null)
+        {
+            return;
+        }
+
+        task.Status = "COMPLETED";
+        task.CompletedAt = completedAt;
+        task.CompletedBy = actorId;
     }
 
     private async Task CancelPendingTasksAsync(

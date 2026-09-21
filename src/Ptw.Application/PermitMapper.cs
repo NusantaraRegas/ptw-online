@@ -150,6 +150,7 @@ internal static class PermitMapper
         label,
         evidence is not null,
         evidence?.ActorId,
+        evidence?.ActorName,
         evidence?.Statement,
         evidence?.ValidatedAt,
         evidence?.SafetyEquipmentCodes ?? []);

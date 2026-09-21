@@ -59,10 +59,12 @@ public sealed class PermitStateMachineTests
             "hse.validator",
             "JSA dan requirement konsisten.",
             ["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"],
-            Now.AddMinutes(2));
+            Now.AddMinutes(2),
+            "Darsono");
 
         Assert.Equal(PermitStatus.AwaitingAreaApproval, permit.Status);
         Assert.Equal("hse.validator", permit.HseValidation?.ActorId);
+        Assert.Equal("Darsono", permit.HseValidation?.ActorName);
         Assert.Equal(
             ["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"],
             permit.HseValidation?.SafetyEquipmentCodes);

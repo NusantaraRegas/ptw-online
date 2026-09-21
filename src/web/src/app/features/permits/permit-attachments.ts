@@ -65,21 +65,24 @@ export class PermitAttachments {
   protected readonly hasUnavailableDownloads = computed(() =>
     this.attachments().some((attachment) => attachment.scanStatus !== 'CLEAN'),
   );
+  protected readonly jsaDocument = computed(
+    () => this.mandatoryDocuments().find((option) => option.code === 'JSA') ?? null,
+  );
+  protected readonly mandatoryEvidenceDocuments = computed(() =>
+    this.mandatoryDocuments().filter((option) => option.code !== 'JSA'),
+  );
   protected readonly selectedSupportingDocuments = computed(() => {
     const selected = new Set(this.selectedDocumentCodes());
     return this.supportingDocuments().filter(
       (option) => !option.required && selected.has(option.code),
     );
   });
-  protected readonly uploadDocumentOptions = computed(() =>
-    [
-      ...this.mandatoryDocuments().filter((option) => option.uploadCategory === 'SUPPORTING'),
-      ...this.selectedSupportingDocuments(),
-    ].filter(
-      (option, index, items) =>
-        items.findIndex((candidate) => candidate.code === option.code) === index,
-    ),
-  );
+  protected readonly selectedPrintPackageId = computed(() => {
+    const options = this.printPackages();
+    const selected = this.printPackageId();
+    if (options.some((option) => option.id === selected)) return selected;
+    return options.length === 1 ? options[0].id : '';
+  });
 
   private currentETag = '';
 
@@ -124,7 +127,7 @@ export class PermitAttachments {
     const metadata = this.uploadMetadata();
     if (metadata === null) {
       this.error.set(
-        'Kategori JSA dan Salinan Lapangan Bertanda Tangan memerlukan nomor, revisi, dan tanggal dokumen.',
+        'JSA dan salinan lapangan bertanda tangan memerlukan nomor, revisi, dan tanggal dokumen.',
       );
       return;
     }
@@ -163,20 +166,14 @@ export class PermitAttachments {
       .subscribe();
   }
 
-  protected setCategory(value: string): void {
-    const category = this.fieldCopyOnly()
-      ? 'SIGNED_FIELD_COPY'
-      : (value as PermitAttachmentCategory);
+  protected setDocumentType(documentCode: string): void {
+    if (this.fieldCopyOnly()) return;
+
+    const category: PermitAttachmentCategory = documentCode === 'JSA' ? 'JSA' : 'SUPPORTING';
     this.category.set(category);
+    this.supportingDocumentCode.set(documentCode);
     if (category === 'JSA') {
-      this.supportingDocumentCode.set('JSA');
       this.prefillJsaMetadata();
-    } else if (category === 'SIGNED_FIELD_COPY') {
-      this.supportingDocumentCode.set('');
-    } else if (
-      !this.uploadDocumentOptions().some((option) => option.code === this.supportingDocumentCode())
-    ) {
-      this.supportingDocumentCode.set('');
     }
     this.error.set('');
   }
@@ -248,7 +245,8 @@ export class PermitAttachments {
       documentNumber,
       documentRevision,
       documentDate,
-      printPackageId: category === 'SIGNED_FIELD_COPY' ? this.printPackageId() || null : null,
+      printPackageId:
+        category === 'SIGNED_FIELD_COPY' ? this.selectedPrintPackageId() || null : null,
     };
   }
 

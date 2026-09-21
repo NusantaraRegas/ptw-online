@@ -135,6 +135,18 @@ public sealed class PermitAttachmentStore(
 
         AddVersion(permit, actor.Id);
         AddEvents(permit.DequeueEvents(), actor.Id, correlationId);
+        if (permit.Status == PermitStatus.RevisionRequired)
+        {
+            var revisionTask = await dbContext.PermitTasks.SingleOrDefaultAsync(
+                x => x.PermitId == permit.Id
+                    && x.Type == "SPONSOR_REVISION"
+                    && x.Status == "PENDING",
+                cancellationToken);
+            if (revisionTask is not null)
+            {
+                revisionTask.PermitVersion = permit.Version;
+            }
+        }
         dbContext.PermitAttachmentCommandReceipts.Add(new PermitAttachmentCommandReceiptRecord
         {
             Id = Guid.CreateVersion7(),

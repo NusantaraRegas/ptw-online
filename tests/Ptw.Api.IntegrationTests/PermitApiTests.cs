@@ -328,7 +328,9 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.Equal(HttpStatusCode.Conflict, selfResponse.StatusCode);
         Assert.Equal("permit.validation.self_validation_forbidden", await ProblemCodeAsync(selfResponse));
 
-        using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
+        var validatorId = Unique("hse");
+        const string validatorName = "Darsono";
+        using var validator = Client(validatorId, "HSEValidator", "ORF", validatorName);
         using var validateResponse = await validator.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/tasks/{validationTask.Id}/validate",
@@ -341,6 +343,8 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.Equal("AWAITING_AREA_APPROVAL", validated.Status);
         Assert.Equal("HSE", validated.Workflow.Hse.Code);
         Assert.True(validated.Workflow.Hse.Completed);
+        Assert.Equal(validatorId, validated.Workflow.Hse.ActorId);
+        Assert.Equal(validatorName, validated.Workflow.Hse.ActorName);
         Assert.Equal(
             ["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"],
             validated.Workflow.Hse.SafetyEquipmentCodes);
@@ -349,6 +353,36 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var areaReviewTask = await PendingTaskAsync(submitted.Id, "AREA_OPERATION_REVIEW");
         Assert.Equal(submitted.Version, areaReviewTask.PermitVersion);
         Assert.Equal("AreaOwnerSeniorOfficer", areaReviewTask.RequiredRole);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+            var now = DateTimeOffset.UtcNow;
+            db.UserAccounts.Add(new UserAccountRecord
+            {
+                SubjectId = validatorId,
+                UserName = validatorId,
+                NormalizedUserName = validatorId.ToUpperInvariant(),
+                DisplayName = validatorName,
+                Position = "Sr. Officer II Health & Safety",
+                Department = "HSSE",
+                IsActive = true,
+                Version = 1,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE [ptw].[Permit]
+                SET [WorkflowEvidenceJson] = JSON_MODIFY(
+                    [WorkflowEvidenceJson], '$.hseValidation.actorName', NULL)
+                WHERE [Id] = {submitted.Id}
+                """);
+        }
+
+        var legacyResponse = Required(
+            await sponsor.GetFromJsonAsync<PermitResponse>($"/api/v1/permits/{submitted.Id}"));
+        Assert.Equal(validatorName, legacyResponse.Workflow.Hse.ActorName);
     }
 
     [Fact]
@@ -565,6 +599,25 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.Equal("REVISION_REQUIRED", revision.Status);
         Assert.False(revision.Workflow.Hse.Completed);
 
+        var sponsorNotifications = Required(
+            await sponsor.GetFromJsonAsync<PagedResponse<PermitTaskResponse>>("/api/v1/tasks"));
+        var revisionNotification = Assert.Single(
+            sponsorNotifications.Items,
+            task => task.PermitId == revision.Id && task.Type == "SPONSOR_REVISION");
+        Assert.Equal("Perbaiki dan ajukan ulang PTW", revisionNotification.Label);
+        Assert.Equal("Sponsor", revisionNotification.RequiredRole);
+        using var sponsorWithChangedRole = Client(sponsorId, "Administrator", "ORF");
+        var directlyAssignedNotifications = Required(
+            await sponsorWithChangedRole.GetFromJsonAsync<PagedResponse<PermitTaskResponse>>("/api/v1/tasks"));
+        Assert.Contains(
+            directlyAssignedNotifications.Items,
+            task => task.Id == revisionNotification.Id);
+        var managerNotifications = Required(
+            await manager.GetFromJsonAsync<PagedResponse<PermitTaskResponse>>("/api/v1/tasks"));
+        Assert.DoesNotContain(
+            managerNotifications.Items,
+            task => task.PermitId == revision.Id && task.Type == "SPONSOR_REVISION");
+
         using var patchResponse = await sponsor.SendAsync(Command(
             HttpMethod.Patch,
             $"/api/v1/permits/{revision.Id}/draft",
@@ -585,6 +638,11 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
         Assert.Equal("CANCELLED", (await db.PermitTasks.SingleAsync(x => x.Id == areaTask.Id)).Status);
+        var completedRevisionNotification = await db.PermitTasks.SingleAsync(
+            x => x.Id == revisionNotification.Id);
+        Assert.Equal("COMPLETED", completedRevisionNotification.Status);
+        Assert.Equal(sponsorId, completedRevisionNotification.CompletedBy);
+        Assert.Equal(updated.Version, completedRevisionNotification.PermitVersion);
         Assert.Single(await db.PermitTasks.Where(x => x.PermitId == updated.Id
             && x.PermitVersion == resubmitted.Version
             && x.Type == "HSE_VALIDATION"
@@ -1189,11 +1247,15 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             x => x.PermitId == permitId && x.Type == type && x.Status == "PENDING");
     }
 
-    private HttpClient Client(string userId, string roles, string locations)
+    private HttpClient Client(
+        string userId,
+        string roles,
+        string locations,
+        string? displayName = null)
     {
         var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Dev-User", userId);
-        client.DefaultRequestHeaders.Add("X-Dev-Name", userId);
+        client.DefaultRequestHeaders.Add("X-Dev-Name", displayName ?? userId);
         client.DefaultRequestHeaders.Add("X-Dev-Roles", roles);
         client.DefaultRequestHeaders.Add("X-Dev-Locations", locations);
         return client;

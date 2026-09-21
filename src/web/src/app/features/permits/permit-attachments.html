@@ -8,8 +8,16 @@
         </svg>
       </span>
       <div>
-        <h3 id="attachments-title">Lampiran PTW</h3>
-        <p>Tambahkan dokumen pendukung dalam format PDF, JPEG, atau PNG.</p>
+        <h3 id="attachments-title">
+          {{ fieldCopyOnly() ? 'Dokumen lapangan' : 'Lampiran PTW' }}
+        </h3>
+        <p>
+          {{
+            fieldCopyOnly()
+              ? 'Unggah salinan paket resmi yang sudah ditandatangani di lapangan.'
+              : 'Lengkapi JSA, dokumen wajib pengajuan, dan dokumen Bagian 4.'
+          }}
+        </p>
       </div>
     </div>
 
@@ -29,25 +37,60 @@
             <path d="M12 5v14M5 12h14" />
           }
         </svg>
-        {{ busy() ? 'Mengunggah…' : 'Tambah lampiran' }}
+        {{
+          busy()
+            ? 'Mengunggah…'
+            : fieldCopyOnly()
+              ? 'Unggah salinan bertanda tangan'
+              : 'Tambah lampiran'
+        }}
       </label>
     }
   </header>
 
   @if (!fieldCopyOnly()) {
+    <section class="document-readiness jsa-readiness" aria-labelledby="jsa-readiness-title">
+      <div class="document-readiness-head">
+        <div>
+          <h4 id="jsa-readiness-title">JSA terkontrol</h4>
+          <p>Unggah satu kali di sini. JSA ini sekaligus memenuhi item wajib JSA pada Bagian 4.</p>
+        </div>
+        <span>Wajib</span>
+      </div>
+      @if (jsaDocument(); as document) {
+        <ul class="document-readiness-list">
+          <li>
+            <span class="document-check" [class.complete]="documentComplete(document.code)">
+              {{ documentComplete(document.code) ? '✓' : '○' }}
+            </span>
+            <div>
+              <strong>{{ document.label }}</strong>
+              <small>Dokumen terkontrol dan item Bagian 4</small>
+              @for (attachment of attachmentsFor(document.code); track attachment.id) {
+                <span class="document-file">{{ attachment.fileName }}</span>
+              }
+            </div>
+            <span class="document-status" [class.complete]="documentComplete(document.code)">
+              {{ documentStatus(document.code) }}
+            </span>
+          </li>
+        </ul>
+      }
+    </section>
+
     <section class="document-readiness" aria-labelledby="mandatory-document-readiness-title">
       <div class="document-readiness-head">
         <div>
-          <h4 id="mandatory-document-readiness-title">Dokumen dasar wajib</h4>
-          <p>Semua dokumen berikut harus diunggah sebelum PTW dapat diajukan.</p>
+          <h4 id="mandatory-document-readiness-title">Dokumen wajib pengajuan</h4>
+          <p>Bukti berikut wajib tersedia, tetapi tidak menjadi checklist cetak Bagian 4.</p>
         </div>
-        <span>{{ mandatoryDocuments().length }} wajib</span>
+        <span>{{ mandatoryEvidenceDocuments().length }} wajib</span>
       </div>
       @if (mandatoryDocumentError()) {
         <p class="attachment-error" role="alert">{{ mandatoryDocumentError() }}</p>
       } @else {
         <ul class="document-readiness-list">
-          @for (document of mandatoryDocuments(); track document.code) {
+          @for (document of mandatoryEvidenceDocuments(); track document.code) {
             <li>
               <span class="document-check" [class.complete]="documentComplete(document.code)">
                 {{ documentComplete(document.code) ? '✓' : '○' }}
@@ -108,33 +151,45 @@
 
   @if (canManage()) {
     <fieldset class="upload-metadata">
-      <legend>Detail dokumen yang akan diunggah</legend>
+      <legend>
+        {{ fieldCopyOnly() ? 'Salinan lapangan bertanda tangan' : 'Dokumen yang akan diunggah' }}
+      </legend>
+      @if (fieldCopyOnly()) {
+        <ol class="field-copy-steps" aria-label="Alur salinan lapangan">
+          <li>Unduh dan gunakan paket PTW resmi di lapangan.</li>
+          <li>Lengkapi tanda tangan lapangan pada hardcopy.</li>
+          <li>Unggah salinannya untuk penutupan atau perpanjangan.</li>
+        </ol>
+      }
       <div class="metadata-grid">
-        <label class="field category-field">
-          <span>Kategori lampiran</span>
-          <select
-            [value]="category()"
-            [disabled]="busy() || fieldCopyOnly()"
-            aria-describedby="category-help"
-            (change)="setCategory($any($event.target).value)"
-          >
-            <option value="SUPPORTING">Dokumen pendukung</option>
-            <option value="JSA">JSA</option>
-            <option value="SIGNED_FIELD_COPY">Salinan lapangan bertanda tangan</option>
-          </select>
-        </label>
-
-        @if (category() === 'SUPPORTING') {
+        @if (!fieldCopyOnly()) {
           <label class="field category-field">
             <span>Jenis dokumen</span>
             <select
               [value]="supportingDocumentCode()"
               [disabled]="busy()"
-              (change)="supportingDocumentCode.set($any($event.target).value)"
+              aria-describedby="category-help"
+              (change)="setDocumentType($any($event.target).value)"
             >
               <option value="">Lampiran pendukung umum</option>
-              @for (option of uploadDocumentOptions(); track option.code) {
-                <option [value]="option.code">{{ option.label }}</option>
+              <optgroup label="JSA terkontrol">
+                <option value="JSA">
+                  {{ jsaDocument()?.label ?? 'Job Safety Analisis (JSA)' }}
+                </option>
+              </optgroup>
+              @if (mandatoryEvidenceDocuments().length > 0) {
+                <optgroup label="Dokumen wajib pengajuan">
+                  @for (option of mandatoryEvidenceDocuments(); track option.code) {
+                    <option [value]="option.code">{{ option.label }}</option>
+                  }
+                </optgroup>
+              }
+              @if (selectedSupportingDocuments().length > 0) {
+                <optgroup label="Dokumen tambahan Bagian 4">
+                  @for (option of selectedSupportingDocuments(); track option.code) {
+                    <option [value]="option.code">{{ option.label }}</option>
+                  }
+                </optgroup>
               }
             </select>
           </label>
@@ -167,17 +222,19 @@
             />
           </label>
         }
-        @if (category() === 'SIGNED_FIELD_COPY') {
+        @if (fieldCopyOnly()) {
           <label class="field print-package-field">
             <span>Paket cetak sumber</span>
             <select
-              [value]="printPackageId()"
+              [value]="selectedPrintPackageId()"
               [disabled]="busy()"
               (change)="printPackageId.set($any($event.target).value)"
             >
               <option value="">Pilih paket cetak…</option>
               @for (option of printPackages(); track option.id) {
-                <option [value]="option.id">Versi {{ option.permitVersion }}</option>
+                <option [value]="option.id" [selected]="option.id === selectedPrintPackageId()">
+                  Versi {{ option.permitVersion }}
+                </option>
               }
             </select>
           </label>
@@ -185,13 +242,14 @@
       </div>
 
       <p id="category-help" class="metadata-note">
-        @if (category() === 'SIGNED_FIELD_COPY') {
-          Salinan lapangan harus dikaitkan dengan paket cetak resmi yang digunakan di lapangan.
+        @if (fieldCopyOnly()) {
+          Salinan harus cocok dengan versi dan paket cetak resmi yang benar. Jika hanya ada satu
+          paket yang memenuhi syarat, sistem memilihnya otomatis.
         } @else if (category() === 'JSA') {
-          Nomor, revisi, dan tanggal diperlukan untuk menjaga keterlacakan dokumen JSA.
+          Nomor, revisi, dan tanggal JSA mengikuti data draft untuk menjaga keterlacakan.
         } @else {
-          Pilih jenis dokumen wajib atau Bagian 4 untuk menghubungkan file, atau gunakan lampiran
-          umum untuk foto dan drawing tambahan.
+          Pilih dokumen wajib atau dokumen Bagian 4 yang sesuai. Lampiran umum hanya untuk foto,
+          drawing, atau evidence tambahan.
         }
       </p>
     </fieldset>
@@ -238,7 +296,9 @@
         <p>
           {{
             canManage()
-              ? 'Pilih kategori, lalu gunakan tombol “Tambah lampiran” untuk mengunggah dokumen.'
+              ? fieldCopyOnly()
+                ? 'Gunakan tombol “Unggah salinan bertanda tangan” setelah hardcopy resmi ditandatangani di lapangan.'
+                : 'Pilih jenis dokumen, lalu gunakan tombol “Tambah lampiran”.'
               : 'Dokumen pendukung untuk PTW ini belum tersedia.'
           }}
         </p>

@@ -12,6 +12,7 @@ public sealed class PermitMigrationTests(PtwApiFactory factory)
 {
     private const string TaskMigration = "20260903081421_PersistPermitWorkflowTasks";
     private const string AttachmentEvidenceMigration = "20260915074426_AddV16AttachmentEvidenceMetadata";
+    private const string UserAccountsMigration = "20260921092617_AddUserAccountsAndSignatures";
 
     [Fact]
     public async Task V16MigrationLeavesOneHseRouteAndOneAtomicAreaApprovalTask()
@@ -132,6 +133,47 @@ public sealed class PermitMigrationTests(PtwApiFactory factory)
             Assert.Equal("PENDING", migrated.ScanStatus);
             Assert.Null(migrated.ScanEvidenceReference);
             Assert.Null(migrated.ScannedAt);
+        }
+        finally
+        {
+            await db.Database.EnsureDeletedAsync();
+        }
+    }
+
+    [Fact]
+    public async Task SponsorRevisionTaskMigrationBackfillsExistingRevisionRequiredPermit()
+    {
+        var builder = new SqlConnectionStringBuilder(factory.ConnectionString)
+        {
+            InitialCatalog = $"PtwMigrationTest{Guid.NewGuid():N}"
+        };
+        var options = new DbContextOptionsBuilder<PtwDbContext>()
+            .UseSqlServer(builder.ConnectionString)
+            .Options;
+        await using var db = new PtwDbContext(options);
+
+        try
+        {
+            var migrator = db.Database.GetService<IMigrator>();
+            await migrator.MigrateAsync(UserAccountsMigration);
+            var now = DateTimeOffset.UtcNow;
+            var permit = Permit(now, "RevisionRequired", "{}");
+            await InsertHistoricalPermitAsync(db, permit);
+
+            await migrator.MigrateAsync();
+            db.ChangeTracker.Clear();
+
+            var task = await db.PermitTasks.SingleAsync(x =>
+                x.PermitId == permit.Id && x.Type == "SPONSOR_REVISION");
+            Assert.Equal(permit.Version, task.PermitVersion);
+            Assert.Equal("Sponsor", task.RequiredRole);
+            Assert.Equal(permit.SponsorId, task.AssignedActorId);
+            Assert.Equal("PENDING", task.Status);
+            Assert.Equal("Perbaiki dan ajukan ulang PTW", task.Label);
+            Assert.True(await db.AuditEvents.AnyAsync(x =>
+                x.PermitId == permit.Id && x.EventType == "sponsor_revision_task_reconciled"));
+            Assert.True(await db.OutboxMessages.AnyAsync(x =>
+                x.AggregateId == permit.Id && x.EventType == "sponsor_revision_task_reconciled"));
         }
         finally
         {

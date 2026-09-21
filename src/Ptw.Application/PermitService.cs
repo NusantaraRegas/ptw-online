@@ -45,14 +45,15 @@ public sealed class PermitService(
             request.LocationId,
             cancellationToken);
         var permit = Permit.CreateDraft(request.ToDomain(), clock.UtcNow);
-        return (await store.AddAsync(permit, actor, correlationId, authorization, cancellationToken)).ToResponse();
+        var created = await store.AddAsync(permit, actor, correlationId, authorization, cancellationToken);
+        return await ToResponseAsync(created, cancellationToken);
     }
 
     public async Task<PermitResponse> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var stored = await GetStoredAsync(id, cancellationToken);
         EnsureLocationScope(actorContext.Current, stored.Permit.Draft.LocationId);
-        return stored.ToResponse();
+        return await ToResponseAsync(stored, cancellationToken);
     }
 
     public async Task<PagedResponse<PermitResponse>> ListAsync(CancellationToken cancellationToken)
@@ -62,11 +63,17 @@ public sealed class PermitService(
             ["Auditor", "Administrator", HseValidatorRole, AreaOperationsReviewerRole, AreaOwnerManagerRole])
             ? null
             : actor.Id;
-        var items = (await store.ListAsync(sponsorFilter, cancellationToken))
+        var storedItems = (await store.ListAsync(sponsorFilter, cancellationToken))
             .Where(x => HasLocationScope(actor, x.Permit.Draft.LocationId))
-            .Select(x => x.ToResponse())
             .ToArray();
-        return new PagedResponse<PermitResponse>(items, items.Length);
+        var items = new List<PermitResponse>(storedItems.Length);
+        var accountCache = new Dictionary<string, StoredUserAccount?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var stored in storedItems)
+        {
+            items.Add(await ToResponseAsync(stored, cancellationToken, accountCache));
+        }
+
+        return new PagedResponse<PermitResponse>(items, items.Count);
     }
 
     public async Task<PagedResponse<PermitTaskResponse>> ListTasksAsync(CancellationToken cancellationToken)
@@ -160,14 +167,15 @@ public sealed class PermitService(
             request.LocationId,
             cancellationToken);
         stored.Permit.UpdateDraft(request.ToDomain(), clock.UtcNow);
-        return (await store.UpdateAsync(
+        var updated = await store.UpdateAsync(
             stored.Permit,
             expectedETag,
             actor,
             correlationId,
             null,
             authorization,
-            cancellationToken)).ToResponse();
+            cancellationToken);
+        return await ToResponseAsync(updated, cancellationToken);
     }
 
     public async Task<PermitResponse> RequestRenewalAsync(
@@ -277,7 +285,10 @@ public sealed class PermitService(
             var sourceId = prior.Permit.RenewedFromPermitId
                 ?? throw new InvalidOperationException("Hasil idempoten approval renewal tidak memiliki PTW asal.");
             var priorSource = await GetStoredAsync(sourceId, cancellationToken);
-            return new PermitRenewalResponse(priorSource.Permit.Version, priorSource.ETag, prior.ToResponse());
+            return new PermitRenewalResponse(
+                priorSource.Permit.Version,
+                priorSource.ETag,
+                await ToResponseAsync(prior, cancellationToken));
         }
 
         var task = await GetPendingTaskAsync(taskId, cancellationToken);
@@ -330,7 +341,7 @@ public sealed class PermitService(
         return new PermitRenewalResponse(
             created.Source.Permit.Version,
             created.Source.ETag,
-            created.Renewal.ToResponse());
+            await ToResponseAsync(created.Renewal, cancellationToken));
     }
 
     public async Task<PermitResponse> SubmitAsync(
@@ -352,7 +363,7 @@ public sealed class PermitService(
             cancellationToken);
         if (prior is not null)
         {
-            return prior.ToResponse();
+            return await ToResponseAsync(prior, cancellationToken);
         }
 
         var stored = await GetStoredAsync(id, cancellationToken);
@@ -502,14 +513,16 @@ public sealed class PermitService(
             ? PermitSupportingDocumentCatalog.JsaCode
             : null);
 
-    public Task<PermitResponse> ValidateSubmissionAsync(
+    public async Task<PermitResponse> ValidateSubmissionAsync(
         Guid taskId,
         ValidateSubmissionRequest request,
         string expectedETag,
         string idempotencyKey,
         string correlationId,
-        CancellationToken cancellationToken) =>
-        ExecuteTaskCommandAsync(
+        CancellationToken cancellationToken)
+    {
+        var presentation = await ResolveActorPresentationAsync(actorContext.Current.Id, cancellationToken);
+        return await ExecuteTaskCommandAsync(
             taskId,
             "HSE_VALIDATION",
             request,
@@ -522,8 +535,10 @@ public sealed class PermitService(
                 actor.Id,
                 request.Statement,
                 request.SafetyEquipmentCodes,
-                now),
+                now,
+                DisplayNameUnlessIdentifier(actor, presentation.DisplayName)),
             cancellationToken);
+    }
 
     public Task<PermitResponse> EscalateValidationAsync(
         Guid taskId,
@@ -597,7 +612,8 @@ public sealed class PermitService(
                         "PTW tidak dapat diterbitkan setelah masa berlakunya berakhir.");
                 }
 
-                var actorName = presentation.DisplayName ?? actor.DisplayName;
+                var actorName = DisplayNameUnlessIdentifier(actor, presentation.DisplayName)
+                    ?? "Profil pengguna tidak tersedia";
                 var actorPosition = presentation.Position ?? AreaManagerPosition(permit.Draft.LocationId);
                 permit.ApproveAndIssue(new PermitApprovalEvidence(
                     actor.Id,
@@ -658,7 +674,8 @@ public sealed class PermitService(
                         "Assignment SO/Officer Pemilik Wilayah aktif yang terverifikasi server wajib tersedia.");
                 }
 
-                var actorName = presentation.DisplayName ?? actor.DisplayName;
+                var actorName = DisplayNameUnlessIdentifier(actor, presentation.DisplayName)
+                    ?? "Profil pengguna tidak tersedia";
                 var actorPosition = presentation.Position ?? AreaOperationsPosition(permit.Draft.LocationId);
                 permit.ReviewAreaOperations(new AreaOperationsReviewEvidence(
                     actor.Id,
@@ -1061,7 +1078,7 @@ public sealed class PermitService(
         var prior = await store.FindIdempotentResultAsync(actor.Id, operation, idempotencyKey, requestHash, cancellationToken);
         if (prior is not null)
         {
-            return prior.ToResponse();
+            return await ToResponseAsync(prior, cancellationToken);
         }
 
         var task = await GetPendingTaskAsync(taskId, cancellationToken);
@@ -1114,7 +1131,7 @@ public sealed class PermitService(
         var prior = await store.FindIdempotentResultAsync(actor.Id, operation, idempotencyKey, requestHash, cancellationToken);
         if (prior is not null)
         {
-            return prior.ToResponse();
+            return await ToResponseAsync(prior, cancellationToken);
         }
 
         var stored = await GetStoredAsync(id, cancellationToken);
@@ -1154,7 +1171,7 @@ public sealed class PermitService(
         var prior = await store.FindIdempotentResultAsync(actor.Id, operation, idempotencyKey, requestHash, cancellationToken);
         if (prior is not null)
         {
-            return prior.ToResponse();
+            return await ToResponseAsync(prior, cancellationToken);
         }
 
         var stored = await GetStoredAsync(id, cancellationToken);
@@ -1186,15 +1203,93 @@ public sealed class PermitService(
         string idempotencyKey,
         string requestHash,
         PolicyAuthorizationEvidence? authorization,
-        CancellationToken cancellationToken) =>
-        (await store.UpdateAsync(
+        CancellationToken cancellationToken)
+    {
+        var updated = await store.UpdateAsync(
             permit,
             expectedETag,
             actor,
             correlationId,
             new IdempotencyContext(actor.Id, operation, idempotencyKey, requestHash),
             authorization,
-            cancellationToken)).ToResponse();
+            cancellationToken);
+        return await ToResponseAsync(updated, cancellationToken);
+    }
+
+    private async Task<PermitResponse> ToResponseAsync(
+        StoredPermit stored,
+        CancellationToken cancellationToken,
+        Dictionary<string, StoredUserAccount?>? accountCache = null)
+    {
+        accountCache ??= new Dictionary<string, StoredUserAccount?>(StringComparer.OrdinalIgnoreCase);
+        var response = stored.ToResponse();
+        var workflow = response.Workflow;
+        var hseName = await ResolveWorkflowActorNameAsync(
+            workflow.Hse.ActorId,
+            workflow.Hse.ActorName,
+            accountCache,
+            cancellationToken);
+        var areaOperationsName = await ResolveWorkflowActorNameAsync(
+            workflow.AreaOperations.ActorId,
+            workflow.AreaOperations.ActorName,
+            accountCache,
+            cancellationToken);
+        var approvalName = await ResolveWorkflowActorNameAsync(
+            workflow.Approval.ActorId,
+            workflow.Approval.ActorName,
+            accountCache,
+            cancellationToken);
+
+        return response with
+        {
+            Workflow = workflow with
+            {
+                Hse = workflow.Hse with { ActorName = hseName },
+                AreaOperations = workflow.AreaOperations with { ActorName = areaOperationsName },
+                Approval = workflow.Approval with { ActorName = approvalName }
+            }
+        };
+    }
+
+    private async Task<string?> ResolveWorkflowActorNameAsync(
+        string? actorId,
+        string? evidenceName,
+        Dictionary<string, StoredUserAccount?> accountCache,
+        CancellationToken cancellationToken)
+    {
+        var normalizedActorId = NormalizeOptional(actorId);
+        var normalizedEvidenceName = NormalizeOptional(evidenceName);
+        if (normalizedActorId is null)
+        {
+            return normalizedEvidenceName;
+        }
+
+        if (!accountCache.TryGetValue(normalizedActorId, out var stored))
+        {
+            stored = await userDirectoryStore.FindAsync(normalizedActorId, cancellationToken);
+            accountCache[normalizedActorId] = stored;
+        }
+
+        var userName = NormalizeOptional(stored?.Account.UserName);
+        if (!IsLoginIdentifier(normalizedEvidenceName, normalizedActorId, userName))
+        {
+            return normalizedEvidenceName;
+        }
+
+        var profileName = NormalizeOptional(stored?.Account.DisplayName);
+        return IsLoginIdentifier(profileName, normalizedActorId, userName) ? null : profileName;
+    }
+
+    private static string? DisplayNameUnlessIdentifier(Actor actor, string? preferredName = null)
+    {
+        var name = NormalizeOptional(preferredName) ?? NormalizeOptional(actor.DisplayName);
+        return string.Equals(name, actor.Id, StringComparison.OrdinalIgnoreCase) ? null : name;
+    }
+
+    private static bool IsLoginIdentifier(string? value, string actorId, string? userName) =>
+        value is null
+        || string.Equals(value, actorId, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(value, userName, StringComparison.OrdinalIgnoreCase);
 
     private async Task<StoredPermit> GetStoredAsync(Guid id, CancellationToken cancellationToken) =>
         await store.FindAsync(id, cancellationToken) ?? throw new ResourceNotFoundException("Permit", id);
