@@ -49,6 +49,14 @@ builder.Services.AddSingleton(
 builder.Services.AddSingleton(
     builder.Configuration.GetSection("IssuancePolicy").Get<IssuancePolicySettings>()
     ?? new IssuancePolicySettings());
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection("UserAuthorizationRoleProfiles")
+        .Get<UserAuthorizationRoleProfileSettings>()
+    ?? new UserAuthorizationRoleProfileSettings());
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection("UserAuthorizationApproval")
+        .Get<UserAuthorizationApprovalSettings>()
+    ?? new UserAuthorizationApprovalSettings());
 builder.Services.AddPtwInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
 var attachmentMaxFileBytes = builder.Configuration.GetValue<long>("Attachments:MaxFileBytes");
 if (attachmentMaxFileBytes > 0)

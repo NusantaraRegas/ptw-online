@@ -349,6 +349,7 @@ public sealed class Permit
     public void Submit(string permitNumber, SubmissionReadiness readiness, DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.Draft, PermitStatus.RevisionRequired);
+        var isResubmission = Status == PermitStatus.RevisionRequired;
         EnsureHeaderClassificationIsComplete(Draft);
         EnsureOtherWorkTypeDetailIsComplete(Draft);
         EnsureSupportingDocumentSelectionIsComplete(Draft);
@@ -366,6 +367,13 @@ public sealed class Permit
 
         PermitNumber ??= permitNumber.Trim();
         ClearReviewEvidence();
+        if (isResubmission)
+        {
+            // A revision starts a new review cycle. Keep the cancelled workflow task
+            // as immutable history and bind the fresh task to a new permit version.
+            Version++;
+        }
+
         MoveTo(PermitStatus.UnderValidation, "permit_submitted", now);
     }
 
@@ -446,7 +454,7 @@ public sealed class Permit
         {
             throw new DomainRuleViolationException(
                 "permit.area_operations.review_required",
-                "Verifikasi kondisi operasi Bagian 7 oleh Senior Officer wajib selesai sebelum penerbitan.");
+                "Verifikasi kondisi operasi Bagian 7 oleh SO/Officer Pemilik Wilayah wajib selesai sebelum penerbitan.");
         }
 
         if (HseValidation.SafetyEquipmentCodes is not { Count: > 0 })
@@ -464,7 +472,7 @@ public sealed class Permit
         {
             throw new DomainRuleViolationException(
                 "permit.approval.separation_of_duty",
-                "Sponsor, validator HSE, atau Senior Officer reviewer tidak boleh menyetujui dan menerbitkan PTW yang sama.");
+                "Sponsor, validator HSE, atau reviewer SO/Officer tidak boleh menyetujui dan menerbitkan PTW yang sama.");
         }
 
         if (approval.AuthorizationId == Guid.Empty
@@ -517,7 +525,7 @@ public sealed class Permit
         {
             throw new DomainRuleViolationException(
                 "permit.area_operations.separation_of_duty",
-                "Sponsor atau validator HSE tidak boleh menjadi Senior Officer reviewer pada PTW yang sama.");
+                "Sponsor atau validator HSE tidak boleh menjadi reviewer SO/Officer Pemilik Wilayah pada PTW yang sama.");
         }
 
         if (review.AuthorizationId == Guid.Empty
@@ -526,7 +534,7 @@ public sealed class Permit
         {
             throw new DomainRuleViolationException(
                 "permit.area_operations.authorization_evidence_required",
-                "Snapshot otorisasi Senior Officer wajib lengkap.");
+                "Snapshot otorisasi SO/Officer Pemilik Wilayah wajib lengkap.");
         }
 
         var conditions = PermitOperationalConditionCatalog.NormalizeAndValidate(

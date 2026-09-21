@@ -11,8 +11,7 @@
     <p class="eyebrow">Authority efektif dan berversi</p>
     <h1>Otorisasi pengguna</h1>
     <p class="subtitle">
-      Satu karyawan dapat memegang beberapa role, masing-masing dengan action, lokasi, kompetensi,
-      dan periode yang terukur.
+      Tetapkan role dan area kewenangan. Hak akses teknis diturunkan otomatis oleh server.
     </p>
   </div>
   @if (!accessDenied()) {
@@ -64,9 +63,12 @@
       <header>
         <div>
           <h2>Draft assignment baru</h2>
-          <p>Maker tidak dapat menyetujui assignment yang dibuat atau diajukannya sendiri.</p>
+          <p>
+            Administrator Development dapat membuat, mengajukan, dan menyetujui assignment yang
+            sama. Semua transisi tetap diaudit.
+          </p>
         </div>
-        <span>Maker-checker</span>
+        <span>Persetujuan administrator</span>
       </header>
       <div class="form-grid">
         <label>
@@ -81,64 +83,72 @@
           </select>
         </label>
         <label>
-          <span>Role code</span>
-          <select formControlName="roleCode">
+          <span>Role</span>
+          <select
+            #roleSelector
+            formControlName="roleCode"
+            (change)="selectRole(roleSelector.value)"
+          >
             <option value="">Pilih role</option>
-            <option value="Administrator">Administrator</option>
-            <option value="Sponsor">Sponsor</option>
-            <option value="HSEValidator">PIC HSE</option>
-            <option value="AreaOwnerSeniorOfficer">Senior Officer Pemilik Wilayah</option>
-            <option value="AreaOwnerManager">Manager Pemilik Wilayah</option>
-            <option value="Auditor">Auditor</option>
+            @for (role of roleOptions(); track role.code) {
+              <option [value]="role.code">{{ role.label }}</option>
+            }
           </select>
         </label>
-        <label class="wide">
-          <span>Action codes <small>pisahkan dengan koma</small></span>
-          <input
-            formControlName="actionCodes"
-            autocomplete="off"
-            placeholder="permit.issue, permit.suspend"
-          />
-        </label>
-        <label>
-          <span>Jenis assignment</span>
-          <select formControlName="kind">
-            <option value="DIRECT">Langsung</option>
-            <option value="DELEGATION">Delegasi</option>
-          </select>
-        </label>
-        <label>
-          <span>Assignment sumber <small>wajib untuk delegasi</small></span>
-          <input
-            formControlName="sourceAuthorizationId"
-            autocomplete="off"
-            placeholder="UUID assignment"
-          />
-        </label>
-        <label>
-          <span>Location ID <small>kosong berarti global</small></span>
-          <input formControlName="locationId" autocomplete="off" placeholder="UUID lokasi" />
-        </label>
-        <label class="checkbox-field">
-          <input type="checkbox" formControlName="includeDescendants" />
-          <span>Termasuk seluruh lokasi turunan</span>
-        </label>
-        <label class="wide">
-          <span>Kompetensi wajib <small>pisahkan dengan koma</small></span>
-          <input
-            formControlName="requiredCompetencyCodes"
-            autocomplete="off"
-            placeholder="GAS_TEST_L2, HSE_INDUCTION"
-          />
-        </label>
+        @if (selectedRole()?.locationRequired) {
+          <label class="wide">
+            <span>Area kewenangan</span>
+            <select formControlName="locationId">
+              <option value="">Pilih area</option>
+              @for (location of locations(); track location.id) {
+                <option [value]="location.id">{{ location.name }} ({{ location.code }})</option>
+              }
+            </select>
+          </label>
+        } @else if (selectedRole()) {
+          <div class="scope-note wide">
+            <strong>Scope global</strong>
+            <span>Role ini tidak memerlukan pemetaan area tertentu.</span>
+          </div>
+        }
         <label>
           <span>Mulai efektif</span>
           <input type="datetime-local" formControlName="effectiveFrom" />
         </label>
-        <label>
-          <span>Akhir efektif <small>wajib untuk delegasi</small></span>
-          <input type="datetime-local" formControlName="effectiveUntil" />
+        @if (!form.controls.neverExpires.value) {
+          <label>
+            <span>Akhir efektif</span>
+            <input type="datetime-local" formControlName="effectiveUntil" />
+          </label>
+        } @else {
+          <div class="period-note">
+            Tanggal akhir tidak ditetapkan; status pengguna dan pemeriksaan assignment tetap
+            berlaku.
+          </div>
+        }
+        <label class="checkbox-field wide">
+          <input type="checkbox" formControlName="neverExpires" />
+          <span>Tanpa tanggal berakhir</span>
         </label>
+        @if (form.controls.subjectId.value && selectedRole()) {
+          <section class="assignment-summary wide" aria-label="Ringkasan assignment">
+            <small>Ringkasan akses</small>
+            <strong>{{ selectedUserLabel() }} — {{ selectedRole()?.label }}</strong>
+            <span>
+              {{
+                selectedRole()?.locationRequired
+                  ? locationLabel(form.controls.locationId.value || null)
+                  : 'Seluruh lokasi'
+              }}
+              ·
+              {{
+                form.controls.neverExpires.value
+                  ? 'tanpa tanggal berakhir'
+                  : 'memiliki tanggal akhir'
+              }}
+            </span>
+          </section>
+        }
       </div>
       <footer>
         <button type="button" class="secondary-action" (click)="toggleForm()">Batal</button>
@@ -169,15 +179,14 @@
             </span>
             <div class="identity">
               <strong>{{ item.subjectId }}</strong>
-              <p>{{ item.roleCode }} · {{ item.kind === 'DIRECT' ? 'Langsung' : 'Delegasi' }}</p>
+              <p>
+                {{ roleLabel(item.roleCode) }} ·
+                {{ item.kind === 'DIRECT' ? 'Langsung' : 'Delegasi' }}
+              </p>
             </div>
             <div class="scope">
-              <small>Action</small>
-              <div class="chips">
-                @for (action of item.actionCodes; track action) {
-                  <span>{{ action }}</span>
-                }
-              </div>
+              <small>Area kewenangan</small>
+              <strong>{{ locationLabel(item.locationId) }}</strong>
             </div>
             <div class="period">
               <small>Periode efektif</small>
@@ -186,10 +195,10 @@
                 {{
                   item.effectiveUntil
                     ? (item.effectiveUntil | date: 'dd MMM yyyy' : 'Asia/Jakarta')
-                    : 'seterusnya'
+                    : 'tanpa tanggal berakhir'
                 }}
               </span>
-              <small>{{ item.locationId ? 'Scope lokasi' : 'Scope global' }}</small>
+              <small>Hak akses mengikuti role terkontrol</small>
             </div>
             <span class="status" [attr.data-status]="item.status">
               {{ statusLabel(item.status) }}

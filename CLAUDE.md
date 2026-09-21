@@ -30,11 +30,11 @@ tanda tangan lapangan tetap dikendalikan pada hardcopy.
 ## 2. Peta repository
 
 ```
-src/Ptw.Domain          aggregate, state machine, invariant, katalog checklist formulir — tanpa EF/ASP.NET/IO
+src/Ptw.Domain          aggregate, state machine, invariant, katalog checklist formulir, UserAccount/UserAuthorizationAssignment — tanpa EF/ASP.NET/IO
 src/Ptw.Contracts       DTO netral — tanpa domain behavior
-src/Ptw.Application     use case, authorization, ports (IPermitStore, IPrintPackage...)
+src/Ptw.Application     use case, authorization, ports (IPermitStore, IPrintPackage...), UserAuthorizationRoleProfiles (profil role assignment langsung)
 src/Ptw.Infrastructure  EF Core, storage, audit, outbox, Printing/ (renderer + template)
-src/Ptw.Api             mapping HTTP, DevelopmentAuthenticationHandler, ApiExceptionHandler
+src/Ptw.Api             mapping HTTP, Security/ (DevelopmentAuthenticationHandler, HttpActorContext), login cookie lokal, ApiExceptionHandler
 src/Ptw.Worker          job idempotent dan bounded
 src/web                 Angular: core/*-api.ts (HTTP) + features/* (komponen)
 deploy/compose, deploy/nginx  compose.dev.yaml (production-like), compose.hotreload.yaml (bind mount + dotnet watch/ng serve), reverse proxy (cache index.html, 404 chunk hilang)
@@ -44,6 +44,7 @@ tests/Ptw.Printing.Tests         regresi layout dokumen (akses internal via Inte
 docs/                            BRD/PRD/FSD v1.7 (sumber requirement)
 docs/decisions/                  OPN-001..009 (DRAFT), PTW-RENEWAL (baseline Development) — register kebijakan; DRAFT bukan keputusan
 docs/implementation-status.md    matriks traceability requirement -> komponen -> test
+.github/workflows/ci.yml         CI: build/test backend, build/test frontend, compose config; format/prettier/audit belum di CI
 ```
 
 Arah dependency: `Api`/`Worker` → `Application` → `Domain`/`Contracts`; `Infrastructure`
@@ -62,7 +63,7 @@ dotnet format PtwOnline.sln --verify-no-changes --no-restore
 dotnet list PtwOnline.sln package --vulnerable --include-transitive
 ```
 
-Bila SDK .NET 10 tidak terpasang lokal, jalankan perintah yang sama melalui image `mcr.microsoft.com/dotnet/sdk:10.0` dengan repository di-mount sebagai `/workspace` (lihat `AGENTS.md`). Integration test memerlukan Docker untuk SQL Server disposable.
+Bila SDK .NET 10 tidak terpasang lokal (workstation ini hanya memiliki SDK sampai 9.x), jalankan perintah yang sama melalui image `mcr.microsoft.com/dotnet/sdk:10.0` dengan repository di-mount sebagai `/workspace` (lihat `AGENTS.md`). Set `PTW_USE_ARTIFACTS_OUTPUT=true` dan shadow `artifacts/` dengan named volume agar output build Linux tidak bertabrakan dengan `bin/obj` host; mount Docker socket dan set `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal` agar integration test dapat menjalankan SQL Server disposable. Jangan menjalankan gate ini di dalam container `api`/`worker` stack hot reload.
 
 Frontend:
 
@@ -129,7 +130,7 @@ disamarkan sebagai selesai.
 - [ ] Perubahan tidak membuat `ISSUED`/**Diterbitkan** tampak sebagai izin otomatis memulai pekerjaan; peringatan hardcopy tetap ada.
 - [ ] Tidak ada status di luar sebelas status aktif (`DRAFT`, `UNDER_VALIDATION`, `REVISION_REQUIRED`, `AWAITING_AREA_APPROVAL`, `ISSUED`, `SUSPENDED`, `CLOSURE_REQUESTED`, `CLOSED`, `REJECTED`, `CANCELLED`, `EXPIRED`).
 - [ ] `CLOSED`, `REJECTED`, `CANCELLED`, `EXPIRED` tetap terminal; validity maksimum tujuh hari; renewal membuat permit dan nomor baru.
-- [ ] Renewal tidak mengubah status PTW asal dan tidak membuat permit saat request: Sponsor mengajukan signed field copy `CLEAN` yang cocok dengan exact PrintPackage/PermitVersion, task `AREA_RENEWAL_REVIEW` dibuat, dan draft penerus hanya lahir atomik saat Manager pemilik area menyetujui. Draft penerus tetap melewati submit, validasi HSE, review Bagian 7 Senior Officer, dan approve-and-issue normal.
+- [ ] Renewal tidak mengubah status PTW asal dan tidak membuat permit saat request: Sponsor mengajukan signed field copy `CLEAN` yang cocok dengan exact PrintPackage/PermitVersion, task `AREA_RENEWAL_REVIEW` dibuat, dan draft penerus hanya lahir atomik saat Manager pemilik area menyetujui. Draft penerus tetap melewati submit, validasi HSE, review Bagian 7 oleh SO/Officer pemilik wilayah, dan approve-and-issue normal.
 - [ ] Suspend tetap menghentikan hak kerja seketika; resolve hanya kembali ke `ISSUED`.
 - [ ] Tidak ada endpoint atau helper generik bergaya `setStatus`.
 - [ ] Tidak ada kebijakan OPN-001–012 yang dikarang: location authority, risk/approval matrix, checklist final, ambang/umur gas test, urutan review, contractor acknowledgement, kontrak SSO/E-SIMI produksi, retention, RPO/RTO, topologi HA. Tanpa decision record, jalur tersebut fail-closed. Klasifikasi header HOT/COLD hanya merepresentasikan checklist formulir (dan memetakan `RiskLevel` legacy pada COLD), bukan matriks routing risiko OPN-002.
@@ -151,6 +152,7 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 - [ ] Aggregate, task/decision, audit event, outbox message, dan idempotency result commit atomik dalam satu transaction.
 - [ ] Audit tetap append-only; tidak ada jalur aplikasi untuk mengubah atau menghapus audit historis.
 - [ ] Snapshot yang menjadi dasar keputusan (`PrintPackageSnapshot`, evidence) tidak berubah setelah dibuat.
+- [ ] Submit ulang setelah `REVISION_REQUIRED` menaikkan `PermitVersion` meskipun draft tidak berubah; task lama tetap `CANCELLED` sebagai riwayat dan task baru terikat pada versi baru.
 - [ ] Migration bersifat additive/expand-contract; tanpa `EnsureCreated` dan tanpa destructive migration satu langkah; `PtwDbContextModelSnapshot` ikut ter-update.
 - [ ] Tipe kolom sesuai: `datetimeoffset`, `decimal` untuk gas reading, foreign key dan check constraint, index yang ter-scope.
 - [ ] Tidak ada panggilan HTTP eksternal di dalam database transaction; job Worker idempotent dan bounded.
@@ -160,10 +162,12 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 - [ ] Scope filter diterapkan pada query, termasuk pengecekan parent permit untuk resource turunan dan attachment. Menyembunyikan tombol di UI tidak dihitung.
 - [ ] Identitas actor dan Sponsor aktif berasal dari `/api/v1/me`, bukan profil demo yang di-hard-code ke payload domain.
 - [ ] Bagian 5 hanya dapat ditetapkan PIC HSE saat validasi; payload draft Sponsor yang membawa Bagian 5 ditolak, dan approval tanpa evidence Bagian 5 diarahkan ke revisi.
-- [ ] Bagian 7 hanya dapat ditetapkan Senior Officer pemilik wilayah pada task `AREA_OPERATION_REVIEW` setelah validasi HSE, dengan assignment yang terverifikasi server. Sponsor dan validator HSE tidak boleh menjadi reviewer; Manager yang menerbitkan harus berbeda dari Sponsor, validator HSE, dan reviewer; approve-and-issue tanpa evidence Bagian 7 ditolak. Field bebas CLSR dan isolation/precaution tidak lagi diterima dari Sponsor.
+- [ ] Bagian 7 hanya dapat ditetapkan SO/Officer pemilik wilayah (pool role `AreaOwnerSeniorOfficer`; kode dipertahankan untuk kompatibilitas data) pada tepat satu task `AREA_OPERATION_REVIEW` setelah validasi HSE, dengan assignment yang terverifikasi server. Reviewer pertama yang menyelesaikan task menang; reviewer berikutnya tidak lagi menemukan task (`404`). Sponsor dan validator HSE tidak boleh menjadi reviewer; Manager yang menerbitkan harus berbeda dari Sponsor, validator HSE, dan reviewer; approve-and-issue tanpa evidence Bagian 7 ditolak. Nama dan jabatan aktor pada evidence berasal dari profil akun aktif di server, bukan dari klien. Field bebas CLSR dan isolation/precaution tidak lagi diterima dari Sponsor.
 - [ ] Bagian 4: JSA wajib, setiap dokumen terpilih memerlukan lampiran bertaut, dan metadata lampiran JSA harus cocok dengan draft sebelum submit. Validasi ini di server, bukan di UI.
 - [ ] Dokumen dasar JSA, ID, BPJS TK, FTW, dan E-SIMI (`PermitMandatoryDocumentCatalog`) masing-masing memiliki lampiran bertaut sebelum submit; JSA harus diunggah dengan kategori `JSA`.
 - [ ] Development identity header hanya aktif pada environment `Development`.
+- [ ] Akun lokal, login cookie HTTP-only, dan `UserAuthorizationApproval:AllowAdministratorSelfApproval=true` hanya untuk `Development`; default kode dan konfigurasi non-Development tetap mewajibkan maker dan checker berbeda. Role dan scope dihitung ulang dari assignment approved/effective pada setiap request, bukan dari cookie.
+- [ ] Assignment langsung (`POST /api/v1/admin/authorizations/direct`) hanya menerima user, role, area bila role area-scoped, dan periode; action code dan kompetensi diturunkan server dari `UserAuthorizationRoleProfiles`, input action code dari klien diabaikan, dan tanpa profil terkonfigurasi jalur ini fail-closed. Profil di `appsettings.Development.json` adalah konfigurasi UX/UAT, bukan matriks OPN-002; jangan menyalinnya ke production.
 - [ ] `DevelopmentUploadTrustScanner` hanya terdaftar saat environment `Development` **dan** `Attachments:RequireMalwareScan=false`; di luar itu `UnavailableMalwareScanner` tetap fail-closed. Jangan melonggarkan kondisi ini atau membawanya ke konfigurasi production.
 - [ ] Tidak ada secret, `.env`, token, connection string ber-secret, PII nyata, isi attachment, atau build output yang masuk Git.
 - [ ] Log tidak memuat token, secret, isi dokumen, atau PII berlebih; correlation ID (`X-Correlation-ID`) tetap dipertahankan.
@@ -174,7 +178,7 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 ### Gate E — Paket cetak
 
 - [ ] Output tetap setia pada formulir terkontrol FM-001/002/003-B-002-NR-B220 sebagai dua halaman A3: halaman 1 landscape untuk Bagian 1–7 dan halaman 2 portrait yang dimulai pada Bagian 8. Jangan mengganti dengan layout digital yang lebih rapi, template placeholder, atau menunda layout.
-- [ ] Sistem mengisi Bagian 1–5 dan evidence Bagian 7 (checklist kondisi operasi Senior Officer serta baris persetujuan Senior Officer/Manager) dari snapshot immutable; Bagian 6 dan Bagian 8–10 dicetak kosong dengan ruang tulis yang memadai.
+- [ ] Sistem mengisi Bagian 1–5 dan evidence Bagian 7 (checklist kondisi operasi reviewer SO/Officer serta baris keputusan SO/Officer dan Manager, dengan nama/jabatan aktor dari profil akun dan spesimen tanda tangan berversi bila ada) dari snapshot immutable; Bagian 6 dan Bagian 8–10 dicetak kosong dengan ruang tulis yang memadai.
 - [ ] Perubahan output menaikkan `RendererVersion` dan disertai test regresi di `tests/Ptw.Printing.Tests`.
 - [ ] Kegagalan render tidak membatalkan keputusan penerbitan: `RETRYING` dengan backoff, lalu `FAILED`, dengan retry administrator yang idempotent.
 - [ ] Pratinjau draft selalu ber-watermark `DRAFT / TIDAK BERLAKU` dan tidak pernah disimpan; setiap unduhan dokumen resmi menghasilkan audit event.

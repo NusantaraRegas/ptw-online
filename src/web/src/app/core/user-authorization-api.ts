@@ -15,6 +15,20 @@ export interface UserAuthorizationDraft {
   effectiveUntil: string | null;
 }
 
+export interface DirectUserAuthorizationDraft {
+  subjectId: string;
+  roleCode: string;
+  locationId: string | null;
+  effectiveFrom: string;
+  effectiveUntil: string | null;
+}
+
+export interface UserAuthorizationRoleOption {
+  code: string;
+  label: string;
+  locationRequired: boolean;
+}
+
 export interface UserAuthorization extends UserAuthorizationDraft {
   id: string;
   status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED';
@@ -33,6 +47,11 @@ export interface PagedUserAuthorizations {
   count: number;
 }
 
+interface PagedRoleOptions {
+  items: UserAuthorizationRoleOption[];
+  count: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class UserAuthorizationApi {
   constructor(private readonly http: HttpClient) {}
@@ -43,6 +62,14 @@ export class UserAuthorizationApi {
 
   create(draft: UserAuthorizationDraft): Observable<UserAuthorization> {
     return this.http.post<UserAuthorization>('/api/v1/admin/authorizations', draft);
+  }
+
+  createDirect(draft: DirectUserAuthorizationDraft): Observable<UserAuthorization> {
+    return this.http.post<UserAuthorization>('/api/v1/admin/authorizations/direct', draft);
+  }
+
+  listDirectRoleOptions(): Observable<PagedRoleOptions> {
+    return this.http.get<PagedRoleOptions>('/api/v1/admin/authorizations/direct-role-options');
   }
 
   submit(id: string, eTag: string): Observable<UserAuthorization> {

@@ -167,7 +167,22 @@ public sealed class PermitStateMachineTests
         permit.Submit("IGNORED", ReadyToSubmit(), Now.AddMinutes(5));
 
         Assert.Equal(PermitStatus.UnderValidation, permit.Status);
-        Assert.Equal(2, permit.Version);
+        Assert.Equal(3, permit.Version);
+        Assert.Null(permit.HseValidation);
+        Assert.Null(permit.AreaOperationsReview);
+    }
+
+    [Fact]
+    public void ResubmissionWithoutDraftMutationStartsANewPermitVersion()
+    {
+        var permit = ReviewedPermit();
+        var reviewedVersion = permit.Version;
+
+        permit.RequestRevision("Konfirmasi ulang dokumen pendukung.", Now.AddMinutes(3));
+        permit.Submit("IGNORED", ReadyToSubmit(), Now.AddMinutes(4));
+
+        Assert.Equal(PermitStatus.UnderValidation, permit.Status);
+        Assert.Equal(reviewedVersion + 1, permit.Version);
         Assert.Null(permit.HseValidation);
         Assert.Null(permit.AreaOperationsReview);
     }

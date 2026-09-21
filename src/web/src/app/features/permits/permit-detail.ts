@@ -4,7 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Observable } from 'rxjs';
-import { DevelopmentIdentityStore } from '../../core/development-identity';
+import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
 import { PermitAttachment, PermitAttachmentApi } from '../../core/permit-attachment-api';
 import {
@@ -49,7 +49,7 @@ export class PermitDetail {
   private readonly api = inject(PermitApi);
   private readonly locationApi = inject(LocationApi);
   private readonly attachmentApi = inject(PermitAttachmentApi);
-  private readonly identityStore = inject(DevelopmentIdentityStore);
+  private readonly identityApi = inject(IdentityApi);
   private readonly route = inject(ActivatedRoute);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
@@ -57,6 +57,9 @@ export class PermitDetail {
 
   protected readonly permit = signal<Permit | null>(null);
   protected readonly tasks = signal<PermitTask[]>([]);
+  protected readonly identity = signal<CurrentIdentity | null>(null);
+  protected readonly identityError = signal('');
+  protected readonly taskError = signal('');
   protected readonly loading = signal(true);
   protected readonly editing = signal(false);
   protected readonly saving = signal(false);
@@ -96,9 +99,9 @@ export class PermitDetail {
   protected readonly operationalConditionOptions = signal<PermitOperationalConditionOption[]>([]);
   protected readonly loadingOperationalConditions = signal(true);
   protected readonly operationalConditionError = signal('');
-  protected readonly roles = this.identityStore.selected().roles;
-  protected readonly actorId = this.identityStore.selected().userId;
-  protected readonly actorDisplayName = this.identityStore.selected().displayName;
+  protected readonly roles = computed(() => this.identity()?.roles ?? []);
+  protected readonly actorId = computed(() => this.identity()?.userId ?? '');
+  protected readonly actorDisplayName = computed(() => this.identity()?.displayName ?? '');
   protected readonly canEdit = computed(() => {
     const status = this.permit()?.status;
     return status === 'DRAFT' || status === 'REVISION_REQUIRED';
@@ -106,13 +109,13 @@ export class PermitDetail {
   /** Ready print packages, used to bind a signed field copy to the sheet actually used in the field. */
   protected readonly readyPrintPackages = signal<{ id: string; permitVersion: number }[]>([]);
 
-  protected readonly canRetryPrintPackage = computed(() => this.roles.includes('Administrator'));
+  protected readonly canRetryPrintPackage = computed(() => this.roles().includes('Administrator'));
 
   protected readonly canManageDraftAttachments = computed(
     () =>
       this.canEdit() &&
-      (this.roles.includes('Administrator') ||
-        (this.roles.includes('Sponsor') && this.permit()?.draft.sponsorId === this.actorId)),
+      (this.roles().includes('Administrator') ||
+        (this.roles().includes('Sponsor') && this.permit()?.draft.sponsorId === this.actorId())),
   );
   protected readonly closureReplacementPending = computed(
     () =>
@@ -122,16 +125,16 @@ export class PermitDetail {
   protected readonly canResubmitClosure = computed(
     () =>
       this.closureReplacementPending() &&
-      this.roles.includes('Sponsor') &&
-      this.permit()?.draft.sponsorId === this.actorId,
+      this.roles().includes('Sponsor') &&
+      this.permit()?.draft.sponsorId === this.actorId(),
   );
   protected readonly canUploadFieldCopy = computed(
     () =>
       (['ISSUED', 'SUSPENDED', 'EXPIRED'].includes(this.permit()?.status ?? '') ||
         this.closureReplacementPending()) &&
       this.permit()?.workflow.renewal?.status !== 'PENDING' &&
-      (this.roles.includes('Administrator') ||
-        (this.roles.includes('Sponsor') && this.permit()?.draft.sponsorId === this.actorId)),
+      (this.roles().includes('Administrator') ||
+        (this.roles().includes('Sponsor') && this.permit()?.draft.sponsorId === this.actorId())),
   );
   protected readonly canManageAttachments = computed(
     () => this.canManageDraftAttachments() || this.canUploadFieldCopy(),
@@ -173,7 +176,7 @@ export class PermitDetail {
   protected readonly canSubmit = computed(
     () =>
       this.canEdit() &&
-      (this.roles.includes('Sponsor') || this.roles.includes('Administrator')) &&
+      (this.roles().includes('Sponsor') || this.roles().includes('Administrator')) &&
       !this.editing(),
   );
   protected readonly currentTask = computed(() =>
@@ -182,19 +185,19 @@ export class PermitDetail {
   protected readonly canValidateHse = computed(
     () =>
       this.currentTask()?.type === 'HSE_VALIDATION' &&
-      this.roles.includes('HSEValidator') &&
-      this.permit()?.draft.sponsorId !== this.actorId,
+      this.roles().includes('HSEValidator') &&
+      this.permit()?.draft.sponsorId !== this.actorId(),
   );
   protected readonly canApprove = computed(
     () =>
       this.currentTask()?.type === 'AREA_APPROVE_AND_ISSUE' &&
-      this.roles.includes('AreaOwnerManager') &&
+      this.roles().includes('AreaOwnerManager') &&
       this.permit()?.workflow.areaOperations.completed,
   );
   protected readonly canReviewAreaOperations = computed(
     () =>
       this.currentTask()?.type === 'AREA_OPERATION_REVIEW' &&
-      this.roles.includes('AreaOwnerSeniorOfficer'),
+      this.roles().includes('AreaOwnerSeniorOfficer'),
   );
   protected readonly approvalMissingSafetyEquipment = computed(
     () =>
@@ -204,15 +207,16 @@ export class PermitDetail {
     const task = this.currentTask();
     return (
       !!task &&
-      ((task.type === 'HSE_VALIDATION' && this.roles.includes('HSEValidator')) ||
-        (task.type === 'AREA_OPERATION_REVIEW' && this.roles.includes('AreaOwnerSeniorOfficer')) ||
-        (task.type === 'AREA_APPROVE_AND_ISSUE' && this.roles.includes('AreaOwnerManager')))
+      ((task.type === 'HSE_VALIDATION' && this.roles().includes('HSEValidator')) ||
+        (task.type === 'AREA_OPERATION_REVIEW' &&
+          this.roles().includes('AreaOwnerSeniorOfficer')) ||
+        (task.type === 'AREA_APPROVE_AND_ISSUE' && this.roles().includes('AreaOwnerManager')))
     );
   });
   protected readonly canSuspend = computed(
     () =>
       this.permit()?.status === 'ISSUED' &&
-      this.roles.some((role) =>
+      this.roles().some((role) =>
         ['HSEValidator', 'AreaOwnerManager', 'Administrator'].includes(role),
       ),
   );
@@ -222,8 +226,8 @@ export class PermitDetail {
       !this.permit()?.renewalPermitId &&
       !this.permit()?.workflow.closure.requested &&
       this.permit()?.workflow.renewal?.status !== 'PENDING' &&
-      this.roles.includes('Sponsor') &&
-      this.permit()?.draft.sponsorId === this.actorId,
+      this.roles().includes('Sponsor') &&
+      this.permit()?.draft.sponsorId === this.actorId(),
   );
   protected readonly canRequestClosure = computed(
     () =>
@@ -231,17 +235,18 @@ export class PermitDetail {
       !this.permit()?.workflow.closure.requested &&
       !this.permit()?.renewalPermitId &&
       !['PENDING', 'REVISION_REQUIRED'].includes(this.permit()?.workflow.renewal?.status ?? '') &&
-      this.roles.includes('Sponsor') &&
-      this.permit()?.draft.sponsorId === this.actorId,
+      this.roles().includes('Sponsor') &&
+      this.permit()?.draft.sponsorId === this.actorId(),
   );
   protected readonly canReviewRenewal = computed(
     () =>
-      this.currentTask()?.type === 'AREA_RENEWAL_REVIEW' && this.roles.includes('AreaOwnerManager'),
+      this.currentTask()?.type === 'AREA_RENEWAL_REVIEW' &&
+      this.roles().includes('AreaOwnerManager'),
   );
   protected readonly canReviewClosure = computed(
     () =>
       this.currentTask()?.type === 'AREA_CLOSE_VERIFICATION' &&
-      this.roles.includes('AreaOwnerManager'),
+      this.roles().includes('AreaOwnerManager'),
   );
   protected readonly canClose = computed(
     () => this.canReviewClosure() && !this.closureReplacementPending(),
@@ -249,7 +254,7 @@ export class PermitDetail {
   protected readonly canResolveSuspension = computed(
     () =>
       this.permit()?.status === 'SUSPENDED' &&
-      this.roles.some((role) => ['AreaOwnerManager', 'Administrator'].includes(role)),
+      this.roles().some((role) => ['AreaOwnerManager', 'Administrator'].includes(role)),
   );
   protected readonly hasDecisionAction = computed(
     () =>
@@ -345,6 +350,20 @@ export class PermitDetail {
   });
 
   constructor() {
+    this.identityApi
+      .me()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (identity) => {
+          this.identity.set(identity);
+          this.identityError.set('');
+        },
+        error: (response) =>
+          this.identityError.set(
+            response?.error?.detail ??
+              'Identitas pengguna gagal dimuat. Muat ulang halaman sebelum menjalankan tindakan workflow.',
+          ),
+      });
     this.loadLocations();
     this.loadHeaderClassifications();
     this.loadWorkTypes();
@@ -915,7 +934,7 @@ export class PermitDetail {
         otherConditionDetail: review.otherConditionDetail.trim() || null,
         conditionsReviewed: review.conditionsReviewed,
       }),
-      'Verifikasi Senior Officer tersimpan. PTW diteruskan kepada Manager Pemilik Wilayah untuk approval final.',
+      'Verifikasi SO/Officer tersimpan. PTW diteruskan kepada Manager Pemilik Wilayah untuk approval final.',
     );
   }
 
@@ -1189,12 +1208,19 @@ export class PermitDetail {
   }
 
   private refreshTasks(): void {
+    this.taskError.set('');
     this.api
       .listTasks()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (page) => this.tasks.set(page.items),
-        error: () => this.tasks.set([]),
+        error: (response) => {
+          this.tasks.set([]);
+          this.taskError.set(
+            response?.error?.detail ??
+              'Tugas workflow gagal dimuat. Muat ulang halaman sebelum memberikan keputusan.',
+          );
+        },
       });
   }
 

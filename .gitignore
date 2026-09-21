@@ -20,12 +20,19 @@ test-results/
 playwright-report/
 blob-report/
 .eslintcache
+*.tsbuildinfo
 
 # Local configuration and secrets
 .env
 .env.*
 !.env.example
 appsettings.*.local.json
+appsettings.Local.json
+**/Properties/PublishProfiles/
+*.pubxml
+*.pubxml.user
+deploy/compose/*.local.y*ml
+compose.override.y*ml
 secrets/
 *.pfx
 *.p12

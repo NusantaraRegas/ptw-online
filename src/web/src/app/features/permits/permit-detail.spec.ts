@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { FormControl, FormGroup } from '@angular/forms';
 import { ActivatedRoute, convertToParamMap, ParamMap, provideRouter } from '@angular/router';
 import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
+import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
 import { LocationApi } from '../../core/location-api';
 import {
   Permit,
@@ -59,6 +60,15 @@ const validation = (code: string, label: string) => ({
   statement: null,
   completedAt: null,
   safetyEquipmentCodes: [],
+});
+
+const identity = (userId: string, displayName: string, roles: string[]): CurrentIdentity => ({
+  userId,
+  displayName,
+  roles,
+  locationScopes: ['ORF'],
+  competencyCodes: [],
+  isDevelopmentIdentity: false,
 });
 
 describe('PermitDetail HSE validation', () => {
@@ -165,6 +175,12 @@ describe('PermitDetail HSE validation', () => {
       imports: [PermitDetail],
       providers: [
         provideRouter([]),
+        {
+          provide: IdentityApi,
+          useValue: {
+            me: () => of(identity('hse.validator', 'HSE Validator', ['HSEValidator'])),
+          },
+        },
         { provide: PermitApi, useValue: permitApi },
         { provide: PermitAttachmentApi, useValue: { list: () => of([]) } },
         { provide: LocationApi, useValue: { list: () => of({ items: [], count: 0 }) } },
@@ -314,6 +330,7 @@ describe('PermitDetail', () => {
   let requestedPermitIds: string[];
   let currentPermit: Permit;
   let currentTasks: PermitTask[];
+  let currentIdentity: CurrentIdentity;
   let areaReviewRequest: {
     statement: string;
     conditionCodes: string[];
@@ -327,6 +344,7 @@ describe('PermitDetail', () => {
     requestedPermitIds = [];
     currentPermit = permit;
     currentTasks = [];
+    currentIdentity = identity('sponsor.demo', 'Sponsor Demo', ['Sponsor', 'Administrator']);
     areaReviewRequest = null;
 
     const permitApi = {
@@ -421,6 +439,7 @@ describe('PermitDetail', () => {
       imports: [PermitDetail],
       providers: [
         provideRouter([]),
+        { provide: IdentityApi, useValue: { me: () => of(currentIdentity) } },
         { provide: PermitApi, useValue: permitApi },
         { provide: PermitAttachmentApi, useValue: { list: () => of([]) } },
         { provide: LocationApi, useValue: { list: () => of({ items: [], count: 0 }) } },
@@ -451,8 +470,9 @@ describe('PermitDetail', () => {
       .compileComponents();
   });
 
-  it('lets the Senior Officer review Bagian 7 before Manager approval becomes available', () => {
-    sessionStorage.setItem('ptw.development-identity', 'area-senior-officer-orf');
+  it('uses /me so a logged-in SO can review Bagian 7 even when the demo selector is Sponsor', () => {
+    sessionStorage.setItem('ptw.development-identity', 'sponsor-admin');
+    currentIdentity = identity('ade.ruhimat', 'Ade Imat Ruhimat', ['AreaOwnerSeniorOfficer']);
     currentPermit = {
       ...permit,
       status: 'AWAITING_AREA_APPROVAL',
@@ -537,7 +557,7 @@ describe('PermitDetail', () => {
   });
 
   it('blocks legacy area approval and directs the manager to request revision', () => {
-    sessionStorage.setItem('ptw.development-identity', 'area-owner-orf');
+    currentIdentity = identity('yosep.zulkarnain', 'Yosep Ismail Zulkarnain', ['AreaOwnerManager']);
     currentPermit = {
       ...permit,
       status: 'AWAITING_AREA_APPROVAL',
@@ -599,7 +619,7 @@ describe('PermitDetail', () => {
   });
 
   it('presents area-owner closure verification as a clear, structured decision flow', () => {
-    sessionStorage.setItem('ptw.development-identity', 'area-owner-orf');
+    currentIdentity = identity('yosep.zulkarnain', 'Yosep Ismail Zulkarnain', ['AreaOwnerManager']);
     currentPermit = {
       ...permit,
       status: 'CLOSURE_REQUESTED',
@@ -646,7 +666,7 @@ describe('PermitDetail', () => {
     expect(panel?.querySelectorAll('.closure-check').length).toBe(5);
     expect(panel?.querySelector('[formControlName="officerName"]')).not.toBeNull();
     expect(panel?.querySelectorAll('[formControlName="completionOutcome"]').length).toBe(2);
-    expect(panel?.textContent).toContain('Manager Pemilik Wilayah ORF Demo');
+    expect(panel?.textContent).toContain('Yosep Ismail Zulkarnain');
     expect(panel?.querySelector('.decision-statement small')?.textContent).toContain('Wajib diisi');
     expect(panel?.querySelector('.closure-secondary-action')?.textContent).toContain(
       'Evidence belum sesuai?',

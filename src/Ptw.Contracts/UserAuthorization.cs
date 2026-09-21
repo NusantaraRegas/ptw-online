@@ -12,6 +12,18 @@ public sealed record UserAuthorizationDraftRequest(
     DateTimeOffset EffectiveFrom,
     DateTimeOffset? EffectiveUntil);
 
+public sealed record DirectUserAuthorizationDraftRequest(
+    string SubjectId,
+    string RoleCode,
+    Guid? LocationId,
+    DateTimeOffset EffectiveFrom,
+    DateTimeOffset? EffectiveUntil);
+
+public sealed record UserAuthorizationRoleOptionResponse(
+    string Code,
+    string Label,
+    bool LocationRequired);
+
 public sealed record ReturnAuthorizationForChangesRequest(string Reason);
 
 public sealed record UserAuthorizationResponse(

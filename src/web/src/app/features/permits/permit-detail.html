@@ -28,6 +28,12 @@
       <a [routerLink]="['/permits', renewalCreatedId()]">Buka draft renewal</a>
     </div>
   }
+  @if (identityError()) {
+    <div class="message error workflow-error" role="alert">{{ identityError() }}</div>
+  }
+  @if (taskError()) {
+    <div class="message error workflow-error" role="alert">{{ taskError() }}</div>
+  }
   @if (error() && !editing() && !hasDecisionAction()) {
     <div class="message error workflow-error" role="alert">
       <span>{{ error() }}</span>
@@ -357,8 +363,8 @@
         @if (
           permit()!.status === 'CLOSURE_REQUESTED' &&
           !closureReplacementPending() &&
-          roles.includes('Sponsor') &&
-          permit()!.draft.sponsorId === actorId
+          roles().includes('Sponsor') &&
+          permit()!.draft.sponsorId === actorId()
         ) {
           <section class="card workflow-action evidence-card">
             <h2>Penutupan sedang diverifikasi</h2>
@@ -503,15 +509,15 @@
                 <span class="workflow-action-kicker">Bagian 7</span>
                 <h2>Verifikasi kondisi operasi</h2>
                 <p>
-                  Senior Officer menetapkan kondisi operasi yang relevan sebelum PTW diteruskan
-                  kepada Manager Pemilik Wilayah.
+                  SO/Officer Pemilik Wilayah menetapkan kondisi operasi yang relevan sebelum PTW
+                  diteruskan kepada Manager Pemilik Wilayah.
                 </p>
               </header>
             } @else if (canApprove()) {
               <header class="workflow-action-header">
                 <span class="workflow-action-kicker">Approval final Bagian 7</span>
                 <h2>Review dan terbitkan PTW</h2>
-                <p>Tinjau hasil verifikasi Senior Officer sebelum memberikan persetujuan akhir.</p>
+                <p>Tinjau hasil verifikasi SO/Officer sebelum memberikan persetujuan akhir.</p>
               </header>
             } @else if (canClose()) {
               <header class="workflow-action-header">
@@ -668,7 +674,7 @@
                   <input type="checkbox" formControlName="conditionsReviewed" />
                   <span>
                     <strong>Seluruh kondisi operasi yang relevan telah diperiksa.</strong>
-                    <small> Persetujuan ini menjadi evidence Senior Officer pada Bagian 7. </small>
+                    <small> Persetujuan ini menjadi evidence SO/Officer pada Bagian 7. </small>
                   </span>
                 </label>
               </div>
@@ -677,7 +683,7 @@
               <section class="area-operation-summary" aria-labelledby="area-review-summary-title">
                 <div class="area-operation-summary-heading">
                   <div>
-                    <span>Verifikasi Senior Officer</span>
+                    <span>Verifikasi SO/Officer</span>
                     <h3 id="area-review-summary-title">
                       {{ permit()!.workflow.areaOperations.actorName }}
                     </h3>
@@ -819,8 +825,8 @@
                     <legend>Persetujuan Pemilik Wilayah</legend>
                     <div class="closure-manager-identity">
                       <span>Manager Pemilik Wilayah</span>
-                      <strong>{{ actorDisplayName }}</strong>
-                      <small>{{ actorId }}</small>
+                      <strong>{{ actorDisplayName() }}</strong>
+                      <small>{{ actorId() }}</small>
                     </div>
                     <label class="check closure-check">
                       <input type="checkbox" formControlName="managerAgreesWorkCompleted" />

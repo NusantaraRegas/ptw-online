@@ -70,6 +70,7 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
             services.RemoveAll<IDbContextOptionsConfiguration<PtwDbContext>>();
             services.RemoveAll<IssuancePolicySettings>();
             services.RemoveAll<LocationReleaseSettings>();
+            services.RemoveAll<UserAuthorizationRoleProfileSettings>();
             services.AddSingleton(new IssuancePolicySettings
             {
                 Approved = true,
@@ -84,6 +85,23 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
                     ["ORF"] = "Departemen Distribusi Gas dan Pengelolaan ORF",
                     ["SITE_OFFICE"] = "Departemen General Affair",
                     ["WATER_BASED"] = "Departemen Transport & Operasi FSRU"
+                }
+            });
+            services.AddSingleton(new UserAuthorizationRoleProfileSettings
+            {
+                Roles = new Dictionary<string, UserAuthorizationRoleProfile>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Administrator"] = new()
+                    {
+                        Label = "Administrator",
+                        ActionCodes = ["admin.manage"]
+                    },
+                    ["AreaOwnerManager"] = new()
+                    {
+                        Label = "Manager Pemilik Wilayah",
+                        LocationRequired = true,
+                        ActionCodes = ["permit.approve-and-issue", "permit.suspend"]
+                    }
                 }
             });
             services.AddDbContext<PtwDbContext>(options => options.UseSqlServer(_connectionString));

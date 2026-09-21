@@ -12,6 +12,9 @@ namespace Ptw.Api.IntegrationTests;
 [Collection(PtwApiTestGroup.Name)]
 public sealed class UserAuthorizationApiTests(PtwApiFactory factory)
 {
+    private static readonly string[] ManagerActions = ["permit.approve-and-issue", "permit.suspend"];
+    private static readonly string[] MaliciousActions = ["admin.manage"];
+
     [Fact]
     public async Task NonAdministratorCannotReadOrCreateAssignments()
     {
@@ -30,7 +33,58 @@ public sealed class UserAuthorizationApiTests(PtwApiFactory factory)
     }
 
     [Fact]
-    public async Task SubjectCanHoldMultipleRolesWithMakerCheckerAndAtomicEvidence()
+    public async Task ControlledDirectAssignmentDerivesActionsAndSupportsNoEndDate()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        using var maker = AdminClient($"admin.direct-maker.{suffix}");
+        using var checker = AdminClient($"admin.direct-checker.{suffix}");
+        var location = await CreateApprovedLocationAsync(maker, checker, $"DIRECT-{suffix}");
+
+        using var optionsResponse = await maker.GetAsync(
+            "/api/v1/admin/authorizations/direct-role-options");
+        optionsResponse.EnsureSuccessStatusCode();
+        var options = Required(
+            await optionsResponse.Content.ReadFromJsonAsync<PagedResponse<UserAuthorizationRoleOptionResponse>>());
+        var managerOption = Assert.Single(options.Items, item => item.Code == "AreaOwnerManager");
+        Assert.True(managerOption.LocationRequired);
+
+        using var response = await maker.PostAsJsonAsync(
+            "/api/v1/admin/authorizations/direct",
+            new
+            {
+                SubjectId = $"area.manager.{suffix}",
+                RoleCode = "AreaOwnerManager",
+                LocationId = location.Id,
+                EffectiveFrom = DateTimeOffset.UtcNow,
+                EffectiveUntil = (DateTimeOffset?)null,
+                ActionCodes = MaliciousActions
+            });
+        response.EnsureSuccessStatusCode();
+        var assignment = Required(
+            await response.Content.ReadFromJsonAsync<UserAuthorizationResponse>());
+
+        Assert.Equal("DIRECT", assignment.Kind);
+        Assert.Equal(location.Id, assignment.LocationId);
+        Assert.Null(assignment.EffectiveUntil);
+        Assert.Equal(
+            ManagerActions,
+            assignment.ActionCodes);
+        Assert.DoesNotContain("admin.manage", assignment.ActionCodes);
+
+        using var missingLocation = await maker.PostAsJsonAsync(
+            "/api/v1/admin/authorizations/direct",
+            new DirectUserAuthorizationDraftRequest(
+                $"area.manager.missing.{suffix}",
+                "AreaOwnerManager",
+                null,
+                DateTimeOffset.UtcNow,
+                null));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, missingLocation.StatusCode);
+        Assert.Equal("authorization.location_required", await ProblemCodeAsync(missingLocation));
+    }
+
+    [Fact]
+    public async Task SubjectCanHoldMultipleRolesWithAdministratorApprovalAndAtomicEvidence()
     {
         var suffix = Guid.NewGuid().ToString("N");
         var subjectId = $"operator.{suffix}";
@@ -47,11 +101,12 @@ public sealed class UserAuthorizationApiTests(PtwApiFactory factory)
             issuerPending.ETag,
             Guid.NewGuid().ToString("N"));
         using var selfApprovalResponse = await maker.SendAsync(selfApproval);
-        Assert.Equal(HttpStatusCode.Conflict, selfApprovalResponse.StatusCode);
-        Assert.Equal("authorization.maker_checker_required", await ProblemCodeAsync(selfApprovalResponse));
+        selfApprovalResponse.EnsureSuccessStatusCode();
+        var issuerApproved = Required(
+            await selfApprovalResponse.Content.ReadFromJsonAsync<UserAuthorizationResponse>());
+        Assert.Equal(issuerApproved.MakerId, issuerApproved.CheckerId);
 
         using var checker = AdminClient($"admin.checker.{suffix}");
-        var issuerApproved = await ApproveAsync(checker, issuerPending);
         var testerApproved = await ApproveAsync(checker, testerPending);
 
         Assert.Equal("APPROVED", issuerApproved.Status);
@@ -251,6 +306,48 @@ public sealed class UserAuthorizationApiTests(PtwApiFactory factory)
         using var response = await client.SendAsync(command);
         response.EnsureSuccessStatusCode();
         return Required(await response.Content.ReadFromJsonAsync<UserAuthorizationResponse>());
+    }
+
+    private static async Task<LocationMasterResponse> CreateApprovedLocationAsync(
+        HttpClient maker,
+        HttpClient checker,
+        string code)
+    {
+        using var createResponse = await maker.PostAsJsonAsync(
+            "/api/v1/admin/locations",
+            new LocationDraftRequest(
+                code,
+                $"Lokasi {code}",
+                null,
+                DateTimeOffset.UtcNow.AddHours(-1),
+                null));
+        createResponse.EnsureSuccessStatusCode();
+        var created = Required(
+            await createResponse.Content.ReadFromJsonAsync<LocationMasterResponse>());
+
+        using var submit = ConfigurationCommand(
+            $"/api/v1/admin/locations/{created.Id}/submit",
+            created.ETag);
+        using var submitResponse = await maker.SendAsync(submit);
+        submitResponse.EnsureSuccessStatusCode();
+        var pending = Required(
+            await submitResponse.Content.ReadFromJsonAsync<LocationMasterResponse>());
+
+        using var approve = ConfigurationCommand(
+            $"/api/v1/admin/locations/{created.Id}/approve",
+            pending.ETag);
+        using var approveResponse = await checker.SendAsync(approve);
+        approveResponse.EnsureSuccessStatusCode();
+        return Required(
+            await approveResponse.Content.ReadFromJsonAsync<LocationMasterResponse>());
+    }
+
+    private static HttpRequestMessage ConfigurationCommand(string path, string etag)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, path);
+        request.Headers.TryAddWithoutValidation("If-Match", etag);
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+        return request;
     }
 
     private static HttpRequestMessage Command(Guid id, string command, string etag, string key)

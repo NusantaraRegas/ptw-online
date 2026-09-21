@@ -186,11 +186,11 @@ public sealed class UserAuthorizationAssignment
         Raise("authorization_submitted_for_approval", new { SubjectId, RoleCode, Version });
     }
 
-    public void Approve(string checkerId, DateTimeOffset now)
+    public void Approve(string checkerId, DateTimeOffset now, bool allowMakerApproval = false)
     {
         EnsureStatus(AuthorizationAssignmentStatus.PendingApproval);
         var checker = Required(checkerId, "Checker");
-        if (string.Equals(checker, MakerId, StringComparison.OrdinalIgnoreCase))
+        if (!allowMakerApproval && string.Equals(checker, MakerId, StringComparison.OrdinalIgnoreCase))
         {
             throw new DomainRuleViolationException(
                 "authorization.maker_checker_required",

@@ -24,7 +24,7 @@ const ROLE_LABELS: Readonly<Record<string, string>> = {
   Administrator: 'Administrator',
   Sponsor: 'Sponsor',
   HSEValidator: 'PIC HSE',
-  AreaOwnerSeniorOfficer: 'Senior Officer Pemilik Wilayah',
+  AreaOwnerSeniorOfficer: 'SO / Officer Pemilik Wilayah',
   AreaOwnerManager: 'Manager Pemilik Wilayah',
 };
 

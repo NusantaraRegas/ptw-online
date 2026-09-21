@@ -18,7 +18,9 @@ public sealed class PermitService(
     IUserDirectoryStore userDirectoryStore)
 {
     private const string HseValidatorRole = "HSEValidator";
-    private const string AreaOwnerSeniorOfficerRole = "AreaOwnerSeniorOfficer";
+    // Retain the persisted code for compatibility. This role is the single Bagian 7
+    // reviewer pool and may be assigned to an SO or Officer Pemilik Wilayah.
+    private const string AreaOperationsReviewerRole = "AreaOwnerSeniorOfficer";
     private const string AreaOwnerManagerRole = "AreaOwnerManager";
 
     public async Task<PermitResponse> CreateAsync(
@@ -57,7 +59,7 @@ public sealed class PermitService(
     {
         var actor = actorContext.Current;
         var sponsorFilter = actor.Roles.Overlaps(
-            ["Auditor", "Administrator", HseValidatorRole, AreaOwnerSeniorOfficerRole, AreaOwnerManagerRole])
+            ["Auditor", "Administrator", HseValidatorRole, AreaOperationsReviewerRole, AreaOwnerManagerRole])
             ? null
             : actor.Id;
         var items = (await store.ListAsync(sponsorFilter, cancellationToken))
@@ -550,7 +552,7 @@ public sealed class PermitService(
         string correlationId,
         CancellationToken cancellationToken)
     {
-        var signature = await ResolveVisualSignatureAsync(actorContext.Current.Id, cancellationToken);
+        var presentation = await ResolveActorPresentationAsync(actorContext.Current.Id, cancellationToken);
         return await ExecuteTaskCommandAsync(
             taskId,
             "AREA_APPROVE_AND_ISSUE",
@@ -595,12 +597,14 @@ public sealed class PermitService(
                         "PTW tidak dapat diterbitkan setelah masa berlakunya berakhir.");
                 }
 
+                var actorName = presentation.DisplayName ?? actor.DisplayName;
+                var actorPosition = presentation.Position ?? AreaManagerPosition(permit.Draft.LocationId);
                 permit.ApproveAndIssue(new PermitApprovalEvidence(
                     actor.Id,
-                    AreaManagerPosition(permit.Draft.LocationId),
+                    actorPosition,
                     ApprovalCapacity.Manager,
                     actor.Id,
-                    AreaManagerPosition(permit.Draft.LocationId),
+                    actorPosition,
                     authorizationId,
                     null,
                     issuancePolicy.RuleVersion,
@@ -608,8 +612,8 @@ public sealed class PermitService(
                     issuancePolicy.CampaignAssetVersion,
                     request.Statement,
                     now,
-                    actor.DisplayName,
-                    signature), now);
+                    actorName,
+                    presentation.Signature), now);
             },
             cancellationToken);
     }
@@ -622,7 +626,7 @@ public sealed class PermitService(
         string correlationId,
         CancellationToken cancellationToken)
     {
-        var signature = await ResolveVisualSignatureAsync(actorContext.Current.Id, cancellationToken);
+        var presentation = await ResolveActorPresentationAsync(actorContext.Current.Id, cancellationToken);
         return await ExecuteTaskCommandAsync(
             taskId,
             "AREA_OPERATION_REVIEW",
@@ -631,14 +635,14 @@ public sealed class PermitService(
             idempotencyKey,
             correlationId,
             PermitPolicyOperations.ReviewAreaOperations,
-            [AreaOwnerSeniorOfficerRole],
+            [AreaOperationsReviewerRole],
             (permit, actor, now, authorization) =>
             {
                 if (!request.ConditionsReviewed)
                 {
                     throw new DomainRuleViolationException(
                         "permit.area_operations.confirmation_required",
-                        "Senior Officer wajib mengonfirmasi bahwa seluruh kondisi operasi yang relevan telah diperiksa.");
+                        "SO atau Officer Pemilik Wilayah wajib mengonfirmasi bahwa seluruh kondisi operasi yang relevan telah diperiksa.");
                 }
 
                 var authorizationId = authorization?.AssignmentIds.SingleOrDefault() ?? Guid.Empty;
@@ -650,38 +654,50 @@ public sealed class PermitService(
                 if (authorizationId == Guid.Empty)
                 {
                     throw new PolicyAuthorizationDeniedException(
-                        "authorization.senior_officer_assignment_required",
-                        "Assignment Senior Officer aktif yang terverifikasi server wajib tersedia.");
+                        "authorization.area_operations_reviewer_assignment_required",
+                        "Assignment SO/Officer Pemilik Wilayah aktif yang terverifikasi server wajib tersedia.");
                 }
 
+                var actorName = presentation.DisplayName ?? actor.DisplayName;
+                var actorPosition = presentation.Position ?? AreaOperationsPosition(permit.Draft.LocationId);
                 permit.ReviewAreaOperations(new AreaOperationsReviewEvidence(
                     actor.Id,
-                    actor.DisplayName,
-                    AreaOperationsPosition(permit.Draft.LocationId),
+                    actorName,
+                    actorPosition,
                     authorizationId,
                     request.ConditionCodes,
                     request.OtherConditionDetail,
                     request.Statement,
                     now,
-                    signature), now);
+                    presentation.Signature), now);
             },
             cancellationToken);
     }
 
-    private async Task<VisualSignatureEvidence?> ResolveVisualSignatureAsync(
+    private async Task<ActorPresentation> ResolveActorPresentationAsync(
         string actorId,
         CancellationToken cancellationToken)
     {
-        var signature = await userDirectoryStore.FindActiveSignatureAsync(actorId, cancellationToken);
-        return signature is null
-            ? null
-            : new VisualSignatureEvidence(
-                signature.Id,
-                signature.Version,
-                signature.MediaType,
-                signature.Content,
-                signature.Sha256);
+        var stored = await userDirectoryStore.FindAsync(actorId, cancellationToken);
+        var account = stored?.Account.IsActive == true ? stored.Account : null;
+        var signature = stored?.Signature is { IsActive: true } activeSignature
+            ? new VisualSignatureEvidence(
+                activeSignature.Id,
+                activeSignature.Version,
+                activeSignature.MediaType,
+                activeSignature.Content,
+                activeSignature.Sha256)
+            : null;
+        return new ActorPresentation(
+            NormalizeOptional(account?.DisplayName),
+            NormalizeOptional(account?.Position),
+            signature);
     }
+
+    private sealed record ActorPresentation(
+        string? DisplayName,
+        string? Position,
+        VisualSignatureEvidence? Signature);
 
     public Task<PermitResponse> RequestRevisionAsync(
         Guid taskId,
@@ -1009,7 +1025,7 @@ public sealed class PermitService(
         var role = task.Type switch
         {
             "HSE_VALIDATION" => HseValidatorRole,
-            "AREA_OPERATION_REVIEW" => AreaOwnerSeniorOfficerRole,
+            "AREA_OPERATION_REVIEW" => AreaOperationsReviewerRole,
             "AREA_APPROVE_AND_ISSUE" => AreaOwnerManagerRole,
             _ => throw new InvalidRequestException("task.type.invalid", "Task tidak mendukung keputusan revisi atau penolakan.")
         };
@@ -1198,6 +1214,9 @@ public sealed class PermitService(
         string.Equals(locationId, "ORF", StringComparison.OrdinalIgnoreCase)
             ? "Kepala Departemen Distribusi Gas dan Manajemen ORF"
             : "Manager Pemilik Wilayah";
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static void EnsureSponsorOrAdmin(Actor actor)
     {

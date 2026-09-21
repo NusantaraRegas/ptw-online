@@ -18,7 +18,7 @@ public sealed class UserAuthorizationAssignmentTests
     }
 
     [Fact]
-    public void MakerCannotApproveOwnAssignment()
+    public void MakerCannotApproveOwnAssignmentByDefault()
     {
         var assignment = Create();
         assignment.SubmitForApproval("admin.maker", Now.AddMinutes(1));
@@ -28,6 +28,20 @@ public sealed class UserAuthorizationAssignmentTests
 
         Assert.Equal("authorization.maker_checker_required", exception.Code);
         Assert.Equal(AuthorizationAssignmentStatus.PendingApproval, assignment.Status);
+    }
+
+    [Fact]
+    public void AdministratorCanApproveOwnAssignmentWhenPolicyAllowsIt()
+    {
+        var assignment = Create();
+        assignment.SubmitForApproval("admin.maker", Now.AddMinutes(1));
+
+        assignment.Approve("admin.maker", Now.AddMinutes(2), allowMakerApproval: true);
+
+        Assert.Equal(AuthorizationAssignmentStatus.Approved, assignment.Status);
+        Assert.Equal("admin.maker", assignment.MakerId);
+        Assert.Equal("admin.maker", assignment.CheckerId);
+        Assert.Equal(Now.AddMinutes(2), assignment.ApprovedAt);
     }
 
     [Fact]

@@ -44,16 +44,16 @@ Increment P0 lifecycle v1.7 telah tersedia:
 - lifecycle aktif: `DRAFT`, `UNDER_VALIDATION`, `REVISION_REQUIRED`, `AWAITING_AREA_APPROVAL`, `ISSUED`, `SUSPENDED`, `CLOSURE_REQUESTED`, `CLOSED`, `REJECTED`, `CANCELLED`, `EXPIRED`;
 - submit membuat tepat satu task `HSE_VALIDATION`; tidak ada validator Distribusi Gas;
 - Sponsor yang juga PIC HSE tidak dapat memvalidasi PTW miliknya sendiri;
-- setelah validasi HSE, Development/UAT membuat task `AREA_OPERATION_REVIEW` untuk Senior Officer pemilik wilayah. Senior Officer menetapkan checklist kondisi operasi Bagian 7; hanya setelah review itu selesai sistem membuat task `AREA_APPROVE_AND_ISSUE` untuk Manager pemilik wilayah. Command Manager tetap atomik dan menyimpan decision, status `ISSUED`, audit, outbox, `PrintPackageSnapshot`, serta placeholder `GeneratedDocument` dalam satu `SaveChanges` transaction;
+- setelah validasi HSE, Development/UAT membuat tepat satu task `AREA_OPERATION_REVIEW` untuk pool SO/Officer pemilik wilayah. Pemegang assignment yang pertama menyelesaikan task menetapkan checklist kondisi operasi Bagian 7; hanya setelah review itu selesai sistem membuat tepat satu task `AREA_APPROVE_AND_ISSUE` untuk Manager pemilik wilayah. Command Manager tetap atomik dan menyimpan decision, status `ISSUED`, audit, outbox, `PrintPackageSnapshot`, serta placeholder `GeneratedDocument` dalam satu `SaveChanges` transaction;
 - release lokasi dikonfigurasi server-side; Development mengaktifkan ORF, Site-Office, dan Water-Based Activity, sedangkan lokasi lain ditolak fail-closed;
 - suspend berlaku langsung dan resolve kembali ke `ISSUED`; request renewal Sponsor memerlukan signed field copy exact package/version dan baru membuat permit penerus tanpa overlap setelah Pemilik Wilayah menyetujui;
 - closure memakai task Pemilik Wilayah dan memerlukan signed field copy yang `CLEAN`, bermetadata lengkap, tidak superseded, serta cocok dengan exact PermitVersion dan PrintPackage. Pemilik Wilayah kemudian mengisi verifikasi Bagian 10: nama Officer, hasil inspeksi area, status selesai, pemulihan sistem inhibited, handback/pengamanan area, dan keterbacaan evidence. Pekerjaan yang belum selesai dikembalikan kepada Sponsor tanpa menutup PTW atau memulihkan hak kerja; Sponsor dapat mengunggah hardcopy pengganti untuk paket cetak yang sama dan mengajukan ulang melalui command khusus;
 - lampiran privat mengenali signature PDF/JPEG/PNG, menyimpan SHA-256, kategori, metadata dokumen, target version, PrintPackage, replacement lineage, serta evidence malware scan; file selain `CLEAN` tidak dapat diunduh;
-- form draft Sponsor memuat tipe pengaju, klasifikasi header resmi (HOT: `Api Terbuka`/`Percikan Api` multi-select; COLD: tepat satu `Low Risk`/`High Risk`; CSE tanpa pilihan tambahan), work type multi-select (opsi `Lain-lain` mewajibkan detail yang ikut tercetak), nomor dan nama equipment, Work Order No., plant/area, SIMOPS, serta nomor/revisi/tanggal JSA. Referensi bahaya tambahan bersifat opsional dan informatif; JSA tetap menjadi sumber resmi identifikasi bahaya dan pengendalian. Field bebas CLSR dan isolation/precaution tidak ditampilkan pada form Sponsor karena bukan kewenangan Sponsor; checklist kondisi operasi Bagian 7 ditetapkan Senior Officer setelah validasi HSE;
+- form draft Sponsor memuat tipe pengaju, klasifikasi header resmi (HOT: `Api Terbuka`/`Percikan Api` multi-select; COLD: tepat satu `Low Risk`/`High Risk`; CSE tanpa pilihan tambahan), work type multi-select (opsi `Lain-lain` mewajibkan detail yang ikut tercetak), nomor dan nama equipment, Work Order No., plant/area, SIMOPS, serta nomor/revisi/tanggal JSA. Referensi bahaya tambahan bersifat opsional dan informatif; JSA tetap menjadi sumber resmi identifikasi bahaya dan pengendalian. Field bebas CLSR dan isolation/precaution tidak ditampilkan pada form Sponsor karena bukan kewenangan Sponsor; checklist kondisi operasi Bagian 7 ditetapkan SO/Officer pemilik wilayah setelah validasi HSE;
 - dokumen dasar JSA, ID, BPJS TK, FTW, dan E-SIMI wajib memiliki lampiran bertaut sebelum submit; dokumen selain JSA menjadi evidence pengajuan dan tidak ditambahkan ke checklist Bagian 4 pada PDF resmi;
 - Bagian 4 memakai 15 pilihan dokumen sesuai template resmi: JSA wajib dan pilihan lain opsional. Setiap pilihan harus memiliki lampiran yang tertaut sebelum submit, metadata lampiran JSA harus cocok dengan draft, dan hasil checklist dicetak dari immutable snapshot;
 - APD/perlengkapan safety Bagian 5 dipilih secara multi-select oleh PIC HSE pada tahap validasi dan tidak dapat diisi bebas oleh Sponsor; approval permit lama tanpa evidence Bagian 5 diblokir dan diarahkan melalui revisi; input hazards/controls bebas telah dihapus dari UI;
-- paket cetak resmi dirender Worker dari `PrintPackageSnapshot` yang immutable dengan halaman resmi FM-001/002/003-B-002-NR-B220 sebagai template vektor. Hasil unduhan terdiri dari dua halaman A3: halaman 1 landscape untuk Bagian 1-7 dan halaman 2 portrait yang dimulai dari Bagian 8; sistem mengisi Bagian 1-5 serta evidence Bagian 7 (checklist Senior Officer dan baris persetujuan Senior Officer/Manager), sedangkan Bagian 6 dan Bagian 8-10 tetap kosong untuk diisi manual di lapangan;
+- paket cetak resmi dirender Worker dari `PrintPackageSnapshot` yang immutable dengan halaman resmi FM-001/002/003-B-002-NR-B220 sebagai template vektor. Hasil unduhan terdiri dari dua halaman A3: halaman 1 landscape untuk Bagian 1-7 dan halaman 2 portrait yang dimulai dari Bagian 8; sistem mengisi Bagian 1-5 serta evidence Bagian 7 (checklist dan baris keputusan SO/Officer serta Manager), sedangkan Bagian 6 dan Bagian 8-10 tetap kosong untuk diisi manual di lapangan;
 - kegagalan render tidak membatalkan keputusan penerbitan: status paket menjadi `RETRYING` dengan exponential backoff, lalu `FAILED` setelah batas percobaan, dan Administrator dapat menjadwalkan render ulang secara idempotent;
 - hanya paket berstatus `READY` yang dapat diunduh; setiap unduhan menghasilkan audit event, dan pratinjau draft selalu diberi watermark `DRAFT / TIDAK BERLAKU` serta tidak pernah disimpan.
 - deploy web menjaga `index.html` tetap tervalidasi, tidak mengalihkan chunk JavaScript yang hilang ke SPA shell, dan melakukan satu reload terbatas ketika lazy chunk lama gagal dimuat.
@@ -134,18 +134,19 @@ flowchart TB
 ```text
 src/Ptw.Domain          aggregate, state machine, invariant, katalog checklist formulir — tanpa EF/ASP.NET/IO
 src/Ptw.Contracts       DTO netral — tanpa domain behavior
-src/Ptw.Application     use case, authorization, ports (IPermitStore, IPrintPackage...)
+src/Ptw.Application     use case, authorization, ports (IPermitStore, IPrintPackage...), profil role assignment langsung
 src/Ptw.Infrastructure  EF Core, storage, audit, outbox, Printing/ (renderer + template)
-src/Ptw.Api             mapping HTTP, DevelopmentAuthenticationHandler, ApiExceptionHandler
+src/Ptw.Api             mapping HTTP, Security/ (DevelopmentAuthenticationHandler, HttpActorContext), login cookie lokal, ApiExceptionHandler
 src/Ptw.Worker          OutboxWorker dan PrintPackageRenderWorker
 src/web                 Angular: core/*-api.ts (HTTP) + features/* (komponen)
 tests/Ptw.Domain.Tests           unit state machine
 tests/Ptw.Api.IntegrationTests   end-to-end via PtwApiFactory + Testcontainers
 tests/Ptw.Printing.Tests         regresi layout dokumen
-deploy/compose                   compose.dev.yaml
+deploy/compose                   compose.dev.yaml (production-like), compose.hotreload.yaml (bind mount + dotnet watch/ng serve)
 deploy/nginx                     konfigurasi reverse proxy
 docs/                            BRD/PRD/FSD v1.7, status implementasi
-docs/decisions/                  OPN-001..009, PTW-RENEWAL — decision record yang disahkan
+docs/decisions/                  register OPN-001..009 (semua masih DRAFT) dan PTW-RENEWAL (baseline Development)
+.github/workflows/ci.yml         CI: build/test backend, build/test frontend, validasi compose config
 ```
 
 ## Lifecycle PTW
@@ -191,7 +192,7 @@ sequenceDiagram
   autonumber
   actor Sponsor
   actor HSE as PIC HSE (HSEValidator)
-  actor SO as Senior Officer pemilik wilayah
+  actor SO as SO/Officer pemilik wilayah
   actor Mgr as Manager pemilik area
   participant SPA as Angular SPA
   participant API as Ptw.Api
@@ -217,7 +218,7 @@ sequenceDiagram
 
   SO->>SPA: Tinjau kondisi operasi Bagian 7
   SPA->>API: POST /api/v1/tasks/{taskId}/review-area-operations
-  SVC->>DB: evidence Senior Officer,<br/>task AREA_APPROVE_AND_ISSUE
+  SVC->>DB: evidence reviewer SO/Officer,<br/>task AREA_APPROVE_AND_ISSUE
 
   Mgr->>SPA: Tinjau task persetujuan
   alt ditolak
@@ -293,7 +294,7 @@ Pratinjau draft (`GET .../print-packages/preview`) merender langsung dari state 
 | --- | --- | --- |
 | `POST` | `/api/v1/permits/{id}/submit` | `SubmitPermit` |
 | `POST` | `/api/v1/tasks/{taskId}/validate` | `ValidateSubmission` |
-| `POST` | `/api/v1/tasks/{taskId}/review-area-operations` | `ReviewAreaOperations` oleh Senior Officer pemilik wilayah |
+| `POST` | `/api/v1/tasks/{taskId}/review-area-operations` | `ReviewAreaOperations` oleh SO/Officer pemilik wilayah; reviewer pertama menyelesaikan satu task |
 | `POST` | `/api/v1/tasks/{taskId}/escalate` | eskalasi HSE dengan catatan |
 | `POST` | `/api/v1/tasks/{taskId}/revision` | `RequestRevision` |
 | `POST` | `/api/v1/tasks/{taskId}/reject` | `RejectPermit` |
@@ -317,7 +318,7 @@ Pratinjau draft (`GET .../print-packages/preview`) merender langsung dari state 
 
 Task command memakai `taskId`, bukan permit ID. Semua transition memerlukan `If-Match` dan `Idempotency-Key`. Tidak ada endpoint generik `setStatus`.
 
-Endpoint baca/create draft, attachment (multipart dengan `supportingDocumentCode` untuk dokumen wajib dan Bagian 4), history, master lokasi, authorization, policy readiness/simulation/UAT, dan health tetap tersedia. Katalog dokumen wajib dibaca dari `GET /api/v1/reference-data/mandatory-documents`; katalog checklist formulir dibaca dari `/header-classifications`, `/work-types`, `/supporting-documents`, `/safety-equipment`, dan `/operational-conditions`. Nilai dikontrol dan divalidasi ulang di server. OpenAPI hanya diekspos pada Development melalui `/openapi/v1.json`.
+Endpoint baca/create draft, attachment (multipart dengan `supportingDocumentCode` untuk dokumen wajib dan Bagian 4), history, master lokasi, authorization, policy readiness/simulation/UAT, dan health tetap tersedia. Katalog dokumen wajib dibaca dari `GET /api/v1/reference-data/mandatory-documents`; katalog checklist formulir dibaca dari `/header-classifications`, `/work-types`, `/supporting-documents`, `/safety-equipment`, dan `/operational-conditions`. Nilai dikontrol dan divalidasi ulang di server. Assignment role langsung memakai `GET /api/v1/admin/authorizations/direct-role-options` dan `POST /api/v1/admin/authorizations/direct`; action code dan kompetensi diturunkan server dari profil role, bukan diterima dari klien. OpenAPI hanya diekspos pada Development melalui `/openapi/v1.json`.
 
 Renewal tidak mengubah status PTW asal. Request Sponsor membuat task `AREA_RENEWAL_REVIEW` untuk Manager pemilik area; permit penerus (`DRAFT`, terhubung lewat `RenewedFromPermitId`) baru dibuat secara atomik saat task tersebut disetujui, dan selama review masih `PENDING` lampiran PTW asal tidak dapat diubah serta closure tidak dapat diajukan.
 
@@ -382,11 +383,13 @@ npm ci
 npm start
 ```
 
-Development identity hanya aktif pada environment `Development`. Profil yang relevan untuk flow v1.7 adalah Sponsor, PIC HSE (`HSEValidator`), Senior Officer pemilik wilayah (`AreaOwnerSeniorOfficer`), dan Manager pemilik area (`AreaOwnerManager`). Identitas dan Sponsor aktif berasal dari `/api/v1/me`; header development diabaikan di luar Development.
+Development identity hanya aktif pada environment `Development`. Profil yang relevan untuk flow v1.7 adalah Sponsor, PIC HSE (`HSEValidator`), pool reviewer SO/Officer pemilik wilayah (kode kompatibilitas `AreaOwnerSeniorOfficer`), dan Manager pemilik area (`AreaOwnerManager`). Identitas dan Sponsor aktif berasal dari `/api/v1/me`; header development diabaikan di luar Development.
 
-Administrator dapat membuat akun lokal Development melalui **Administrasi > Pengguna**, lalu membuat dan menyetujui assignment role melalui **Otorisasi pengguna** dengan maker dan checker yang berbeda. Layar login memakai cookie HTTP-only; role dan scope tidak disimpan di cookie sebagai authority, tetapi dihitung ulang dari assignment approved/effective pada setiap request. Login lokal sengaja ditolak di luar environment `Development` sampai kontrak IdP/SSO OPN-007 disahkan. Mode dan pemilih akun demo hanya aktif setelah dipilih secara eksplisit pada layar login, sebagai bootstrap dan regression harness Development.
+Administrator dapat membuat akun lokal Development melalui **Administrasi > Pengguna**, lalu membuat, mengajukan, dan menyetujui assignment role melalui **Otorisasi pengguna**. Konfigurasi Development mengizinkan Administrator pembuat menjadi approver assignment yang sama; kedua identitas tetap direkam pada audit dan dapat bernilai sama. Default non-Development tetap mewajibkan maker-checker berbeda. Layar login memakai cookie HTTP-only; role dan scope tidak disimpan di cookie sebagai authority, tetapi dihitung ulang dari assignment approved/effective pada setiap request. Login lokal sengaja ditolak di luar environment `Development` sampai kontrak IdP/SSO OPN-007 disahkan. Mode dan pemilih akun demo hanya aktif setelah dipilih secara eksplisit pada layar login, sebagai bootstrap dan regression harness Development.
 
-Spesimen tanda tangan pengguna menerima PNG maksimum 256 KB dan 2000×2000 piksel serta dapat dipratinjau oleh Administrator tanpa cache browser. Versi lama tidak ditimpa; exact version, hash, dan byte PNG dibekukan ke evidence review Senior Officer atau approval Manager, kemudian Worker mencetaknya bersama waktu keputusan dalam WIB. Ini adalah bukti visual persetujuan elektronik, bukan tanda tangan digital tersertifikasi. Bagian 3 dan tanda tangan lapangan lain tetap kosong untuk pengisian hardcopy sampai OPN-008 disahkan.
+Form assignment langsung hanya meminta pengguna, role, area kewenangan bila role bersifat area-scoped, waktu mulai, dan tanggal akhir opsional. Checkbox **Tanpa tanggal berakhir** disimpan sebagai `EffectiveUntil = null`; akun masih dapat dinonaktifkan, sedangkan command pencabutan assignment eksplisit belum tersedia. Action code dan kompetensi tidak diterima dari form sederhana, tetapi diturunkan server dari `UserAuthorizationRoleProfiles`. Profil yang tersedia saat ini hanya konfigurasi Development untuk UX/UAT dan bukan matriks produksi OPN-002. Endpoint assignment generik tetap tersedia untuk kompatibilitas serta framework delegasi yang masih fail-closed.
+
+Spesimen tanda tangan pengguna menerima PNG maksimum 256 KB dan 2000×2000 piksel serta dapat dipratinjau oleh Administrator tanpa cache browser. Versi lama tidak ditimpa; exact version, hash, dan byte PNG dibekukan ke evidence reviewer SO/Officer atau approval Manager, kemudian Worker mencetaknya bersama nama aktor dan waktu keputusan dalam WIB. Ini adalah bukti visual persetujuan elektronik, bukan tanda tangan digital tersertifikasi. Bagian 3 dan tanda tangan lapangan lain tetap kosong untuk pengisian hardcopy sampai OPN-008 disahkan.
 
 Saat memakai hot reload, perubahan migration/model EF memerlukan restart container API agar langkah `--migrate` sebelum `dotnet watch` dijalankan kembali:
 
@@ -425,7 +428,9 @@ npm test -- --watch=false
 npm audit --audit-level=high
 ```
 
-Jika .NET 10 hanya tersedia melalui Docker, mount Docker socket dan set `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal` agar integration test dapat menjalankan SQL Server disposable.
+Jika .NET 10 hanya tersedia melalui Docker, mount Docker socket dan set `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal` agar integration test dapat menjalankan SQL Server disposable. Set `PTW_USE_ARTIFACTS_OUTPUT=true` dan shadow `artifacts/` dengan named volume agar output build Linux tidak bertabrakan dengan `bin/obj` host (lihat [AGENTS.md](AGENTS.md)).
+
+Workflow GitHub Actions di [ci.yml](.github/workflows/ci.yml) menjalankan build/test backend, build/test frontend, dan validasi `compose config` pada setiap push dan pull request. Formatter, Prettier, dan audit dependency belum dijalankan CI sehingga wajib dijalankan lokal sebelum commit.
 
 ## Dokumentasi dan decision record
 
@@ -435,7 +440,7 @@ Jika .NET 10 hanya tersedia melalui Docker, mount Docker socket dan set `TESTCON
 | [PRD v1.7](docs/PRD-NR-PTW-Online-v1.7-ID.md) | kebutuhan produk |
 | [FSD v1.7](docs/FSD-NR-PTW-Online-v1.7-ID.md) | spesifikasi fungsional |
 | [Status implementasi](docs/implementation-status.md) | traceability requirement → komponen → endpoint → migration → test |
-| [Decision records](docs/decisions/README.md) | OPN-001..009 dan PTW-RENEWAL yang disahkan |
+| [Decision records](docs/decisions/README.md) | register OPN-001..009 (status DRAFT, bukan keputusan) dan PTW-RENEWAL (baseline Development) |
 | [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) | panduan kerja dan aturan normatif untuk kontributor dan agen |
 
 Urutan rujukan ketika ambigu: permintaan pengguna, decision record yang disahkan, invariant dan kontrak yang sudah diuji, BRD/PRD/FSD v1.7, lalu asumsi teknis yang dinyatakan eksplisit. Kebijakan OPN yang belum disahkan tidak boleh dikarang; jalur tersebut fail-closed.

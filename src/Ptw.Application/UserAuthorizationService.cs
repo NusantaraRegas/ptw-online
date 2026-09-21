@@ -9,7 +9,9 @@ public sealed class UserAuthorizationService(
     IUserAuthorizationStore store,
     ILocationMasterStore locationStore,
     IActorContext actorContext,
-    IClock clock)
+    IClock clock,
+    UserAuthorizationRoleProfileSettings roleProfiles,
+    UserAuthorizationApprovalSettings approvalSettings)
 {
     public async Task<PagedResponse<UserAuthorizationResponse>> ListAsync(CancellationToken cancellationToken)
     {
@@ -22,6 +24,40 @@ public sealed class UserAuthorizationService(
     {
         EnsureAdministrator();
         return ToResponse(await GetStoredAsync(id, cancellationToken));
+    }
+
+    public PagedResponse<UserAuthorizationRoleOptionResponse> ListDirectRoleOptions()
+    {
+        EnsureAdministrator();
+        var items = roleProfiles.Roles
+            .Where(item => !string.IsNullOrWhiteSpace(item.Key)
+                && !string.IsNullOrWhiteSpace(item.Value.Label)
+                && item.Value.ActionCodes.Count > 0)
+            .Select(item => new UserAuthorizationRoleOptionResponse(
+                item.Key,
+                item.Value.Label,
+                item.Value.LocationRequired))
+            .OrderBy(item => item.Label, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return new PagedResponse<UserAuthorizationRoleOptionResponse>(items, items.Length);
+    }
+
+    public async Task<UserAuthorizationResponse> CreateDirectAsync(
+        DirectUserAuthorizationDraftRequest request,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        EnsureAdministrator();
+        var controlled = ToControlledDirectDraft(request);
+        await EnsureReferencesAsync(
+            controlled,
+            AuthorizationAssignmentKind.Direct,
+            true,
+            cancellationToken);
+        return await CreateAsync(
+            controlled,
+            correlationId,
+            cancellationToken);
     }
 
     public async Task<UserAuthorizationResponse> CreateAsync(
@@ -46,6 +82,51 @@ public sealed class UserAuthorizationService(
             actor.Id,
             clock.UtcNow);
         return ToResponse(await store.AddAsync(entry, actor, correlationId, cancellationToken));
+    }
+
+    private UserAuthorizationDraftRequest ToControlledDirectDraft(
+        DirectUserAuthorizationDraftRequest request)
+    {
+        if (!roleProfiles.TryGet(request.RoleCode, out var configured))
+        {
+            throw new InvalidRequestException(
+                "authorization.role_profile_unavailable",
+                "Profil hak akses untuk role yang dipilih belum dikonfigurasi.");
+        }
+
+        var profile = configured.Value;
+        if (profile.ActionCodes.Count == 0)
+        {
+            throw new InvalidRequestException(
+                "authorization.role_profile_incomplete",
+                "Profil role belum memiliki action code terkontrol.");
+        }
+
+        if (profile.LocationRequired && request.LocationId is null)
+        {
+            throw new InvalidRequestException(
+                "authorization.location_required",
+                "Area kewenangan wajib dipilih untuk role ini.");
+        }
+
+        if (!profile.LocationRequired && request.LocationId is not null)
+        {
+            throw new InvalidRequestException(
+                "authorization.location_not_applicable",
+                "Role ini menggunakan scope global dan tidak menerima area kewenangan.");
+        }
+
+        return new UserAuthorizationDraftRequest(
+            request.SubjectId,
+            configured.Key,
+            profile.ActionCodes,
+            request.LocationId,
+            false,
+            profile.RequiredCompetencyCodes,
+            AuthorizationAssignmentKind.Direct.ToString(),
+            null,
+            request.EffectiveFrom,
+            request.EffectiveUntil);
     }
 
     public async Task<UserAuthorizationResponse> UpdateDraftAsync(
@@ -117,7 +198,7 @@ public sealed class UserAuthorizationService(
             async (entry, actor, now, token) =>
             {
                 await EnsureApprovalReferencesAsync(entry, token);
-                entry.Approve(actor.Id, now);
+                entry.Approve(actor.Id, now, approvalSettings.AllowAdministratorSelfApproval);
             },
             cancellationToken);
 

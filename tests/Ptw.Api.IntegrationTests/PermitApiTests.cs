@@ -352,12 +352,26 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     }
 
     [Fact]
-    public async Task SeniorOfficerReviewIsRequiredBeforeManagerTaskAndValidatesBagian7()
+    public async Task SoOrOfficerReviewIsRequiredBeforeManagerTaskAndUsesUserProfileIdentity()
     {
         var sponsorId = Unique("sponsor");
+        var reviewerId = Unique("area-officer");
+        const string reviewerName = "Benny Sulistio";
+        const string reviewerPosition = "Officer II Gas Delivery Operation";
+        using var admin = Client(Unique("admin"), "Administrator", "*");
+        using var createReviewer = await admin.PostAsJsonAsync(
+            "/api/v1/admin/users",
+            new CreateUserRequest(
+                reviewerId,
+                reviewerId,
+                reviewerName,
+                reviewerPosition,
+                "Gas Distribution&ORF Management",
+                "TestPassword123!"));
+        createReviewer.EnsureSuccessStatusCode();
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
         using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
-        using var seniorOfficer = Client(Unique("senior-officer"), "AreaOwnerSeniorOfficer", "ORF");
+        using var reviewer = Client(reviewerId, "AreaOwnerSeniorOfficer", "ORF");
         using var manager = Client(Unique("manager"), "AreaOwnerManager", "ORF");
         var submitted = await CreateAndSubmitAsync(sponsor, sponsorId);
         var validationTask = await PendingTaskAsync(submitted.Id, "HSE_VALIDATION");
@@ -374,11 +388,11 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             HttpMethod.Post,
             $"/api/v1/tasks/{areaTask.Id}/approve-and-issue",
             validated.ETag,
-            new ApproveAndIssuePermitRequest("Belum ada review Senior Officer.", null)));
+            new ApproveAndIssuePermitRequest("Belum ada review SO/Officer.", null)));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, prematureIssue.StatusCode);
         Assert.Equal("task.type.invalid", await ProblemCodeAsync(prematureIssue));
 
-        using var invalidReview = await seniorOfficer.SendAsync(Command(
+        using var invalidReview = await reviewer.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/tasks/{areaTask.Id}/review-area-operations",
             validated.ETag,
@@ -390,7 +404,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.Equal(HttpStatusCode.Conflict, invalidReview.StatusCode);
         Assert.Equal("permit.area_operations.subcondition_required", await ProblemCodeAsync(invalidReview));
 
-        using var reviewResponse = await seniorOfficer.SendAsync(Command(
+        using var reviewResponse = await reviewer.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/tasks/{areaTask.Id}/review-area-operations",
             validated.ETag,
@@ -399,9 +413,57 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var reviewed = Required(await reviewResponse.Content.ReadFromJsonAsync<PermitResponse>());
         Assert.True(reviewed.Workflow.AreaOperations.Completed);
         Assert.Equal("AWAITING_AREA_APPROVAL", reviewed.Status);
+        Assert.Equal(reviewerId, reviewed.Workflow.AreaOperations.ActorId);
+        Assert.Equal(reviewerName, reviewed.Workflow.AreaOperations.ActorName);
+        Assert.Equal(reviewerPosition, reviewed.Workflow.AreaOperations.ActorPosition);
 
         var approvalTask = await PendingTaskAsync(reviewed.Id, "AREA_APPROVE_AND_ISSUE");
         Assert.Equal("AreaOwnerManager", approvalTask.RequiredRole);
+    }
+
+    [Fact]
+    public async Task FirstSoOrOfficerToReviewWinsTheSingleAreaTask()
+    {
+        var sponsorId = Unique("sponsor");
+        var firstReviewerId = Unique("area-reviewer-first");
+        var secondReviewerId = Unique("area-reviewer-second");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
+        using var firstReviewer = Client(firstReviewerId, "AreaOwnerSeniorOfficer", "ORF");
+        using var secondReviewer = Client(secondReviewerId, "AreaOwnerSeniorOfficer", "ORF");
+        var submitted = await CreateAndSubmitAsync(sponsor, sponsorId);
+        var validationTask = await PendingTaskAsync(submitted.Id, "HSE_VALIDATION");
+        using var validationResponse = await validator.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{validationTask.Id}/validate",
+            submitted.ETag,
+            new ValidateSubmissionRequest("Valid.", ["SAFETY_FIRE_EXTINGUISHER"])));
+        validationResponse.EnsureSuccessStatusCode();
+        var validated = Required(await validationResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        var areaTask = await PendingTaskAsync(validated.Id, "AREA_OPERATION_REVIEW");
+
+        using var firstResponse = await firstReviewer.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{areaTask.Id}/review-area-operations",
+            validated.ETag,
+            AreaOperationsReview()));
+        firstResponse.EnsureSuccessStatusCode();
+        var reviewed = Required(await firstResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal(firstReviewerId, reviewed.Workflow.AreaOperations.ActorId);
+
+        using var secondResponse = await secondReviewer.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{areaTask.Id}/review-area-operations",
+            validated.ETag,
+            AreaOperationsReview()));
+        Assert.Equal(HttpStatusCode.NotFound, secondResponse.StatusCode);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+        Assert.Single(await db.PermitTasks.AsNoTracking().Where(
+            x => x.PermitId == reviewed.Id
+                && x.Type == "AREA_APPROVE_AND_ISSUE"
+                && x.Status == "PENDING").ToListAsync());
     }
 
     [Fact]
@@ -411,6 +473,19 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
         using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
         var managerId = Unique("manager");
+        const string managerName = "Yosep Ismail Zulkarnain";
+        const string managerPosition = "Manager Gas Distribution&ORF Management";
+        using var admin = Client(Unique("admin"), "Administrator", "*");
+        using var createManager = await admin.PostAsJsonAsync(
+            "/api/v1/admin/users",
+            new CreateUserRequest(
+                managerId,
+                managerId,
+                managerName,
+                managerPosition,
+                "Gas Distribution&ORF Management",
+                "TestPassword123!"));
+        createManager.EnsureSuccessStatusCode();
         using var manager = Client(managerId, "AreaOwnerManager", "ORF");
         var validated = await CreateAndValidateAsync(sponsor, validator, sponsorId);
         var approvalTask = await PendingTaskAsync(validated.Id, "AREA_APPROVE_AND_ISSUE");
@@ -430,6 +505,8 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.Equal("ISSUED", issued.Status);
         Assert.Equal("MANAGER", issued.Workflow.Approval.Capacity);
         Assert.NotEqual(Guid.Empty, issued.Workflow.Approval.AuthorizationId);
+        Assert.Equal(managerName, issued.Workflow.Approval.ActorName);
+        Assert.Equal(managerPosition, issued.Workflow.Approval.ActorPosition);
 
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
@@ -437,7 +514,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             x => x.PermitId == issued.Id && x.Decision == "APPROVE_AND_ISSUE");
         var operationsDecision = await db.PermitDecisions.AsNoTracking().SingleAsync(
             x => x.PermitId == issued.Id && x.Decision == "AREA_OPERATION_REVIEW");
-        Assert.Equal("SENIOR_OFFICER", operationsDecision.ApprovalCapacity);
+        Assert.Equal("AREA_OPERATIONS_REVIEWER", operationsDecision.ApprovalCapacity);
         var snapshot = await db.PrintPackageSnapshots.AsNoTracking().SingleAsync(x => x.PermitId == issued.Id);
         var document = await db.GeneratedDocuments.AsNoTracking()
             .SingleAsync(x => x.PrintPackageSnapshotId == snapshot.Id);
@@ -503,13 +580,48 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             ReadyToSubmit()));
         submitResponse.EnsureSuccessStatusCode();
         var resubmitted = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        Assert.Equal(updated.Version, resubmitted.Version);
+        Assert.Equal(updated.Version + 1, resubmitted.Version);
 
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
         Assert.Equal("CANCELLED", (await db.PermitTasks.SingleAsync(x => x.Id == areaTask.Id)).Status);
         Assert.Single(await db.PermitTasks.Where(x => x.PermitId == updated.Id
-            && x.PermitVersion == updated.Version
+            && x.PermitVersion == resubmitted.Version
+            && x.Type == "HSE_VALIDATION"
+            && x.Status == "PENDING").ToListAsync());
+    }
+
+    [Fact]
+    public async Task RevisionResubmitWithoutDraftMutationCreatesFreshHseTaskForNewVersion()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
+        var submitted = await CreateAndSubmitAsync(sponsor, sponsorId);
+        var originalTask = await PendingTaskAsync(submitted.Id, "HSE_VALIDATION");
+
+        using var revisionResponse = await validator.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{originalTask.Id}/revision",
+            submitted.ETag,
+            new PermitReasonRequest("Konfirmasi ulang dokumen pendukung.")));
+        revisionResponse.EnsureSuccessStatusCode();
+        var revision = Required(await revisionResponse.Content.ReadFromJsonAsync<PermitResponse>());
+
+        using var submitResponse = await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{revision.Id}/submit",
+            revision.ETag,
+            ReadyToSubmit()));
+        submitResponse.EnsureSuccessStatusCode();
+        var resubmitted = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
+
+        Assert.Equal(revision.Version + 1, resubmitted.Version);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+        Assert.Equal("CANCELLED", (await db.PermitTasks.SingleAsync(x => x.Id == originalTask.Id)).Status);
+        Assert.Single(await db.PermitTasks.Where(x => x.PermitId == resubmitted.Id
+            && x.PermitVersion == resubmitted.Version
             && x.Type == "HSE_VALIDATION"
             && x.Status == "PENDING").ToListAsync());
     }

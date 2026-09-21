@@ -13,6 +13,11 @@ public sealed class AdminAuthorizationsController(UserAuthorizationService servi
     public Task<PagedResponse<UserAuthorizationResponse>> List(CancellationToken cancellationToken) =>
         service.ListAsync(cancellationToken);
 
+    [HttpGet("direct-role-options")]
+    [ProducesResponseType<PagedResponse<UserAuthorizationRoleOptionResponse>>(StatusCodes.Status200OK)]
+    public PagedResponse<UserAuthorizationRoleOptionResponse> ListDirectRoleOptions() =>
+        service.ListDirectRoleOptions();
+
     [HttpGet("{id:guid}")]
     [ProducesResponseType<UserAuthorizationResponse>(StatusCodes.Status200OK)]
     public async Task<ActionResult<UserAuthorizationResponse>> Get(Guid id, CancellationToken cancellationToken)
@@ -29,6 +34,17 @@ public sealed class AdminAuthorizationsController(UserAuthorizationService servi
         CancellationToken cancellationToken)
     {
         var response = await service.CreateAsync(request, CorrelationId, cancellationToken);
+        Response.Headers.ETag = response.ETag;
+        return CreatedAtAction(nameof(Get), new { id = response.Id }, response);
+    }
+
+    [HttpPost("direct")]
+    [ProducesResponseType<UserAuthorizationResponse>(StatusCodes.Status201Created)]
+    public async Task<ActionResult<UserAuthorizationResponse>> CreateDirect(
+        DirectUserAuthorizationDraftRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await service.CreateDirectAsync(request, CorrelationId, cancellationToken);
         Response.Headers.ETag = response.ETag;
         return CreatedAtAction(nameof(Get), new { id = response.Id }, response);
     }

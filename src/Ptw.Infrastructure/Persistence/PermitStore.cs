@@ -543,7 +543,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         CancellationToken cancellationToken)
     {
         var review = permit.AreaOperationsReview ?? throw new InvalidOperationException(
-            "Bukti review Senior Officer wajib tersedia ketika task Bagian 7 diselesaikan.");
+            "Bukti review SO/Officer Pemilik Wilayah wajib tersedia ketika task Bagian 7 diselesaikan.");
         var taskId = await dbContext.PermitTasks
             .Where(x => x.PermitId == permit.Id
                 && x.PermitVersion == permit.Version
@@ -561,7 +561,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             Decision = "AREA_OPERATION_REVIEW",
             ActorId = review.ActorId,
             ActorPosition = review.ActorPosition,
-            ApprovalCapacity = "SENIOR_OFFICER",
+            ApprovalCapacity = "AREA_OPERATIONS_REVIEWER",
             PrincipalManagerUserId = review.ActorId,
             PrincipalPosition = review.ActorPosition,
             AuthorizationId = review.AuthorizationId,
