@@ -89,7 +89,7 @@ Penggantinya adalah task HSE tunggal, atomic approve-and-issue, direct suspend, 
 | Print/document regression tests | 23/23 lulus |
 | API integration + SQL Server 2025 database test terisolasi | 52/52 lulus |
 | Angular production build | Lulus |
-| Angular tests | 67/67 lulus |
+| Angular tests | 71/71 lulus |
 | Prettier check | Lulus |
 | `dotnet format --verify-no-changes` | Lulus |
 | NuGet vulnerable audit | Lulus; tidak ada package rentan |

@@ -58,11 +58,14 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 .page-title {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
   gap: 20px;
   align-items: end;
   margin-bottom: 30px;
+}
+.page-title > div {
+  min-width: 0;
 }
 .eyebrow {
   margin: 0 0 7px;
@@ -109,6 +112,7 @@ h3 {
   font-size: 12px;
   text-decoration: none;
   cursor: pointer;
+  white-space: nowrap;
   box-shadow: 0 8px 22px rgb(0 117 191 / 24%);
   transition:
     transform 160ms ease,
@@ -222,10 +226,67 @@ h3 {
 }
 @media (max-width: 650px) {
   .page-title {
+    grid-template-columns: 1fr;
     align-items: flex-start;
-    flex-direction: column;
+  }
+  .page-title .primary-button {
+    justify-self: start;
   }
 }
+
+/* Shell identity layout lives globally to keep the root component style budget bounded. */
+app-root .topbar {
+  justify-content: flex-start;
+  gap: clamp(18px, 2.4vw, 36px);
+}
+app-root .environment,
+app-root .notification-menu,
+app-root .profile-divider,
+app-root .avatar {
+  flex: 0 0 auto;
+}
+app-root .top-actions {
+  min-width: 0;
+  margin-left: auto;
+}
+app-root .identity-switcher {
+  width: clamp(230px, 31vw, 460px);
+  min-width: 0;
+}
+app-root .identity-switcher select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+app-root .user {
+  width: clamp(140px, 20vw, 285px);
+  min-width: 0;
+}
+app-root .user strong,
+app-root .user small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 1100px) {
+  app-root .user,
+  app-root .profile-divider {
+    display: none;
+  }
+  app-root .identity-switcher {
+    width: clamp(210px, 38vw, 340px);
+  }
+}
+@media (max-width: 850px) {
+  app-root .identity-switcher,
+  app-root .identity-switcher select {
+    width: 138px;
+    min-width: 138px;
+    max-width: 138px;
+  }
+}
+
 /* Popup tugas berada di global stylesheet agar tidak membebani budget style shell. */
 .notification-menu {
   position: relative;

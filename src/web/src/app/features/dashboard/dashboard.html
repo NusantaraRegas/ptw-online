@@ -1,13 +1,16 @@
 <div class="page-title">
   <div>
-    <p class="eyebrow">Rabu, 26 Agustus 2026 · WIB</p>
-    <h1>Selamat datang, {{ displayName() }}</h1>
+    <p class="eyebrow">{{ currentDateLabel }} · WIB</p>
+    <h1>Selamat datang</h1>
+    <p class="account-context" [attr.title]="displayName()">{{ displayName() }}</p>
     <p class="subtitle">Pantau izin kerja dan tindakan keselamatan dari satu tempat.</p>
   </div>
-  <a class="primary-button" routerLink="/permits/new">
-    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
-    Buat PTW baru
-  </a>
+  @if (canCreatePermit()) {
+    <a class="primary-button" routerLink="/permits/new">
+      <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+      Buat PTW baru
+    </a>
+  }
 </div>
 
 <section class="safety-callout" aria-label="Informasi keselamatan penting">
@@ -182,7 +185,13 @@
         </svg>
       </span>
       <strong>Belum ada draft PTW</strong>
-      <p>Buat PTW pertama untuk memulai alur perencanaan.</p>
+      <p>
+        {{
+          canCreatePermit()
+            ? 'Buat PTW pertama untuk memulai alur perencanaan.'
+            : 'Belum ada PTW yang tersedia untuk akun dan cakupan lokasi Anda.'
+        }}
+      </p>
     </div>
   }
   @for (permit of permits().slice(0, 4); track permit.id) {
@@ -200,7 +209,7 @@
         <strong>{{ permit.draft.title }}</strong>
         <p>{{ permit.permitNumber || 'Draft belum bernomor' }} · {{ permit.draft.locationId }}</p>
       </div>
-      <span class="status">{{ permit.status }}</span
+      <span class="status">{{ statusLabel(permit.status) }}</span
       ><time>{{ permit.updatedAt | date: 'dd MMM, HH:mm' : 'Asia/Jakarta' }} WIB</time></a
     >
   }

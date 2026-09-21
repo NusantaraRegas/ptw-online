@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Permit, PermitApi, PermitTask } from '../../core/permit-api';
-import { DevelopmentIdentityStore } from '../../core/development-identity';
+import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
 
 @Component({
   selector: 'app-dashboard',
@@ -14,13 +14,24 @@ import { DevelopmentIdentityStore } from '../../core/development-identity';
 export class Dashboard {
   private readonly api = inject(PermitApi);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly identityStore = inject(DevelopmentIdentityStore);
+  private readonly identityApi = inject(IdentityApi);
   protected readonly permits = signal<Permit[]>([]);
   protected readonly tasks = signal<PermitTask[]>([]);
   protected readonly tasksLoading = signal(true);
   protected readonly tasksError = signal('');
   protected readonly online = signal(true);
-  protected readonly displayName = computed(() => this.identityStore.selected().displayName);
+  protected readonly identity = signal<CurrentIdentity | null>(null);
+  protected readonly displayName = computed(() => this.identity()?.displayName ?? 'Pengguna PTW');
+  protected readonly canCreatePermit = computed(() =>
+    (this.identity()?.roles ?? []).some((role) => ['Sponsor', 'Administrator'].includes(role)),
+  );
+  protected readonly currentDateLabel = new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Asia/Jakarta',
+  }).format(new Date());
   protected readonly stats = computed(() => {
     const permits = this.permits();
     return [
@@ -51,7 +62,7 @@ export class Dashboard {
         icon: 'open',
       },
       {
-        label: 'Suspended',
+        label: 'Ditangguhkan',
         value: permits.filter((x) => x.status === 'SUSPENDED').length,
         tone: 'red',
         icon: 'warning',
@@ -77,6 +88,11 @@ export class Dashboard {
   });
 
   constructor() {
+    this.identityApi
+      .me()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (identity) => this.identity.set(identity) });
+
     this.api
       .list()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -108,6 +124,24 @@ export class Dashboard {
         AREA_APPROVE_AND_ISSUE: 'Setujui & terbitkan',
         AREA_CLOSE_VERIFICATION: 'Verifikasi penutupan',
       }[type] ?? 'Buka'
+    );
+  }
+
+  protected statusLabel(status: string): string {
+    return (
+      {
+        DRAFT: 'Draft',
+        REVISION_REQUIRED: 'Perlu revisi',
+        UNDER_VALIDATION: 'Validasi HSE berjalan',
+        AWAITING_AREA_APPROVAL: 'Menunggu persetujuan',
+        ISSUED: 'Diterbitkan',
+        SUSPENDED: 'Ditangguhkan',
+        CLOSURE_REQUESTED: 'Menunggu penutupan',
+        CLOSED: 'Ditutup',
+        REJECTED: 'Ditolak',
+        CANCELLED: 'Dibatalkan',
+        EXPIRED: 'Kedaluwarsa',
+      }[status] ?? status
     );
   }
 }

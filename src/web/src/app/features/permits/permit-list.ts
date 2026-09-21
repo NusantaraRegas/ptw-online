@@ -1,19 +1,22 @@
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Permit, PermitApi } from '../../core/permit-api';
+import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
 
 @Component({
   selector: 'app-permit-list',
   imports: [RouterLink, DatePipe],
   template: ` <div class="page-title">
       <div>
-        <p class="eyebrow">Permit Management</p>
+        <p class="eyebrow">Manajemen PTW</p>
         <h1>PTW Saya</h1>
         <p class="subtitle">Draft, izin aktif, dan riwayat pekerjaan Anda.</p>
       </div>
-      <a class="primary-button" routerLink="/permits/new">＋ Buat PTW baru</a>
+      @if (canCreatePermit()) {
+        <a class="primary-button" routerLink="/permits/new">＋ Buat PTW baru</a>
+      }
     </div>
     <section class="card list-card">
       <div class="toolbar">
@@ -47,7 +50,13 @@ import { Permit, PermitApi } from '../../core/permit-api';
         </a>
       } @empty {
         @if (!loading() && !error()) {
-          <div class="state">Belum ada PTW. Buat draft pertama Anda.</div>
+          <div class="state">
+            {{
+              canCreatePermit()
+                ? 'Belum ada PTW. Buat draft pertama Anda.'
+                : 'Belum ada PTW yang tersedia untuk akun dan cakupan lokasi Anda.'
+            }}
+          </div>
         }
       }
     </section>`,
@@ -143,10 +152,15 @@ import { Permit, PermitApi } from '../../core/permit-api';
 })
 export class PermitList {
   private readonly api = inject(PermitApi);
+  private readonly identityApi = inject(IdentityApi);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly permits = signal<Permit[]>([]);
+  protected readonly identity = signal<CurrentIdentity | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal('');
+  protected readonly canCreatePermit = computed(() =>
+    (this.identity()?.roles ?? []).some((role) => ['Sponsor', 'Administrator'].includes(role)),
+  );
 
   protected statusLabel(status: string): string {
     return (
@@ -167,6 +181,11 @@ export class PermitList {
   }
 
   constructor() {
+    this.identityApi
+      .me()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (identity) => this.identity.set(identity) });
+
     this.api
       .list()
       .pipe(takeUntilDestroyed(this.destroyRef))

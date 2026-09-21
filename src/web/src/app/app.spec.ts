@@ -100,4 +100,34 @@ describe('App', () => {
     );
     sessionStorage.clear();
   });
+
+  it('shows a readable business label instead of an internal role code', async () => {
+    sessionStorage.setItem('ptw.development-identity', 'area-owner-site-office');
+    await TestBed.configureTestingModule({
+      imports: [App],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/me').flush({
+      userId: 'area.owner.site-office.demo',
+      displayName: 'Manager Pemilik Wilayah Site-Office (General Affair) Demo',
+      roles: ['AreaOwnerManager'],
+      locationScopes: ['SITE_OFFICE'],
+      competencyCodes: [],
+      isDevelopmentIdentity: true,
+    });
+    http.expectOne('/api/v1/tasks').flush({ items: [], count: 0 });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.user small')?.textContent.trim()).toBe(
+      'Manager Pemilik Wilayah',
+    );
+    expect(fixture.nativeElement.querySelector('.user')?.getAttribute('title')).toBe(
+      'Manager Pemilik Wilayah Site-Office (General Affair) Demo',
+    );
+    expect(fixture.nativeElement.textContent).not.toContain('AreaOwnerManager');
+    sessionStorage.clear();
+  });
 });

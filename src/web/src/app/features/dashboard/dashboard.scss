@@ -1,3 +1,15 @@
+.account-context {
+  max-width: min(760px, 72vw);
+  margin: 0 0 5px;
+  overflow: hidden;
+  color: #314b55;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .stats {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -361,6 +373,9 @@
   }
 }
 @media (max-width: 650px) {
+  .account-context {
+    max-width: 100%;
+  }
   .safety-callout {
     grid-template-columns: auto 1fr;
   }

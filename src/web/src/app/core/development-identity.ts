@@ -1,6 +1,6 @@
 import { HttpClient, HttpInterceptorFn } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, shareReplay } from 'rxjs';
 
 export interface DevelopmentIdentityProfile {
   key: string;
@@ -18,6 +18,18 @@ export interface CurrentIdentity {
   locationScopes: string[];
   competencyCodes: string[];
   isDevelopmentIdentity: boolean;
+}
+
+const ROLE_LABELS: Readonly<Record<string, string>> = {
+  Administrator: 'Administrator',
+  Sponsor: 'Sponsor',
+  HSEValidator: 'PIC HSE',
+  AreaOwnerSeniorOfficer: 'Senior Officer Pemilik Wilayah',
+  AreaOwnerManager: 'Manager Pemilik Wilayah',
+};
+
+export function roleDisplayLabel(roles: readonly string[]): string {
+  return roles.map((role) => ROLE_LABELS[role] ?? role).join(' · ');
 }
 
 export const DEVELOPMENT_IDENTITIES: DevelopmentIdentityProfile[] = [
@@ -145,10 +157,13 @@ export class DevelopmentIdentityStore {
 
 @Injectable({ providedIn: 'root' })
 export class IdentityApi {
-  constructor(private readonly http: HttpClient) {}
+  private readonly http = inject(HttpClient);
+  private readonly currentIdentity = this.http
+    .get<CurrentIdentity>('/api/v1/me')
+    .pipe(shareReplay({ bufferSize: 1, refCount: false }));
 
   me(): Observable<CurrentIdentity> {
-    return this.http.get<CurrentIdentity>('/api/v1/me');
+    return this.currentIdentity;
   }
 }
 

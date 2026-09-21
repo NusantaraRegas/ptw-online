@@ -6,6 +6,7 @@ import {
   DEVELOPMENT_IDENTITIES,
   DevelopmentIdentityStore,
   IdentityApi,
+  roleDisplayLabel,
 } from './core/development-identity';
 import { PermitApi, PermitTask } from './core/permit-api';
 
@@ -39,7 +40,7 @@ export class App {
       .join('')
       .toUpperCase(),
   );
-  protected readonly roleLabel = computed(() => this.identity().roles.join(' · '));
+  protected readonly roleLabel = computed(() => roleDisplayLabel(this.identity().roles));
   protected readonly isAdministrator = computed(() =>
     this.identity().roles.includes('Administrator'),
   );

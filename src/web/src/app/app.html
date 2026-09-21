@@ -167,7 +167,7 @@
         </div>
         <span class="profile-divider" aria-hidden="true"></span>
         <span class="avatar" aria-hidden="true">{{ initials() }}</span>
-        <span class="user">
+        <span class="user" [attr.title]="identity().displayName">
           <strong>{{ identity().displayName }}</strong>
           <small>{{ roleLabel() }}</small>
         </span>

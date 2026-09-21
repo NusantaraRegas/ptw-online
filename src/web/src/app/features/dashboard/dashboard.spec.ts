@@ -16,6 +16,14 @@ describe('Dashboard', () => {
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
 
+    http.expectOne('/api/v1/me').flush({
+      userId: 'hse.validator.demo',
+      displayName: 'PIC HSE Demo',
+      roles: ['HSEValidator'],
+      locationScopes: ['*'],
+      competencyCodes: [],
+      isDevelopmentIdentity: true,
+    });
     http.expectOne('/api/v1/permits').flush({ items: [], count: 0 });
     http.expectOne('/api/v1/tasks').flush({
       items: [
@@ -55,11 +63,54 @@ describe('Dashboard', () => {
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
 
+    http.expectOne('/api/v1/me').flush({
+      userId: 'area.owner.site-office.demo',
+      displayName: 'Manager Pemilik Wilayah Site-Office (General Affair) Demo',
+      roles: ['AreaOwnerManager'],
+      locationScopes: ['SITE_OFFICE'],
+      competencyCodes: [],
+      isDevelopmentIdentity: true,
+    });
     http.expectOne('/api/v1/permits').flush({ items: [], count: 0 });
     http.expectOne('/api/v1/tasks').flush({ items: [], count: 0 });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Tidak ada tugas aktif');
     expect(fixture.nativeElement.querySelector('.task-row')).toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href="/permits/new"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('h1')?.textContent.trim()).toBe('Selamat datang');
+    expect(fixture.nativeElement.querySelector('.account-context')?.textContent).toContain(
+      'Manager Pemilik Wilayah Site-Office',
+    );
+    expect(fixture.nativeElement.textContent).toContain(
+      'Belum ada PTW yang tersedia untuk akun dan cakupan lokasi Anda.',
+    );
+  });
+
+  it('shows the create action only for Sponsor or Administrator identities', async () => {
+    await TestBed.configureTestingModule({
+      imports: [Dashboard],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(Dashboard);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+
+    http.expectOne('/api/v1/me').flush({
+      userId: 'sponsor.only.demo',
+      displayName: 'Sponsor Only Demo',
+      roles: ['Sponsor'],
+      locationScopes: ['*'],
+      competencyCodes: [],
+      isDevelopmentIdentity: true,
+    });
+    http.expectOne('/api/v1/permits').flush({ items: [], count: 0 });
+    http.expectOne('/api/v1/tasks').flush({ items: [], count: 0 });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('a[href="/permits/new"]')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain(
+      'Buat PTW pertama untuk memulai alur perencanaan.',
+    );
   });
 });
