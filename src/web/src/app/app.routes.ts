@@ -64,6 +64,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/admin/admin-policy-uat').then((m) => m.AdminPolicyUat),
   },
   {
+    path: 'admin/settings',
+    canActivate: [authenticatedGuard],
+    loadComponent: () => import('./features/admin/admin-settings').then((m) => m.AdminSettings),
+  },
+  {
     path: 'admin',
     canActivate: [authenticatedGuard],
     loadComponent: () => import('./features/admin/admin-locations').then((m) => m.AdminLocations),

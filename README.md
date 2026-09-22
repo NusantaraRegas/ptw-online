@@ -1,6 +1,6 @@
 # NR PTW Online
 
-NR PTW Online adalah modular monolith untuk pengelolaan Permit to Work (PTW) Nusantara Regas. Baseline implementasi saat ini mengacu pada BRD, PRD, dan FSD **v1.7**.
+NR PTW Online adalah modular monolith untuk pengelolaan Permit to Work (PTW) Nusantara Regas. Baseline implementasi saat ini mengacu pada BRD, PRD, dan FSD **v1.8**.
 
 > [!IMPORTANT]
 > Status **Diterbitkan** (`ISSUED`) belum otomatis mengizinkan pekerjaan dimulai. Gas test, toolbox/readiness, revalidasi harian/shift, completion, inspeksi/restorasi, handback, dan tanda tangan lapangan tetap dikendalikan pada hardcopy untuk MVP.
@@ -16,9 +16,9 @@ NR PTW Online adalah modular monolith untuk pengelolaan Permit to Work (PTW) Nus
   - [Struktur repository](#struktur-repository)
 - [Lifecycle PTW](#lifecycle-ptw)
 - [Sequence diagram](#sequence-diagram)
-  - [Alur persetujuan v1.7](#alur-persetujuan-v17)
+  - [Alur persetujuan v1.8](#alur-persetujuan-v18)
   - [Penerbitan, render paket cetak, dan unduhan](#penerbitan-render-paket-cetak-dan-unduhan)
-- [Endpoint workflow v1.7](#endpoint-workflow-v17)
+- [Endpoint workflow v1.8](#endpoint-workflow-v18)
 - [Menjalankan aplikasi](#menjalankan-aplikasi)
   - [Docker Compose](#docker-compose)
   - [Development lokal](#development-lokal)
@@ -39,7 +39,7 @@ Prinsip teknis utama:
 
 ## Status implementasi
 
-Increment P0 lifecycle v1.7 telah tersedia:
+Increment P0 lifecycle v1.8 telah tersedia:
 
 - lifecycle aktif: `DRAFT`, `UNDER_VALIDATION`, `REVISION_REQUIRED`, `AWAITING_AREA_APPROVAL`, `ISSUED`, `SUSPENDED`, `CLOSURE_REQUESTED`, `CLOSED`, `REJECTED`, `CANCELLED`, `EXPIRED`;
 - submit membuat tepat satu task `HSE_VALIDATION`; tidak ada validator Distribusi Gas;
@@ -60,7 +60,7 @@ Increment P0 lifecycle v1.7 telah tersedia:
 - hanya paket berstatus `READY` yang dapat diunduh; setiap unduhan menghasilkan audit event, dan pratinjau draft selalu diberi watermark `DRAFT / TIDAK BERLAKU` serta tidak pernah disimpan.
 - deploy web menjaga `index.html` tetap tervalidasi, tidak mengalihkan chunk JavaScript yang hilang ke SPA shell, dan melakukan satu reload terbatas ketika lazy chunk lama gagal dimuat.
 
-Ruleset resmi, acting assignment v1.7 lengkap, malware scanner produksi, E-SIMI adapter, external contractor scoping, serta master LocationRelease/ConfigurationBundle masih fail-closed atau partial. Pilihan Bagian 1, 4, dan 5 dicetak dari snapshot; katalog statis Bagian 4 mengikuti template resmi saat ini, sementara pengelolaan master data effective-dated tetap pekerjaan lanjutan. Detail dan traceability requirement → komponen → endpoint → migration → test ada di [status implementasi](docs/implementation-status.md).
+Ruleset resmi, acting assignment v1.8 lengkap, malware scanner produksi, E-SIMI adapter, external contractor scoping, serta master LocationRelease/ConfigurationBundle masih fail-closed atau partial. Pilihan Bagian 1, 4, dan 5 dicetak dari snapshot; katalog statis Bagian 4 mengikuti template resmi saat ini, sementara pengelolaan master data effective-dated tetap pekerjaan lanjutan. Detail dan traceability requirement → komponen → endpoint → migration → test ada di [status implementasi](docs/implementation-status.md).
 
 ## Arsitektur
 
@@ -146,7 +146,7 @@ tests/Ptw.Api.IntegrationTests   end-to-end via PtwApiFactory + Testcontainers
 tests/Ptw.Printing.Tests         regresi layout dokumen
 deploy/compose                   compose.dev.yaml (production-like), compose.hotreload.yaml (bind mount + dotnet watch/ng serve)
 deploy/nginx                     konfigurasi reverse proxy
-docs/                            BRD/PRD/FSD v1.7, status implementasi
+docs/                            BRD/PRD/FSD v1.8, status implementasi
 docs/decisions/                  register OPN-001..009 (semua masih DRAFT) dan PTW-RENEWAL (baseline Development)
 .github/workflows/ci.yml         CI: build/test backend, build/test frontend, validasi compose config
 ```
@@ -185,7 +185,7 @@ stateDiagram-v2
 
 ## Sequence diagram
 
-### Alur persetujuan v1.7
+### Alur persetujuan v1.8
 
 Setiap transition adalah command eksplisit yang membawa `If-Match` (versi aggregate) dan `Idempotency-Key`. Task command memakai `taskId`, bukan permit ID.
 
@@ -290,7 +290,7 @@ sequenceDiagram
 
 Pratinjau draft (`GET .../print-packages/preview`) merender langsung dari state saat ini dengan watermark `DRAFT / TIDAK BERLAKU` dan tidak pernah disimpan.
 
-## Endpoint workflow v1.7
+## Endpoint workflow v1.8
 
 | Method | Endpoint | Command |
 | --- | --- | --- |
@@ -320,7 +320,7 @@ Pratinjau draft (`GET .../print-packages/preview`) merender langsung dari state 
 
 Task command memakai `taskId`, bukan permit ID. Semua transition memerlukan `If-Match` dan `Idempotency-Key`. Tidak ada endpoint generik `setStatus`.
 
-Endpoint baca/create draft, attachment (multipart dengan `supportingDocumentCode` untuk dokumen wajib dan Bagian 4), history, master lokasi, authorization, policy readiness/simulation/UAT, dan health tetap tersedia. Katalog dokumen wajib dibaca dari `GET /api/v1/reference-data/mandatory-documents`; katalog checklist formulir dibaca dari `/header-classifications`, `/work-types`, `/supporting-documents`, `/safety-equipment`, dan `/operational-conditions`. Nilai dikontrol dan divalidasi ulang di server. Assignment role langsung memakai `GET /api/v1/admin/authorizations/direct-role-options` dan `POST /api/v1/admin/authorizations/direct`; action code dan kompetensi diturunkan server dari profil role, bukan diterima dari klien. OpenAPI hanya diekspos pada Development melalui `/openapi/v1.json`.
+Endpoint baca/create draft, attachment (multipart dengan `supportingDocumentCode` untuk dokumen wajib dan Bagian 4), history, master lokasi, authorization, policy readiness/simulation/UAT, dan health tetap tersedia. Katalog dokumen wajib dibaca dari `GET /api/v1/reference-data/mandatory-documents`; katalog checklist formulir dibaca dari `/header-classifications`, `/work-types`, `/supporting-documents`, `/safety-equipment`, dan `/operational-conditions`. Nilai dikontrol dan divalidasi ulang di server. Mode demo dibaca publik lewat `GET /api/v1/auth/options` dan dikelola Administrator lewat `GET /api/v1/admin/settings/demo-mode` serta `POST .../demo-mode/enable|disable` (hanya Development, memerlukan `If-Match` dan `Idempotency-Key`). Assignment role langsung memakai `GET /api/v1/admin/authorizations/direct-role-options` dan `POST /api/v1/admin/authorizations/direct`; action code dan kompetensi diturunkan server dari profil role, bukan diterima dari klien. OpenAPI hanya diekspos pada Development melalui `/openapi/v1.json`.
 
 Renewal tidak mengubah status PTW asal. Request Sponsor membuat task `AREA_RENEWAL_REVIEW` untuk Manager pemilik area; permit penerus (`DRAFT`, terhubung lewat `RenewedFromPermitId`) baru dibuat secara atomik saat task tersebut disetujui, dan selama review masih `PENDING` lampiran PTW asal tidak dapat diubah serta closure tidak dapat diajukan.
 
@@ -357,7 +357,7 @@ docker compose --env-file .env -f deploy/compose/compose.hotreload.yaml up -d
 docker compose --env-file .env -f deploy/compose/compose.hotreload.yaml logs -f api web
 ```
 
-Buka `http://localhost:8080` (dev server, proxy `/api` dan `/health` ke container `api`). Halaman awal adalah layar login; pengguna harus masuk dengan akun lokal atau memilih **Gunakan mode demo** secara eksplisit sebelum route aplikasi dapat dibuka. API juga dipublikasikan langsung di `http://localhost:5080` (`PTW_API_PORT`). Start pertama lebih lama karena restore NuGet, `npm ci`, dan kompilasi berjalan di dalam container; hasilnya disimpan di named volume (`nuget-packages`, `api-artifacts`, `worker-artifacts`, `web-node-modules`) sehingga start berikutnya cepat. Output build .NET diarahkan ke `artifacts/` melalui `PTW_USE_ARTIFACTS_OUTPUT` (lihat `Directory.Build.props`) agar tidak bertabrakan dengan `bin/obj` host.
+Buka `http://localhost:8080` (dev server, proxy `/api` dan `/health` ke container `api`). Halaman awal adalah layar login; pengguna harus masuk dengan akun lokal atau memilih **Gunakan mode demo** bila fitur tersebut diaktifkan Administrator melalui **Administrasi > Pengaturan aplikasi**. API juga dipublikasikan langsung di `http://localhost:5080` (`PTW_API_PORT`). Start pertama lebih lama karena restore NuGet, `npm ci`, dan kompilasi berjalan di dalam container; hasilnya disimpan di named volume (`nuget-packages`, `api-artifacts`, `worker-artifacts`, `web-node-modules`) sehingga start berikutnya cepat. Output build .NET diarahkan ke `artifacts/` melalui `PTW_USE_ARTIFACTS_OUTPUT` (lihat `Directory.Build.props`) agar tidak bertabrakan dengan `bin/obj` host.
 
 Catatan:
 
@@ -385,9 +385,9 @@ npm ci
 npm start
 ```
 
-Development identity hanya aktif pada environment `Development`. Profil yang relevan untuk flow v1.7 adalah Sponsor, PIC HSE (`HSEValidator`), pool reviewer SO/Officer pemilik wilayah (kode kompatibilitas `AreaOwnerSeniorOfficer`), dan Manager pemilik area (`AreaOwnerManager`). Identitas dan Sponsor aktif berasal dari `/api/v1/me`; header development diabaikan di luar Development.
+Development identity hanya aktif pada environment `Development`. Profil yang relevan untuk flow v1.8 adalah Sponsor, PIC HSE (`HSEValidator`), pool reviewer SO/Officer pemilik wilayah (kode kompatibilitas `AreaOwnerSeniorOfficer`), dan Manager pemilik area (`AreaOwnerManager`). Identitas dan Sponsor aktif berasal dari `/api/v1/me`; header development diabaikan di luar Development.
 
-Administrator dapat membuat akun lokal Development melalui **Administrasi > Pengguna**, lalu membuat, mengajukan, dan menyetujui assignment role melalui **Otorisasi pengguna**. Konfigurasi Development mengizinkan Administrator pembuat menjadi approver assignment yang sama; kedua identitas tetap direkam pada audit dan dapat bernilai sama. Default non-Development tetap mewajibkan maker-checker berbeda. Layar login memakai cookie HTTP-only; role dan scope tidak disimpan di cookie sebagai authority, tetapi dihitung ulang dari assignment approved/effective pada setiap request. Login lokal sengaja ditolak di luar environment `Development` sampai kontrak IdP/SSO OPN-007 disahkan. Mode dan pemilih akun demo hanya aktif setelah dipilih secara eksplisit pada layar login, sebagai bootstrap dan regression harness Development.
+Administrator dapat membuat akun lokal Development melalui **Administrasi > Pengguna**, lalu membuat, mengajukan, dan menyetujui assignment role melalui **Otorisasi pengguna**. Konfigurasi Development mengizinkan Administrator pembuat menjadi approver assignment yang sama; kedua identitas tetap direkam pada audit dan dapat bernilai sama. Default non-Development tetap mewajibkan maker-checker berbeda. Layar login memakai cookie HTTP-only; role dan scope tidak disimpan di cookie sebagai authority, tetapi dihitung ulang dari assignment approved/effective pada setiap request. Login lokal sengaja ditolak di luar environment `Development` sampai kontrak IdP/SSO OPN-007 disahkan. Mode demo dapat diaktifkan atau dinonaktifkan oleh Administrator melalui **Administrasi > Pengaturan aplikasi**; perubahan memakai concurrency, idempotency, audit, dan outbox. Saat nonaktif, tombol login disembunyikan dan autentikasi identitas demo ditolak server.
 
 Form assignment langsung hanya meminta pengguna, role, area kewenangan bila role bersifat area-scoped, waktu mulai, dan tanggal akhir opsional. Checkbox **Tanpa tanggal berakhir** disimpan sebagai `EffectiveUntil = null`; akun masih dapat dinonaktifkan, sedangkan command pencabutan assignment eksplisit belum tersedia. Action code dan kompetensi tidak diterima dari form sederhana, tetapi diturunkan server dari `UserAuthorizationRoleProfiles`. Profil yang tersedia saat ini hanya konfigurasi Development untuk UX/UAT dan bukan matriks produksi OPN-002. Endpoint assignment generik tetap tersedia untuk kompatibilitas serta framework delegasi yang masih fail-closed.
 
@@ -438,14 +438,14 @@ Workflow GitHub Actions di [ci.yml](.github/workflows/ci.yml) menjalankan build/
 
 | Dokumen | Isi |
 | --- | --- |
-| [BRD v1.7](docs/BRD-NR-PTW-Online-v1.7-ID.md) | kebutuhan bisnis |
-| [PRD v1.7](docs/PRD-NR-PTW-Online-v1.7-ID.md) | kebutuhan produk |
-| [FSD v1.7](docs/FSD-NR-PTW-Online-v1.7-ID.md) | spesifikasi fungsional |
+| [BRD v1.8](docs/BRD-NR-PTW-Online-v1.8-ID.md) | kebutuhan bisnis |
+| [PRD v1.8](docs/PRD-NR-PTW-Online-v1.8-ID.md) | kebutuhan produk |
+| [FSD v1.8](docs/FSD-NR-PTW-Online-v1.8-ID.md) | spesifikasi fungsional |
 | [Status implementasi](docs/implementation-status.md) | traceability requirement → komponen → endpoint → migration → test |
 | [Decision records](docs/decisions/README.md) | register OPN-001..009 (status DRAFT, bukan keputusan) dan PTW-RENEWAL (baseline Development) |
 | [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) | panduan kerja dan aturan normatif untuk kontributor dan agen |
 
-Urutan rujukan ketika ambigu: permintaan pengguna, decision record yang disahkan, invariant dan kontrak yang sudah diuji, BRD/PRD/FSD v1.7, lalu asumsi teknis yang dinyatakan eksplisit. Kebijakan OPN yang belum disahkan tidak boleh dikarang; jalur tersebut fail-closed.
+Urutan rujukan ketika ambigu: permintaan pengguna, decision record yang disahkan, invariant dan kontrak yang sudah diuji, BRD/PRD/FSD v1.8, lalu asumsi teknis yang dinyatakan eksplisit. Kebijakan OPN yang belum disahkan tidak boleh dikarang; jalur tersebut fail-closed.
 
 ## Batas produksi
 

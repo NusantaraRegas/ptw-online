@@ -1,0 +1,70 @@
+<nav class="admin-tabs" aria-label="Administrasi konfigurasi">
+  <a routerLink="/admin">Master lokasi</a>
+  <a routerLink="/admin/users">Pengguna</a>
+  <a routerLink="/admin/authorizations">Otorisasi pengguna</a>
+  <a routerLink="/admin/policy">Kesiapan policy</a>
+  <a routerLink="/admin/policy-uat">UAT policy</a>
+  <a routerLink="/admin/settings" aria-current="page">Pengaturan aplikasi</a>
+</nav>
+
+<div class="page-title">
+  <div>
+    <p class="eyebrow">Konfigurasi akses</p>
+    <h1>Pengaturan aplikasi</h1>
+    <p class="subtitle">Kelola fitur khusus yang tersedia pada halaman masuk.</p>
+  </div>
+</div>
+
+@if (accessDenied()) {
+  <section class="card access-card">
+    <div>
+      <h2>Akses Administrator diperlukan</h2>
+      <p>{{ error() }}</p>
+    </div>
+  </section>
+} @else if (loading()) {
+  <section class="card setting-card" aria-live="polite">Memuat pengaturan&hellip;</section>
+} @else {
+  @if (error()) {
+    <p class="error-summary" role="alert">{{ error() }}</p>
+  }
+  @if (success()) {
+    <p class="success-summary" role="status">{{ success() }}</p>
+  }
+
+  <section class="card setting-card" aria-labelledby="demo-mode-title">
+    <div>
+      <h2 id="demo-mode-title">Mode demo</h2>
+      <p>
+        Saat aktif, halaman login menampilkan tombol <strong>Gunakan mode demo</strong>. Saat
+        nonaktif, tombol disembunyikan dan identitas demo ditolak oleh server.
+      </p>
+      @if (setting()?.updatedAt) {
+        <small>
+          Terakhir diubah {{ setting()?.updatedAt | date: 'dd/MM/yyyy HH:mm' : 'Asia/Jakarta' }} WIB
+          oleh {{ setting()?.updatedBy }}
+        </small>
+      }
+    </div>
+    <label class="switch-control">
+      <input
+        type="checkbox"
+        role="switch"
+        [checked]="setting()?.enabled"
+        [disabled]="saving()"
+        (change)="toggle($event)"
+      />
+      <span aria-hidden="true"></span>
+      <strong>{{ setting()?.enabled ? 'Aktif' : 'Nonaktif' }}</strong>
+    </label>
+  </section>
+
+  <section class="boundary-note" aria-label="Peringatan akses">
+    <span aria-hidden="true">i</span>
+    <p>
+      Pastikan minimal satu akun Administrator lokal dapat digunakan sebelum menonaktifkan mode
+      demo. Administrator yang sedang memakai identitas demo akan diarahkan kembali ke halaman login
+      setelah mode dinonaktifkan.
+    </p>
+  </section>
+}

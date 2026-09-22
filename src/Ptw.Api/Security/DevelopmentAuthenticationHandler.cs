@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
+using Ptw.Application;
 
 namespace Ptw.Api.Security;
 
@@ -9,16 +10,23 @@ internal sealed class DevelopmentAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,
-    IWebHostEnvironment environment)
+    IWebHostEnvironment environment,
+    IDemoModeStore demoModeStore)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     public const string SchemeName = "DevelopmentIdentity";
 
-    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+    protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         if (!environment.IsDevelopment())
         {
-            return Task.FromResult(AuthenticateResult.NoResult());
+            return AuthenticateResult.NoResult();
+        }
+
+        var demoMode = await demoModeStore.GetAsync(Context.RequestAborted);
+        if (!demoMode.Enabled)
+        {
+            return AuthenticateResult.NoResult();
         }
 
         var userId = Request.Headers["X-Dev-User"].FirstOrDefault() ?? "sponsor.demo";
@@ -36,8 +44,8 @@ internal sealed class DevelopmentAuthenticationHandler(
         claims.AddRange(locations.Select(location => new Claim("location_scope", location)));
         claims.AddRange(competencies.Select(competency => new Claim("competency", competency)));
         var identity = new ClaimsIdentity(claims, SchemeName);
-        return Task.FromResult(AuthenticateResult.Success(
-            new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));
+        return AuthenticateResult.Success(
+            new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName));
     }
 
     private static string[] Split(string value) => value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);

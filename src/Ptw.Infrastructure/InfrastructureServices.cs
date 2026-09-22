@@ -22,9 +22,14 @@ public static class InfrastructureServices
         services.AddScoped<ILocationMasterStore, LocationMasterStore>();
         services.AddScoped<IUserAuthorizationStore, UserAuthorizationStore>();
         services.AddScoped<IUserDirectoryStore, UserDirectoryStore>();
+        services.AddScoped<IDemoModeStore, DemoModeStore>();
         services.AddScoped<IAuthorizationAssignmentResolver, AuthorizationAssignmentResolver>();
         services.AddScoped<IPolicyUatStore, PolicyUatStore>();
         services.AddSingleton<IClock, SystemClock>();
+        var demoModeEnabledByDefault = isDevelopment
+            && (!bool.TryParse(configuration["DemoMode:EnabledByDefault"], out var configuredDemoMode)
+                || configuredDemoMode);
+        services.AddSingleton(new DemoModeDefaults(demoModeEnabledByDefault));
         services.AddSingleton<IPermitNumberGenerator, PermitNumberGenerator>();
         var attachmentSettings = new AttachmentSettings
         {

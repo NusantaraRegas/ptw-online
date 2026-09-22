@@ -1,6 +1,8 @@
-# Status implementasi BRD/PRD/FSD v1.7
+# Status implementasi BRD/PRD/FSD v1.8
 
-Tanggal pemeriksaan: 22 September 2026. Dokumen requirement v1.7 diperlakukan sebagai sumber kebutuhan; keputusan OPN-001–012 yang belum disahkan tidak diberi nilai bisnis fiktif.
+Tanggal pemeriksaan: 22 September 2026. Dokumen requirement v1.8 diperlakukan sebagai sumber kebutuhan; keputusan OPN-001–012 yang belum disahkan tidak diberi nilai bisnis fiktif.
+
+BRD/PRD/FSD v1.8 (22 September 2026) menggantikan v1.7 dan menyelaraskan requirement dengan flow yang sudah berjalan: review Bagian 7 oleh SO/Officer pemilik wilayah sebelum approval Manager, pembagian pengisian Bagian 1–7 (Sponsor 1–4, PIC HSE 5, SO/Officer dan Manager 7), dokumen dasar JSA/ID/BPJS TK/FTW/E-SIMI, renewal berbasis review pemilik wilayah, closure dengan verifikasi Bagian 10, notifikasi revisi Sponsor, paket cetak dua halaman A3, dan identitas lokal Development. Keputusan baru tercatat sebagai DEC-117 sampai DEC-126 pada BRD v1.8; ID requirement pada tabel di bawah mengacu pada penomoran v1.8.
 
 ## Ringkasan
 
@@ -9,7 +11,7 @@ Tanggal pemeriksaan: 22 September 2026. Dokumen requirement v1.7 diperlakukan se
 | P0 lifecycle dan explicit commands | Selesai untuk vertical slice | State lama dihapus dari domain/API/UI; migration kompatibel tersedia |
 | Satu validator PIC HSE dan SoD Sponsor | Selesai | Satu task exact PermitVersion; self-validation ditolak |
 | Approve-and-issue atomik | Selesai untuk Manager direct | Decision, status, audit, outbox, snapshot cetak atomik |
-| Pejabat pengganti resmi | Partial/fail-closed | Delegation framework lama ada, tetapi field v1.7 lengkap belum tersedia; command menolak acting assignment |
+| Pejabat pengganti resmi | Partial/fail-closed | Delegation framework lama ada, tetapi field v1.8 lengkap belum tersedia; command menolak acting assignment |
 | Release tiga wilayah aktif | Selesai untuk Development | ORF, Site-Office, dan Water-Based Activity aktif melalui konfigurasi server; lokasi lain ditolak fail-closed |
 | Department/owner/release/config bundle | Partial | Routing Development mengikuti scope lokasi Manager; assignment effective-dated dan ConfigurationBundle production masih harus disahkan |
 | Form Bagian 1–5/7 dan JSA metadata | Partial | Header izin memakai katalog terkontrol sesuai template: HOT multi-select `Api Terbuka`/`Percikan Api`, COLD tepat satu `Low Risk`/`High Risk`, dan CSE tanpa pilihan tambahan. Bagian 1 memakai katalog multi-select Sponsor; opsi `Lain-lain` membuka detail wajib maksimum 80 karakter. Bagian 2 menangkap nomor/nama equipment, Work Order No., dan referensi bahaya tambahan opsional yang tidak memengaruhi rules/approval; JSA tetap authoritative. Bagian 4 memakai 15 pilihan sesuai template: JSA wajib, lainnya opsional, masing-masing ditautkan ke lampiran dan divalidasi server sebelum submit. Bagian 5 hanya ditetapkan PIC HSE saat validasi. Seluruh pilihan dicetak dari snapshot; wizard/autosave/rule preview belum tersedia |
@@ -21,16 +23,17 @@ Tanggal pemeriksaan: 22 September 2026. Dokumen requirement v1.7 diperlakukan se
 | Renewal hardcopy | Selesai untuk vertical slice | Sponsor wajib memilih signed field copy exact package/version; Pemilik Wilayah dapat meminta evidence, menolak, atau menyetujui; draft penerus dibuat atomik hanya setelah approval dan kembali ke workflow normal |
 | E-SIMI minimum | Belum tersedia | Draft hanya menyimpan nomor/external ID; verification model/port/endpoint belum ada |
 | Contractor identity/company scope | Belum tersedia | OIDC/BFF dan ExternalUserCompany belum tersedia |
-| User management dan login lokal | Selesai untuk Development | Layar awal login dan route guard tersedia; akun demo memerlukan pilihan eksplisit. User profile/status/password hash/lockout, cookie HTTP-only, dynamic role/location dari assignment effective-dated, dropdown area efektif, assignment tanpa tanggal akhir, dan profil action server-side tersedia; production tetap fail-closed menunggu OPN-002/007 |
+| User management dan login lokal | Selesai untuk Development | Layar awal login dan route guard tersedia; mode demo dikendalikan Administrator melalui pengaturan persisten, disembunyikan dari login saat nonaktif, dan ditolak server. User profile/status/password hash/lockout, cookie HTTP-only, dynamic role/location dari assignment effective-dated, dropdown area efektif, assignment tanpa tanggal akhir, dan profil action server-side tersedia; production tetap fail-closed menunggu OPN-002/007 |
 | Spesimen tanda tangan visual | Partial/Development | Admin dapat mengunggah PNG berversi; exact image/hash dibekukan pada snapshot Sponsor dan evidence reviewer SO/Officer/Manager. Bagian 3 mencetak nama, jabatan, departemen, tanda tangan Sponsor, dan waktu submit; tanda tangan Pelaksana Pekerjaan tetap hardcopy menunggu OPN-008. Bukan PSrE |
 | P1 operations/report/SLA/notification/admin | Partial | Permintaan revisi membuat task perhatian yang hanya ditujukan kepada Sponsor dan diselesaikan saat submit ulang; ikon lonceng melakukan refresh berkala. Kanal eksternal, read receipt, SLA/escalation, dan reporting belum tersedia |
 
 ## Traceability increment ini
 
-| Requirement v1.7 | Komponen | Endpoint/data | Migration | Test |
+| Requirement v1.8 | Komponen | Endpoint/data | Migration | Test |
 | --- | --- | --- | --- | --- |
 | Lifecycle 11 status | `Ptw.Domain/PermitStatus.cs`, `Permit.cs` | seluruh explicit command | `AlignPermitLifecycleV16` | `PermitStateMachineTests` |
 | User lokal Development dan role dinamis | `UserAccount`, `UserDirectoryService`, `UserAuthorizationRoleProfiles`, cookie authentication, `UserDirectoryStore` | `/api/v1/auth/login`, `/logout`, `/admin/users`; assignment langsung menerima user/role/area/periode dan menurunkan action server-side; `/me` mengambil role/scope assignment approved/effective | `AddUserAccountsAndSignatures` | domain user invariant + API create/signature/login/controlled-role assignment + Angular API/interceptor regression |
+| Mode demo terkendali Administrator | `DemoModeService`, `DemoModeStore`, `AdminSettingsController`, `DevelopmentAuthenticationHandler`, Angular `admin-settings` | `GET /api/v1/auth/options` publik; `GET /admin/settings/demo-mode`, `POST .../enable|disable` dengan `If-Match` + `Idempotency-Key`, audit konfigurasi, outbox, dan receipt; saat nonaktif header identity development ditolak `401` | `AddDemoModeSetting` (`cfg.DemoModeSetting`, `intg.DemoModeCommandReceipt`) | `DemoModeApiTests` (403 non-admin, 409 stale, 401 demo identity setelah nonaktif) + Angular login/settings API spec |
 | Spesimen signature immutable | `UserSignatureVersion`, `VisualSignatureEvidence`, `SponsorPrintEvidence`, `PtwFormRenderer` | upload PNG admin; exact version/hash/content Sponsor disimpan pada print snapshot Bagian 3 dan evidence keputusan disimpan pada baris approval Bagian 7 | `AddUserAccountsAndSignatures` | invalid PNG integration + snapshot Sponsor + deterministic signed/unsigned printing regression |
 | Tepat satu task HSE | `PermitStore.ApplyWorkflowTasksAsync` | `GET /api/v1/tasks`, `POST /tasks/{id}/validate` | rename legacy HSSE dan rekonsiliasi task | `SubmitCreatesExactlyOneHseTaskAndNoGasValidatorTask` |
 | Sponsor HSE tidak self-validate | `Permit.ValidateSubmission` | task validate | n/a | domain + `SponsorCannotSelfValidateButAnotherHseValidatorCan` |
@@ -75,6 +78,9 @@ Tanggal pemeriksaan: 22 September 2026. Dokumen requirement v1.7 diperlakukan se
 6. `20260921190541_BackfillSponsorRevisionTasks`
    - membuat task `SPONSOR_REVISION` yang ditugaskan langsung kepada Sponsor untuk PTW existing berstatus `RevisionRequired` yang belum memiliki task tersebut;
    - menambahkan audit dan outbox rekonsiliasi tanpa mengubah status atau versi PTW.
+7. `20260922030206_AddDemoModeSetting`
+   - menambahkan tabel `cfg.DemoModeSetting` (satu baris, `Version` > 0, `rowversion`) untuk pengaturan mode demo persisten;
+   - menambahkan tabel `intg.DemoModeCommandReceipt` dengan index unik actor/operation/key untuk idempotency command enable/disable.
 
 Migration bersifat additive/forward dan mempertahankan kolom legacy `ActiveWorkPeriodId` sebagai compatibility column yang tidak lagi dipakai journey aktif. Penghapusan fisiknya memerlukan tahap contract migration terpisah setelah verifikasi data.
 
@@ -95,9 +101,9 @@ Penggantinya adalah task HSE tunggal, atomic approve-and-issue, direct suspend, 
 | .NET 10 solution build Release | Lulus, 0 warning/0 error |
 | Domain tests | 58/58 lulus |
 | Print/document regression tests | 25/25 lulus |
-| API integration + SQL Server 2025 database test terisolasi | 58/58 lulus |
+| API integration + SQL Server 2025 database test terisolasi | 59/59 lulus |
 | Angular production build | Lulus |
-| Angular tests | 80/80 lulus |
+| Angular tests | 84/84 lulus |
 | Prettier check | Lulus |
 | `dotnet format --verify-no-changes` | Lulus |
 | NuGet vulnerable audit | Lulus; tidak ada package rentan |
@@ -107,7 +113,7 @@ Penggantinya adalah task HSE tunggal, atomic approve-and-issue, direct suspend, 
 ## Blocker keputusan dan implementasi produksi
 
 - OPN-001–012 masih harus disahkan sesuai owner masing-masing; tidak ada checklist, ambang gas, SLA, retensi, signature policy, atau HA topology yang di-hard-code.
-- Acting assignment v1.7 belum menyimpan document basis, department, maximum risk, reason, issued/checked/revoked evidence, principal position formal, dan revocation lifecycle. Approval acting tetap ditolak.
+- Acting assignment v1.8 belum menyimpan document basis, department, maximum risk, reason, issued/checked/revoked evidence, principal position formal, dan revocation lifecycle. Approval acting tetap ditolak.
 - Development mengaktifkan ORF (Distribusi Gas dan Pengelolaan ORF), Site-Office (General Affair), dan Water-Based Activity (Transport & Operasi FSRU) berdasarkan arahan pengguna 16 September 2026. Production tetap fail-closed sampai assignment effective-dated, LocationRelease, dan ConfigurationBundle disahkan.
 - Development memakai alur dan checklist sistem saat ini sebagai `DEV-PTW-FLOW-CHECKLIST-2026-09-16`, serta template resmi FM-001/002/003-B-002-NR-B220 dengan fingerprint SHA-256 `1C4E6AD366B4`. Campaign asset ditandai eksplisit `DEV-NOT-APPLICABLE-2026-09-16` berdasarkan arahan pengguna 16 September 2026. Production tetap fail-closed: ruleset/campaign bundle operasional dan sign-off HSSE masih harus disahkan, serta `IssuancePolicy.Approved` default `false`.
 - Renderer PDF v3.4.0 memisahkan formulir menjadi dua halaman A3 agar lebih mudah dibaca: halaman 1 landscape berakhir pada Bagian 7 dan halaman 2 portrait dimulai pada Bagian 8. Bagian 10 memakai label `(Diisi oleh Pemilik Wilayah)`, `Officer`, dan `Manager Pemilik Wilayah`, sementara isian dan tanda tangan tetap dilakukan pada hardcopy. Pengisian klasifikasi header HOT/COLD, pilihan Bagian 1/4/5 dari snapshot (termasuk detail adaptif untuk opsi Bagian 1 `Lain-lain`), nomor/nama equipment, Work Order No., referensi bahaya tambahan Bagian 2, perbaikan garis divider kontinu pada formulir COLD, serta hierarki tipografi dan baseline isian Bagian 2 telah tersedia. Bagian 3 mengambil nama, jabatan, departemen, exact signature version, dan waktu submit Sponsor dari snapshot immutable; tanda tangan Pelaksana Pekerjaan tetap manual. Setelah validasi HSE, Development/UAT membuat tepat satu task `AREA_OPERATION_REVIEW`; SO atau Officer pemilik wilayah yang pertama menyelesaikan task menetapkan checklist kondisi operasi Bagian 7, kemudian Manager pemilik wilayah melakukan approval dan penerbitan. Checklist dan kedua baris evidence tersebut dicetak dari snapshot immutable menggunakan identitas aktor yang benar-benar mengambil keputusan. Pratinjau ber-watermark dan private generated-document storage juga tersedia. Alur dua tingkat ini tetap memerlukan pengesahan OPN-002 dan mapping authorization effective-dated sebelum production activation. Klasifikasi header hanya merepresentasikan checklist formulir dan belum menjadi matriks routing risiko OPN-002. Yang belum: QR code pada lembar cetak dan master checklist terkontrol yang effective-dated.

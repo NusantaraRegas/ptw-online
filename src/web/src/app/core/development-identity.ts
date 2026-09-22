@@ -147,6 +147,10 @@ export function startDemoSession(): void {
   sessionStorage.removeItem(LocalLoginSessionKey);
 }
 
+export function isDemoSession(): boolean {
+  return typeof sessionStorage !== 'undefined' && sessionStorage.getItem(DemoSessionKey) === '1';
+}
+
 export function clearClientAuthMode(): void {
   if (typeof sessionStorage === 'undefined') return;
   sessionStorage.removeItem(LocalLoginSessionKey);

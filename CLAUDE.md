@@ -8,12 +8,12 @@ Panduan operasional Claude untuk repository **NR PTW Online**. Berisi orientasi 
 > menjadi checklist review yang dapat dieksekusi. Bila terjadi konflik, `AGENTS.md` menang.
 
 Urutan rujukan ketika ambigu: (1) permintaan pengguna, (2) decision record yang disahkan di
-`docs/decisions/`, (3) invariant dan kontrak yang sudah diuji, (4) BRD/PRD/FSD v1.7 di
+`docs/decisions/`, (3) invariant dan kontrak yang sudah diuji, (4) BRD/PRD/FSD v1.8 di
 `docs/`, (5) asumsi teknis yang dinyatakan eksplisit.
 
 ## 1. Orientasi
 
-Modular monolith Permit to Work untuk Nusantara Regas, baseline requirement **v1.7**. MVP
+Modular monolith Permit to Work untuk Nusantara Regas, baseline requirement **v1.8**. MVP
 bersifat hybrid digital-ke-kertas: sistem mengelola lifecycle dan menerbitkan paket cetak,
 sedangkan gas test, readiness, revalidasi, completion, inspeksi/restorasi, handback, dan
 tanda tangan lapangan tetap dikendalikan pada hardcopy.
@@ -32,7 +32,7 @@ tanda tangan lapangan tetap dikendalikan pada hardcopy.
 ```
 src/Ptw.Domain          aggregate, state machine, invariant, katalog checklist formulir, UserAccount/UserAuthorizationAssignment — tanpa EF/ASP.NET/IO
 src/Ptw.Contracts       DTO netral — tanpa domain behavior
-src/Ptw.Application     use case, authorization, ports (IPermitStore, IPrintPackage...), UserAuthorizationRoleProfiles (profil role assignment langsung)
+src/Ptw.Application     use case, authorization, ports (IPermitStore, IPrintPackage...), UserAuthorizationRoleProfiles (profil role assignment langsung), DemoModeService (mode demo persisten)
 src/Ptw.Infrastructure  EF Core, storage, audit, outbox, Printing/ (renderer + template)
 src/Ptw.Api             mapping HTTP, Security/ (DevelopmentAuthenticationHandler, HttpActorContext), login cookie lokal, ApiExceptionHandler
 src/Ptw.Worker          job idempotent dan bounded
@@ -41,7 +41,7 @@ deploy/compose, deploy/nginx  compose.dev.yaml (production-like), compose.hotrel
 tests/Ptw.Domain.Tests           unit state machine
 tests/Ptw.Api.IntegrationTests   end-to-end via PtwApiFactory + Testcontainers
 tests/Ptw.Printing.Tests         regresi layout dokumen (akses internal via InternalsVisibleTo)
-docs/                            BRD/PRD/FSD v1.7 (sumber requirement)
+docs/                            BRD/PRD/FSD v1.8 (sumber requirement)
 docs/decisions/                  OPN-001..009 (DRAFT), PTW-RENEWAL (baseline Development) — register kebijakan; DRAFT bukan keputusan
 docs/implementation-status.md    matriks traceability requirement -> komponen -> test
 .github/workflows/ci.yml         CI: build/test backend, build/test frontend, compose config; format/prettier/audit belum di CI
@@ -173,7 +173,7 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 - [ ] Bagian 7 hanya dapat ditetapkan SO/Officer pemilik wilayah (pool role `AreaOwnerSeniorOfficer`; kode dipertahankan untuk kompatibilitas data) pada tepat satu task `AREA_OPERATION_REVIEW` setelah validasi HSE, dengan assignment yang terverifikasi server. Reviewer pertama yang menyelesaikan task menang; reviewer berikutnya tidak lagi menemukan task (`404`). Sponsor dan validator HSE tidak boleh menjadi reviewer; Manager yang menerbitkan harus berbeda dari Sponsor, validator HSE, dan reviewer; approve-and-issue tanpa evidence Bagian 7 ditolak. Nama dan jabatan aktor pada evidence berasal dari profil akun aktif di server, bukan dari klien. Field bebas CLSR dan isolation/precaution tidak lagi diterima dari Sponsor.
 - [ ] Bagian 4: JSA wajib, setiap dokumen terpilih memerlukan lampiran bertaut, dan metadata lampiran JSA harus cocok dengan draft sebelum submit. Validasi ini di server, bukan di UI.
 - [ ] Dokumen dasar JSA, ID, BPJS TK, FTW, dan E-SIMI (`PermitMandatoryDocumentCatalog`) masing-masing memiliki lampiran bertaut sebelum submit; JSA harus diunggah dengan kategori `JSA`.
-- [ ] Development identity header hanya aktif pada environment `Development`.
+- [ ] Development identity header hanya aktif pada environment `Development` **dan** saat mode demo aktif. Mode demo tersimpan di `cfg.DemoModeSetting`, hanya dapat diubah Administrator di Development lewat `POST /api/v1/admin/settings/demo-mode/enable|disable` dengan `If-Match`, `Idempotency-Key`, audit konfigurasi, outbox, dan receipt; saat nonaktif `DevelopmentAuthenticationHandler` menolak header `X-Dev-*` (`401`) dan `GET /api/v1/auth/options` menyembunyikan tombol demo. `DemoMode:EnabledByDefault` hanya dibaca pada Development; di luar Development nilainya selalu false.
 - [ ] Akun lokal, login cookie HTTP-only, dan `UserAuthorizationApproval:AllowAdministratorSelfApproval=true` hanya untuk `Development`; default kode dan konfigurasi non-Development tetap mewajibkan maker dan checker berbeda. Role dan scope dihitung ulang dari assignment approved/effective pada setiap request, bukan dari cookie.
 - [ ] Assignment langsung (`POST /api/v1/admin/authorizations/direct`) hanya menerima user, role, area bila role area-scoped, dan periode; action code dan kompetensi diturunkan server dari `UserAuthorizationRoleProfiles`, input action code dari klien diabaikan, dan tanpa profil terkonfigurasi jalur ini fail-closed. Profil di `appsettings.Development.json` adalah konfigurasi UX/UAT, bukan matriks OPN-002; jangan menyalinnya ke production.
 - [ ] `DevelopmentUploadTrustScanner` hanya terdaftar saat environment `Development` **dan** `Attachments:RequireMalwareScan=false`; di luar itu `UnavailableMalwareScanner` tetap fail-closed. Jangan melonggarkan kondisi ini atau membawanya ke konfigurasi production.

@@ -4,15 +4,14 @@
   <a routerLink="/admin/authorizations">Otorisasi pengguna</a>
   <a routerLink="/admin/policy">Kesiapan policy</a>
   <a routerLink="/admin/policy-uat">UAT policy</a>
+  <a routerLink="/admin/settings">Pengaturan aplikasi</a>
 </nav>
 
 <div class="page-title">
   <div>
     <p class="eyebrow">Identitas aplikasi</p>
     <h1>Pengguna</h1>
-    <p class="subtitle">
-      Buat akun Development, kelola status, dan simpan spesimen tanda tangan berversi.
-    </p>
+    <p class="subtitle">Buat akun, kelola status, dan simpan spesimen tanda tangan berversi.</p>
   </div>
   @if (!accessDenied()) {
     <button class="primary-action" type="button" (click)="toggleForm()">

@@ -19,6 +19,8 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
     public DbSet<LocationMasterRecord> LocationMasters => Set<LocationMasterRecord>();
     public DbSet<LocationMasterVersionRecord> LocationMasterVersions => Set<LocationMasterVersionRecord>();
     public DbSet<ConfigurationAuditEventRecord> ConfigurationAuditEvents => Set<ConfigurationAuditEventRecord>();
+    public DbSet<DemoModeSettingRecord> DemoModeSettings => Set<DemoModeSettingRecord>();
+    public DbSet<DemoModeCommandReceiptRecord> DemoModeCommandReceipts => Set<DemoModeCommandReceiptRecord>();
     public DbSet<LocationCommandReceiptRecord> LocationCommandReceipts => Set<LocationCommandReceiptRecord>();
     public DbSet<UserAuthorizationRecord> UserAuthorizations => Set<UserAuthorizationRecord>();
     public DbSet<UserAuthorizationVersionRecord> UserAuthorizationVersions => Set<UserAuthorizationVersionRecord>();
@@ -281,6 +283,24 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         configurationAudit.Property(x => x.ActorId).HasMaxLength(200);
         configurationAudit.Property(x => x.CorrelationId).HasMaxLength(100);
         configurationAudit.HasIndex(x => new { x.AggregateType, x.AggregateId, x.Sequence });
+
+        var demoModeSetting = modelBuilder.Entity<DemoModeSettingRecord>();
+        demoModeSetting.ToTable(
+            "DemoModeSetting",
+            "cfg",
+            table => table.HasCheckConstraint("CK_DemoModeSetting_Version", "[Version] > 0"));
+        demoModeSetting.HasKey(x => x.Id);
+        demoModeSetting.Property(x => x.UpdatedBy).HasMaxLength(200);
+        demoModeSetting.Property(x => x.RowVersion).IsRowVersion();
+
+        var demoModeReceipt = modelBuilder.Entity<DemoModeCommandReceiptRecord>();
+        demoModeReceipt.ToTable("DemoModeCommandReceipt", "intg");
+        demoModeReceipt.HasKey(x => x.Id);
+        demoModeReceipt.Property(x => x.ActorId).HasMaxLength(200);
+        demoModeReceipt.Property(x => x.Operation).HasMaxLength(100);
+        demoModeReceipt.Property(x => x.Key).HasMaxLength(200);
+        demoModeReceipt.Property(x => x.RequestHash).HasMaxLength(64).IsFixedLength();
+        demoModeReceipt.HasIndex(x => new { x.ActorId, x.Operation, x.Key }).IsUnique();
 
         var locationReceipt = modelBuilder.Entity<LocationCommandReceiptRecord>();
         locationReceipt.ToTable("LocationCommandReceipt", "intg");

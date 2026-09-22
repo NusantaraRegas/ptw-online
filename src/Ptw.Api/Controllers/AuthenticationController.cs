@@ -12,8 +12,17 @@ namespace Ptw.Api.Controllers;
 [Route("api/v1/auth")]
 public sealed class AuthenticationController(
     UserAuthenticationService authenticationService,
+    DemoModeService demoModeService,
     IWebHostEnvironment environment) : ControllerBase
 {
+    [AllowAnonymous]
+    [HttpGet("options")]
+    public async Task<ActionResult<AuthenticationOptionsResponse>> Options(CancellationToken cancellationToken)
+    {
+        var response = await demoModeService.GetPublicAsync(cancellationToken);
+        return new AuthenticationOptionsResponse(environment.IsDevelopment() && response.Enabled);
+    }
+
     [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request, CancellationToken cancellationToken)
@@ -22,7 +31,7 @@ public sealed class AuthenticationController(
         {
             throw new InvalidRequestException(
                 "authentication.local_login_disabled",
-                "Login lokal hanya tersedia pada lingkungan Development sampai kontrak IdP disahkan.");
+                "Login lokal tidak tersedia pada lingkungan ini sampai kontrak IdP disahkan.");
         }
 
         var stored = await authenticationService.AuthenticateAsync(

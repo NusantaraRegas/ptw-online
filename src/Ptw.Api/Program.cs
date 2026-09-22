@@ -36,6 +36,7 @@ builder.Services.AddScoped<LocationLookupService>();
 builder.Services.AddScoped<UserAuthorizationService>();
 builder.Services.AddScoped<UserDirectoryService>();
 builder.Services.AddScoped<UserAuthenticationService>();
+builder.Services.AddScoped<DemoModeService>();
 builder.Services.AddScoped<OperationalPolicyService>();
 builder.Services.AddScoped<PolicySimulationService>();
 builder.Services.AddScoped<PolicyUatService>();

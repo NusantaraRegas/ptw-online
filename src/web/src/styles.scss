@@ -259,6 +259,96 @@ app-root .identity-switcher select {
   max-width: 100%;
   text-overflow: ellipsis;
 }
+
+app-admin-settings .setting-card {
+  margin-bottom: 18px;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+app-admin-settings .setting-card h2 {
+  margin: 0;
+  color: var(--nr-ink);
+  font-size: 16px;
+}
+app-admin-settings .setting-card p {
+  max-width: 680px;
+  margin: 7px 0 0;
+  color: var(--nr-muted);
+  font-size: 12px;
+}
+app-admin-settings .setting-card small {
+  display: block;
+  margin-top: 12px;
+  color: #7c8e93;
+  font-size: 10px;
+}
+app-admin-settings .switch-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+app-admin-settings .switch-control input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+app-admin-settings .switch-control span {
+  width: 44px;
+  height: 24px;
+  padding: 3px;
+  display: flex;
+  border-radius: 999px;
+  background: #bdc9cd;
+  transition: background 160ms ease;
+}
+app-admin-settings .switch-control span::after {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 2px 5px rgb(7 23 16 / 22%);
+  content: '';
+  transition: transform 160ms ease;
+}
+app-admin-settings .switch-control input:checked + span {
+  background: var(--nr-blue);
+}
+app-admin-settings .switch-control input:checked + span::after {
+  transform: translateX(20px);
+}
+app-admin-settings .switch-control input:focus-visible + span {
+  outline: 3px solid rgb(0 117 191 / 28%);
+  outline-offset: 3px;
+}
+app-admin-settings .switch-control input:disabled + span {
+  cursor: wait;
+  opacity: 0.55;
+}
+app-admin-settings .switch-control strong {
+  min-width: 56px;
+  color: var(--nr-blue-dark);
+  font-size: 11px;
+}
+app-admin-settings .success-summary {
+  padding: 12px 15px;
+  border: 1px solid #bcdcc9;
+  border-radius: 9px;
+  color: #176440;
+  background: #eef9f2;
+  font-size: 10px;
+}
+@media (max-width: 700px) {
+  app-admin-settings .setting-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
 app-root .user {
   width: clamp(140px, 20vw, 285px);
   min-width: 0;

@@ -221,6 +221,29 @@ public sealed class ConfigurationAuditEventRecord
     public string CorrelationId { get; set; } = null!;
 }
 
+public sealed class DemoModeSettingRecord
+{
+    public Guid Id { get; set; }
+    public bool Enabled { get; set; }
+    public int Version { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public string UpdatedBy { get; set; } = null!;
+    public byte[] RowVersion { get; set; } = [];
+}
+
+public sealed class DemoModeCommandReceiptRecord
+{
+    public Guid Id { get; set; }
+    public string ActorId { get; set; } = null!;
+    public string Operation { get; set; } = null!;
+    public string Key { get; set; } = null!;
+    public string RequestHash { get; set; } = null!;
+    public bool ResultEnabled { get; set; }
+    public int ResultVersion { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+}
+
 public sealed class LocationCommandReceiptRecord
 {
     public Guid Id { get; set; }

@@ -1,12 +1,9 @@
 <main class="login-page">
   <section class="login-card">
     <img src="/assets/brand/logo-regas.png" alt="Nusantara Regas" />
-    <p class="eyebrow">PTW Online · Development</p>
+    <p class="eyebrow">PTW Online</p>
     <h1>Masuk</h1>
-    <p class="intro">
-      Gunakan akun yang dibuat Administrator. Login lokal ini hanya aktif pada lingkungan
-      Development.
-    </p>
+    <p class="intro">Gunakan akun yang dibuat Administrator untuk mengakses aplikasi.</p>
     @if (error()) {
       <p class="error" role="alert">{{ error() }}</p>
     }
@@ -22,8 +19,10 @@
         {{ submitting() ? 'Memeriksa…' : 'Masuk' }}
       </button>
     </form>
-    <div class="login-divider"><span>atau</span></div>
-    <button class="demo-button" type="button" (click)="useDemo()">Gunakan mode demo</button>
-    <small>Mode demo hanya tersedia untuk bootstrap Administrator dan pengujian Development.</small>
+    @if (demoModeEnabled()) {
+      <div class="login-divider"><span>atau</span></div>
+      <button class="demo-button" type="button" (click)="useDemo()">Gunakan mode demo</button>
+      <small>Mode demo digunakan untuk simulasi dan pengujian aplikasi.</small>
+    }
   </section>
 </main>
