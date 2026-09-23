@@ -30,6 +30,7 @@ class PermitAttachmentsStub {
   readonly jsaRevision = input('');
   readonly jsaDate = input('');
   readonly printPackages = input<{ id: string; permitVersion: number }[]>([]);
+  readonly primaryAttachmentIds = input<string[]>([]);
   readonly permitChanged = output<PermitAttachmentPermitChange>();
 }
 
@@ -445,7 +446,16 @@ describe('PermitDetail', () => {
         { provide: IdentityApi, useValue: { me: () => of(currentIdentity) } },
         { provide: PermitApi, useValue: permitApi },
         { provide: PermitAttachmentApi, useValue: { list: () => of([]) } },
-        { provide: LocationApi, useValue: { list: () => of({ items: [], count: 0 }) } },
+        {
+          provide: LocationApi,
+          useValue: {
+            list: () =>
+              of({
+                items: [{ id: 'location-orf', code: 'ORF', name: 'Onshore Receiving Facility' }],
+                count: 1,
+              }),
+          },
+        },
         {
           provide: ActivatedRoute,
           useValue: { paramMap: routeParamMap.asObservable() },
@@ -471,6 +481,19 @@ describe('PermitDetail', () => {
         },
       })
       .compileComponents();
+  });
+
+  it('shows the location description without exposing its API code', () => {
+    const fixture = TestBed.createComponent(PermitDetail);
+    fixture.detectChanges();
+
+    const locationFact = Array.from<HTMLElement>(
+      fixture.nativeElement.querySelectorAll('.facts > div'),
+    ).find((item) => item.querySelector('dt')?.textContent?.trim() === 'Lokasi');
+    expect(locationFact?.querySelector('dd')?.textContent?.trim()).toBe(
+      'Onshore Receiving Facility',
+    );
+    expect(locationFact?.textContent).not.toContain('ORF');
   });
 
   it('uses /me so a logged-in SO can review Bagian 7 even when the demo selector is Sponsor', () => {
@@ -672,7 +695,7 @@ describe('PermitDetail', () => {
   });
 
   it('presents area-owner closure verification as a clear, structured decision flow', () => {
-    currentIdentity = identity('yosep.zulkarnain', 'Yosep Ismail Zulkarnain', ['AreaOwnerManager']);
+    currentIdentity = identity('ade.ruhimat', 'Ade Imat Ruhimat', ['AreaOwnerSeniorOfficer']);
     currentPermit = {
       ...permit,
       status: 'CLOSURE_REQUESTED',
@@ -719,7 +742,8 @@ describe('PermitDetail', () => {
     expect(panel?.querySelectorAll('.closure-check').length).toBe(5);
     expect(panel?.querySelector('[formControlName="officerName"]')).not.toBeNull();
     expect(panel?.querySelectorAll('[formControlName="completionOutcome"]').length).toBe(2);
-    expect(panel?.textContent).toContain('Yosep Ismail Zulkarnain');
+    expect(panel?.textContent).toContain('Petugas Pemilik Wilayah yang menutup');
+    expect(panel?.textContent).toContain('Ade Imat Ruhimat');
     expect(panel?.querySelector('.decision-statement small')?.textContent).toContain('Wajib diisi');
     expect(panel?.querySelector('.closure-secondary-action')?.textContent).toContain(
       'Evidence belum sesuai?',

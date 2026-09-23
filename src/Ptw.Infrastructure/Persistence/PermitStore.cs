@@ -258,7 +258,10 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             join permit in dbContext.Permits.AsNoTracking() on task.PermitId equals permit.Id
             where task.Status == "PENDING"
                 && (task.AssignedActorId == actorId
-                    || (task.AssignedActorId == null && roleCodes.Contains(task.RequiredRole)))
+                    || (task.AssignedActorId == null
+                        && (roleCodes.Contains(task.RequiredRole)
+                            || (task.Type == "AREA_CLOSE_VERIFICATION"
+                                && roleCodes.Contains("AreaOwnerSeniorOfficer")))))
             select new { Task = task, Permit = permit };
 
         if (!locationScopes.Contains("*"))

@@ -134,11 +134,11 @@ describe('PermitCreate', () => {
     const options = Array.from(
       fixture.nativeElement.querySelectorAll('select[formControlName="locationId"] option'),
     ).map((option) => (option as HTMLOptionElement).textContent?.trim());
-    expect(options).toEqual([
-      'Pilih lokasi',
-      'HO \u2014 Wisma Nusantara',
-      'ORF \u2014 Onshore Receiving Facility',
-    ]);
+    expect(options).toEqual(['Pilih lokasi', 'Wisma Nusantara', 'Onshore Receiving Facility']);
+    const values = Array.from(
+      fixture.nativeElement.querySelectorAll('select[formControlName="locationId"] option'),
+    ).map((option) => (option as HTMLOptionElement).value);
+    expect(values).toEqual(['', 'HO', 'ORF']);
   });
 
   it('uses the authenticated user as the draft sponsor', async () => {

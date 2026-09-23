@@ -150,7 +150,7 @@ export class AdminAuthorizations {
   protected locationLabel(locationId: string | null): string {
     if (!locationId) return 'Seluruh lokasi';
     const location = this.locations().find((item) => item.id === locationId);
-    return location ? `${location.name} (${location.code})` : 'Lokasi tidak tersedia';
+    return location?.name ?? 'Lokasi tidak tersedia';
   }
 
   protected selectedUserLabel(): string {

@@ -111,6 +111,13 @@ export class PermitDetail {
 
   protected readonly canRetryPrintPackage = computed(() => this.roles().includes('Administrator'));
 
+  protected locationName(code: string): string {
+    return (
+      this.locations().find((location) => location.code === code)?.name ??
+      (this.loadingLocations() ? 'Memuat lokasi...' : 'Lokasi tidak tersedia')
+    );
+  }
+
   protected readonly canManageDraftAttachments = computed(
     () =>
       this.canEdit() &&
@@ -250,7 +257,7 @@ export class PermitDetail {
   protected readonly canReviewClosure = computed(
     () =>
       this.currentTask()?.type === 'AREA_CLOSE_VERIFICATION' &&
-      this.roles().includes('AreaOwnerManager'),
+      this.roles().some((role) => ['AreaOwnerSeniorOfficer', 'AreaOwnerManager'].includes(role)),
   );
   protected readonly canClose = computed(
     () => this.canReviewClosure() && !this.closureReplacementPending(),

@@ -857,6 +857,11 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var sponsorId = Unique("sponsor");
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
         using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
+        using var seniorOfficer = Client(Unique("senior-officer"), "AreaOwnerSeniorOfficer", "ORF");
+        using var wrongScopeOfficer = Client(
+            Unique("wrong-scope-officer"),
+            "AreaOwnerSeniorOfficer",
+            "SITE_OFFICE");
         using var manager = Client(Unique("manager"), "AreaOwnerManager", "ORF");
         var validated = await CreateAndValidateAsync(sponsor, validator, sponsorId);
         var approvalTask = await PendingTaskAsync(validated.Id, "AREA_APPROVE_AND_ISSUE");
@@ -948,6 +953,15 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         validClosureResponse.EnsureSuccessStatusCode();
         var closureRequested = Required(await validClosureResponse.Content.ReadFromJsonAsync<PermitResponse>());
         var closureTask = await PendingTaskAsync(issued.Id, "AREA_CLOSE_VERIFICATION");
+        var seniorOfficerTasks = Required(
+            await seniorOfficer.GetFromJsonAsync<PagedResponse<PermitTaskResponse>>("/api/v1/tasks"));
+        var managerTasks = Required(
+            await manager.GetFromJsonAsync<PagedResponse<PermitTaskResponse>>("/api/v1/tasks"));
+        var wrongScopeOfficerTasks = Required(
+            await wrongScopeOfficer.GetFromJsonAsync<PagedResponse<PermitTaskResponse>>("/api/v1/tasks"));
+        Assert.Contains(seniorOfficerTasks.Items, x => x.Id == closureTask.Id);
+        Assert.Contains(managerTasks.Items, x => x.Id == closureTask.Id);
+        Assert.DoesNotContain(wrongScopeOfficerTasks.Items, x => x.Id == closureTask.Id);
 
         var completeSection10 = new ClosePermitRequest(
             "Bagian 10 dan hardcopy telah diverifikasi.",
@@ -964,6 +978,13 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             closureRequested.ETag,
             completeSection10));
         Assert.Equal(HttpStatusCode.Forbidden, sponsorClose.StatusCode);
+
+        using var wrongScopeClose = await wrongScopeOfficer.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/closure-tasks/{closureTask.Id}/close",
+            closureRequested.ETag,
+            completeSection10));
+        Assert.Equal(HttpStatusCode.Forbidden, wrongScopeClose.StatusCode);
 
         using var incompleteClose = await manager.SendAsync(Command(
             HttpMethod.Post,
@@ -1052,7 +1073,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.Equal(closureTask.Id, refreshedClosureTask.Id);
         Assert.Equal(resubmitted.Version, refreshedClosureTask.BusinessPermitVersion);
 
-        using var ownerClose = await manager.SendAsync(Command(
+        using var ownerClose = await seniorOfficer.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/closure-tasks/{closureTask.Id}/close",
             resubmitted.ETag,

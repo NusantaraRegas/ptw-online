@@ -108,9 +108,9 @@ Modul fungsional: (1) Identity & Authorization, (2) Permit & katalog formulir, (
 | `RejectRenewal` | ISSUED/EXPIRED | sama | `AreaOwnerManager` | Review `PENDING`; alasan; status review → `Rejected` |
 | `ApproveRenewal` | ISSUED/EXPIRED | sama (+ penerus DRAFT) | `AreaOwnerManager` | Review `PENDING`; `FieldVerificationConfirmed` dan `EvidenceReadable`; evidence dicek ulang; draft penerus dibuat atomik dengan Sponsor/lokasi sama, periode yang diminta, tanpa lampiran/Bagian 5; `RenewalPermitId` diisi |
 | `RequestClosure` | ISSUED/SUSPENDED/EXPIRED | CLOSURE_REQUESTED | Sponsor pemilik | Tidak ada penerus atau review renewal aktif; PrintPackage `READY`; `SIGNED_FIELD_COPY` valid seperti renewal; pernyataan penyelesaian; membuat task `AREA_CLOSE_VERIFICATION` |
-| `RequestClosureEvidenceReplacement` | CLOSURE_REQUESTED | CLOSURE_REQUESTED | `AreaOwnerManager` | Belum ada tindak lanjut tertunda; alasan; revisi naik; task selesai |
+| `RequestClosureEvidenceReplacement` | CLOSURE_REQUESTED | CLOSURE_REQUESTED | `AreaOwnerManager`/`AreaOwnerSeniorOfficer` dengan scope lokasi | Belum ada tindak lanjut tertunda; alasan; revisi naik; task selesai |
 | `ResubmitClosure` | CLOSURE_REQUESTED | CLOSURE_REQUESTED | Sponsor pemilik | Tindak lanjut sedang diminta; PrintPackage sama; evidence berbeda dan valid; task `AREA_CLOSE_VERIFICATION` baru mengikuti versi |
-| `ClosePermit` | CLOSURE_REQUESTED | CLOSED | `AreaOwnerManager` | Tidak ada tindak lanjut tertunda; nama Officer ≤ 100; enam konfirmasi Bagian 10 `true`; pernyataan |
+| `ClosePermit` | CLOSURE_REQUESTED | CLOSED | `AreaOwnerManager`/`AreaOwnerSeniorOfficer` dengan scope lokasi | Satu task pool dimenangkan aktor pertama; tidak ada tindak lanjut tertunda; nama Officer ≤ 100; enam konfirmasi Bagian 10 `true`; pernyataan |
 | `CancelPermit` | DRAFT/UNDER_VALIDATION/REVISION_REQUIRED | CANCELLED | Sponsor pemilik | Alasan; task tertunda dibatalkan |
 | `ExpirePermit` | ISSUED/SUSPENDED | EXPIRED | `Administrator` (manual) | `now ≥ ValidUntil`; otomatisasi Worker backlog |
 
@@ -230,7 +230,7 @@ Profil role (`UserAuthorizationRoleProfiles`) di server menurunkan action code:
 | `Administrator` | tidak | `admin.manage` |
 | `Sponsor` | tidak | `permit.create`, `permit.update`, `permit.submit`, `permit.renewal.request`, `permit.closure.request`, `permit.cancel` |
 | `HSEValidator` | tidak | `permit.validate`, `permit.validation.revision`, `permit.validation.reject`, `permit.validation.escalate`, `permit.suspend` |
-| `AreaOwnerSeniorOfficer` | ya | `permit.area-operations.review` |
+| `AreaOwnerSeniorOfficer` | ya | `permit.area-operations.review`, `permit.closure.review` |
 | `AreaOwnerManager` | ya | `permit.approve-and-issue`, `permit.suspend`, `permit.suspension.resolve`, `permit.renewal.review`, `permit.closure.review` |
 | `Auditor` | tidak | `permit.read`, `audit.read` |
 

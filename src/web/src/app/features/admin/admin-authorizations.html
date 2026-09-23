@@ -102,7 +102,7 @@
             <select formControlName="locationId">
               <option value="">Pilih area</option>
               @for (location of locations(); track location.id) {
-                <option [value]="location.id">{{ location.name }} ({{ location.code }})</option>
+                <option [value]="location.id">{{ location.name }}</option>
               }
             </select>
           </label>

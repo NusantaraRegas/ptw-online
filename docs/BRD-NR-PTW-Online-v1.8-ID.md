@@ -90,7 +90,7 @@ BRD ini menyepakati kebutuhan dan aturan bisnis. Jika sumber bertentangan, uruta
 | DEC-119 | Pembagian pengisian formulir: Sponsor mengisi Bagian 1–4 (klasifikasi header, jenis pekerjaan, penjelasan pekerjaan, permintaan izin kerja, dokumen pendukung); PIC HSE menetapkan Bagian 5 saat validasi; SO/Officer menetapkan checklist kondisi operasi Bagian 7; Manager mengisi baris approval Bagian 7 melalui keputusan penerbitan. Bagian 6 dan Bagian 8–10 dicetak kosong untuk pengisian lapangan. | Dikonfirmasi 22 Sep 2026 |
 | DEC-120 | Sebelum submit, JSA, ID, BPJS TK, FTW, dan E-SIMI wajib memiliki lampiran bertaut. Hanya JSA yang juga menjadi item checklist Bagian 4; empat dokumen lainnya adalah evidence pengajuan dan tidak dicetak pada Bagian 4. | Dikonfirmasi 22 Sep 2026 |
 | DEC-121 | Renewal tidak mengubah PTW asal. Sponsor mengajukan permintaan renewal dengan hardcopy hasil verifikasi lapangan yang cocok dengan paket cetak resmi, periode baru non-overlap maksimum tujuh hari, dan pernyataan kelanjutan. Manager pemilik wilayah dapat meminta hardcopy ulang, menolak, atau menyetujui; draft PTW penerus dibuat atomik hanya saat approval dan menjalani workflow normal dari awal. | Dikonfirmasi 22 Sep 2026 |
-| DEC-122 | Penutupan diverifikasi Manager pemilik wilayah dengan isian Bagian 10 terstruktur: nama Officer pemeriksa, area diinspeksi dan bersih, pekerjaan selesai, Manager menyetujui penyelesaian, sistem yang di-inhibit dipulihkan, area di-handback dan pengaman dipulihkan, serta hardcopy terbaca. Bila pekerjaan belum selesai, close terkunci; Sponsor mengunggah hardcopy pengganti untuk paket cetak yang sama dan mengajukan ulang tanpa mengubah status. | Dikonfirmasi 22 Sep 2026 |
+| DEC-122 | Penutupan diverifikasi Manager atau SO/Officer pemilik wilayah dengan assignment efektif dan scope lokasi yang cocok, melalui satu task pool dan isian Bagian 10 terstruktur: nama Officer pemeriksa, area diinspeksi dan bersih, pekerjaan selesai, Pemilik Wilayah menyetujui penyelesaian, sistem yang di-inhibit dipulihkan, area di-handback dan pengaman dipulihkan, serta hardcopy terbaca. Signed field copy pilihan Sponsor menjadi unduhan utama PTW untuk review dan arsip close. Bila pekerjaan belum selesai, close terkunci; Sponsor mengunggah hardcopy pengganti untuk paket cetak yang sama dan mengajukan ulang tanpa mengubah status. | Dikonfirmasi 22 Sep 2026; kewenangan close diperluas 23 Sep 2026 |
 | DEC-123 | Permintaan revisi membatalkan task yang tertunda dan membuat notifikasi task kepada Sponsor PTW. Submit ulang menaikkan versi PTW meskipun draft tidak berubah, dan seluruh task/evidence versi lama menjadi riwayat. | Dikonfirmasi 22 Sep 2026 |
 | DEC-124 | QR/reference pada lembar cetak serta halaman kampanye (10 CLSR, 8 Arahan Direksi, 9 Perilaku Wajib) tidak termasuk paket cetak rilis awal; keduanya menjadi backlog setelah OPN-011/OPN-012 disahkan. | Dikonfirmasi 16 Sep 2026 |
 | DEC-125 | Rilis Development memakai akun lokal terkelola, login cookie HTTP-only, dan assignment role yang disetujui Administrator; role dan scope dihitung ulang setiap request. Spesimen tanda tangan visual berversi dicetak sebagai bukti persetujuan elektronik, bukan tanda tangan digital tersertifikasi. SSO/IdP produksi menunggu OPN-007. | Dikonfirmasi 22 Sep 2026 |
@@ -179,7 +179,7 @@ Proses kertas saat ini memiliki kontrol keselamatan yang penting, tetapi menimbu
 | 7. Izin dari Bagian Operasi | SO/Officer dan Manager pemilik wilayah | Checklist kondisi operasi (`Isolasi` dengan rincian Closed/Lock Valves, Blind, Disconnect; `Depressurized`; `Drained`; `Ventilated`; `Bilas` dengan rincian N2 Purge, Water; `Lainnya` dengan penjelasan maksimum 200 karakter) ditetapkan SO/Officer. Baris keputusan SO/Officer dan Manager dicetak dengan nama, jabatan, spesimen tanda tangan, dan waktu. |
 | 8. Revalidasi Izin Kerja | Lapangan | Dicetak kosong pada halaman 2 dengan ruang tulis hingga tujuh hari. |
 | 9. Pekerjaan Selesai | Lapangan | Diisi/ditandatangani manual, kemudian diunggah sebagai bukti close. |
-| 10. Inspeksi dan Pengembalian ke Operasi | Lapangan lalu pemilik wilayah di sistem | Diisi/ditandatangani manual pada hardcopy; Manager pemilik wilayah merekam verifikasi terstruktur Bagian 10 di sistem sebelum `CLOSED`. |
+| 10. Inspeksi dan Pengembalian ke Operasi | Lapangan lalu pemilik wilayah di sistem | Diisi/ditandatangani manual pada hardcopy; Manager atau SO/Officer pemilik wilayah merekam verifikasi terstruktur Bagian 10 di sistem sebelum `CLOSED`. |
 
 Katalog Bagian 1, 4, 5, dan 7 adalah transkripsi formulir terkontrol dan tidak boleh diubah tanpa decision record yang disahkan; pemindahannya ke master data effective-dated (OPN-003) tetap pekerjaan lanjutan.
 
@@ -192,7 +192,7 @@ Katalog Bagian 1, 4, 5, dan 7 adalah transkripsi formulir terkontrol dan tidak b
 | User Sponsor | `Sponsor` (tipe pengaju `USER_SPONSOR`) | Pengaju internal NR dan/atau sponsor pekerjaan kontraktor; accountable atas representasi crew | Draft, submit, perbaikan, upload hardcopy, permintaan renewal, request/resubmit close, cancel |
 | Pelaksana/Performing Authority | — | Menjalankan metode kerja dan kontrol; validasi/tanda tangan lapangan | Tidak wajib mempunyai akun; tanda tangan melalui hardcopy |
 | PIC HSE | `HSEValidator` | Validator tunggal yang memvalidasi kelengkapan, JSA, klasifikasi, dan menetapkan Bagian 5 | Validate, request revision, reject, escalate, suspend |
-| SO/Officer Pemilik Wilayah | `AreaOwnerSeniorOfficer` (kode dipertahankan untuk kompatibilitas data) | Memverifikasi kondisi operasi aktual Bagian 7 di wilayahnya | Review area operations; request revision/reject pada task review |
+| SO/Officer Pemilik Wilayah | `AreaOwnerSeniorOfficer` (kode dipertahankan untuk kompatibilitas data) | Memverifikasi kondisi operasi aktual Bagian 7 dan dapat memverifikasi penutupan di wilayahnya | Review area operations; request revision/reject pada task review; verifikasi dan close |
 | Manager Pemilik Wilayah | `AreaOwnerManager` | Manager departemen pemilik wilayah atau pejabat pengganti resmi | Approve-and-issue, request revision/reject, suspend, resolve suspension, review renewal, verifikasi dan close |
 | Departemen Distribusi Gas dan Pengelolaan ORF | — | Pemilik wilayah ORF | Menyediakan SO/Officer dan Manager; bukan validator |
 | Departemen General Affair | — | Pemilik wilayah Site Office | Menyediakan SO/Officer dan Manager; bukan validator |
@@ -208,7 +208,7 @@ Untuk approval pemilik wilayah, level Manager merupakan syarat bisnis. Aktor tet
 | Kode lokasi | Lokasi | Departemen pemilik area | Tanggung jawab pada flow |
 | --- | --- | --- | --- |
 | `HO` | Head Office (HO) | Departemen General Affair | **Tidak aktif**; target rollout berikutnya |
-| `ORF` | ORF | Departemen Distribusi Gas dan Pengelolaan ORF | **Aktif**; menyediakan SO/Officer reviewer Bagian 7, Manager approver, reviewer renewal, dan verifier close |
+| `ORF` | ORF | Departemen Distribusi Gas dan Pengelolaan ORF | **Aktif**; menyediakan SO/Officer reviewer Bagian 7, Manager approver, Manager reviewer renewal, serta Manager/SO/Officer verifier close |
 | `SITE_OFFICE` | Site Office | Departemen General Affair | **Aktif**; peran yang sama untuk Site Office |
 | `FSRU` | FSRU | Departemen Transport & Operasi FSRU | **Tidak aktif**; target rollout berikutnya |
 | `WATER_BASED` | Water-Based Activity | Departemen Transport & Operasi FSRU | **Aktif**; peran yang sama untuk Water-Based Activity |
@@ -253,7 +253,7 @@ flowchart TD
     RD --> C
     L -- Ya --> M["Manual: completion, inspeksi, restorasi, handback, tanda tangan"]
     M --> N["Sponsor upload hardcopy final + request close"]
-    N --> O{"Manager pemilik wilayah verifikasi Bagian 10"}
+    N --> O{"Manager/SO/Officer pemilik wilayah verifikasi Bagian 10"}
     O -- Pekerjaan belum selesai / bukti kurang --> N2["Sponsor unggah hardcopy pengganti + ajukan ulang"]
     N2 --> O
     O -- Lengkap --> T["CLOSED; PIC HSE dapat melihat rekap"]
@@ -370,10 +370,10 @@ Prioritas: **M** Must, **S** Should, **C** Could.
 | BR-REN-002 | Permintaan renewal membuat satu task review untuk Manager pemilik wilayah tanpa mengubah status PTW asal; selama review tertunda, lampiran PTW asal terkunci dan closure tidak dapat diajukan. | M |
 | BR-REN-003 | Manager pemilik wilayah dapat meminta hardcopy ulang (Sponsor wajib mengganti evidence), menolak, atau menyetujui setelah mengonfirmasi verifikasi lapangan dan keterbacaan hardcopy. | M |
 | BR-REN-004 | Approval renewal membuat draft PTW penerus secara atomik dengan Sponsor dan lokasi yang sama, periode yang disetujui, lineage ke PTW asal, tanpa lampiran, dan menjalani submit, validasi HSE, review Bagian 7, serta approval penerbitan normal. Satu PTW asal hanya memiliki satu penerus. | M |
-| BR-CLO-001 | Sponsor mengajukan close dari `ISSUED`, `SUSPENDED`, atau `EXPIRED` hanya setelah completion, pemeriksaan lokasi, restorasi, handback, dan tanda tangan manual selesai; hardcopy final `CLEAN` yang cocok dengan paket cetak resmi dan versi PTW adalah wajib. | M |
+| BR-CLO-001 | Sponsor mengajukan close dari `ISSUED`, `SUSPENDED`, atau `EXPIRED` hanya setelah completion, pemeriksaan lokasi, restorasi, handback, dan tanda tangan manual selesai; hardcopy final `CLEAN` yang cocok dengan paket cetak resmi dan versi PTW adalah wajib serta menjadi unduhan utama PTW untuk review dan arsip close. | M |
 | BR-CLO-002 | `CLOSED` bersifat terminal; koreksi administratif dilakukan sebagai addendum audit. | M |
-| BR-CLO-003 | Manager pemilik wilayah memverifikasi Bagian 10 secara terstruktur (nama Officer, area diinspeksi dan bersih, pekerjaan selesai, Manager menyetujui penyelesaian, sistem inhibited dipulihkan, handback dan pengaman dipulihkan, hardcopy terbaca) sebelum menetapkan `CLOSED`; PIC HSE tidak memiliki task approval close. | M |
-| BR-CLO-004 | Bila pekerjaan belum selesai atau bukti kurang, Manager meminta tindak lanjut dengan alasan; close terkunci, Sponsor mengunggah hardcopy pengganti untuk paket cetak yang sama dan mengajukan ulang; status tetap `CLOSURE_REQUESTED` dan hak kerja tidak dipulihkan. | M |
+| BR-CLO-003 | Manager atau SO/Officer pemilik wilayah dengan assignment efektif dan scope lokasi cocok memverifikasi Bagian 10 secara terstruktur (nama Officer, area diinspeksi dan bersih, pekerjaan selesai, Pemilik Wilayah menyetujui penyelesaian, sistem inhibited dipulihkan, handback dan pengaman dipulihkan, hardcopy terbaca) sebelum menetapkan `CLOSED`; PIC HSE tidak memiliki task approval close. | M |
+| BR-CLO-004 | Bila pekerjaan belum selesai atau bukti kurang, verifier Pemilik Wilayah meminta tindak lanjut dengan alasan; close terkunci, Sponsor mengunggah hardcopy pengganti untuk paket cetak yang sama dan mengajukan ulang; status tetap `CLOSURE_REQUESTED` dan hak kerja tidak dipulihkan. | M |
 | BR-CLO-005 | Sistem menyimpan hash, versi, pengunggah, waktu upload, revisi pengajuan, dan keputusan verifier terhadap hardcopy final. | M |
 
 ### 8.7 Visibilitas, notifikasi, audit, dan administrasi
@@ -411,7 +411,7 @@ Prioritas: **M** Must, **S** Should, **C** Could.
 | RB-014 | `ISSUED` menyatakan dokumen izin telah diterbitkan; hak bekerja ditentukan oleh masa berlaku, isian hardcopy, dan kondisi aktual. |
 | RB-015 | Tidak ada kolom bebas bahaya/pengendalian, CLSR, SIMOPS, atau isolasi pada form Sponsor; kondisi operasi ditetapkan SO/Officer pada Bagian 7. |
 | RB-016 | Hanya hardcopy `SIGNED_FIELD_COPY` yang `CLEAN`, bermetadata lengkap, tidak superseded, dan cocok dengan paket cetak `READY` serta versi PTW yang sama yang dapat menjadi evidence closure atau renewal. |
-| RB-017 | Close hanya dapat disahkan Manager pemilik area setelah seluruh konfirmasi Bagian 10 terpenuhi; PIC HSE menerima rekap tanpa task approval close. |
+| RB-017 | Close hanya dapat disahkan Manager atau SO/Officer pemilik area dengan scope lokasi cocok setelah seluruh konfirmasi Bagian 10 terpenuhi; PIC HSE menerima rekap tanpa task approval close. |
 | RB-018 | Rilis awal hanya menerima `ORF`, `SITE_OFFICE`, dan `WATER_BASED`; lokasi lain gagal aman. |
 | RB-019 | Renewal dan closure saling eksklusif: permintaan renewal ditolak setelah closure dimulai, dan closure ditolak selama review renewal aktif atau setelah penerus dibuat. |
 | RB-020 | Cancel hanya oleh Sponsor pemilik dari `DRAFT`, `UNDER_VALIDATION`, atau `REVISION_REQUIRED`; seluruh task tertunda dibatalkan. |

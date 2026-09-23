@@ -189,4 +189,85 @@ describe('PermitAttachments', () => {
       'print-package-id',
     );
   });
+
+  it('makes the signed copy selected for closure the primary PTW download', async () => {
+    const attachments = [
+      {
+        id: 'supporting-id',
+        permitId: 'permit-id',
+        addedInVersion: 1,
+        removedInVersion: null,
+        fileName: 'jsa.pdf',
+        sizeBytes: 2048,
+        mediaType: 'application/pdf',
+        sha256: 'a'.repeat(64),
+        scanStatus: 'CLEAN',
+        scanEvidenceReference: 'scan-1',
+        scannedAt: '2026-09-04T12:00:00.000Z',
+        category: 'JSA' as const,
+        supportingDocumentCode: 'JSA',
+        documentNumber: 'JSA-001',
+        documentRevision: '1',
+        documentDate: '2026-09-04T00:00:00.000Z',
+        targetPermitVersion: 1,
+        printPackageId: null,
+        supersedesAttachmentId: null,
+        uploadedBy: 'sponsor.demo',
+        uploadedAt: '2026-09-04T12:00:00.000Z',
+      },
+      {
+        id: 'signed-copy-id',
+        permitId: 'permit-id',
+        addedInVersion: 1,
+        removedInVersion: null,
+        fileName: 'ptw-signed.pdf',
+        sizeBytes: 4096,
+        mediaType: 'application/pdf',
+        sha256: 'b'.repeat(64),
+        scanStatus: 'CLEAN',
+        scanEvidenceReference: 'scan-2',
+        scannedAt: '2026-09-04T13:00:00.000Z',
+        category: 'SIGNED_FIELD_COPY' as const,
+        supportingDocumentCode: null,
+        documentNumber: 'PTW-001',
+        documentRevision: '1',
+        documentDate: '2026-09-04T00:00:00.000Z',
+        targetPermitVersion: 1,
+        printPackageId: 'print-package-id',
+        supersedesAttachmentId: null,
+        uploadedBy: 'sponsor.demo',
+        uploadedAt: '2026-09-04T13:00:00.000Z',
+      },
+    ];
+    await TestBed.configureTestingModule({
+      imports: [PermitAttachments],
+      providers: [
+        { provide: PermitAttachmentApi, useValue: { list: () => of(attachments) } },
+        {
+          provide: PermitApi,
+          useValue: {
+            listSupportingDocuments: () => of(supportingDocuments),
+            listMandatoryDocuments: () => of(mandatoryDocuments),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(PermitAttachments);
+    fixture.componentRef.setInput('permitId', 'permit-id');
+    fixture.componentRef.setInput('eTag', '"etag-value"');
+    fixture.componentRef.setInput('fieldCopyOnly', true);
+    fixture.componentRef.setInput('primaryAttachmentIds', ['signed-copy-id']);
+    fixture.detectChanges();
+
+    const primary = fixture.nativeElement.querySelector(
+      '.attachment-list li.primary-document',
+    ) as HTMLElement | null;
+    expect(fixture.nativeElement.textContent).toContain('Dokumen utama PTW');
+    expect(primary?.textContent).toContain('ptw-signed.pdf');
+    expect(primary?.querySelector('.primary-download')?.textContent).toContain(
+      'Unduh untuk review',
+    );
+    expect(fixture.nativeElement.querySelector('.attachment-list li')).toBe(primary);
+  });
 });

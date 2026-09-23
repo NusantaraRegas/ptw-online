@@ -60,9 +60,7 @@ function localDate(hoursFromNow: number): string {
               {{ loadingLocations() ? 'Memuat lokasi...' : 'Pilih lokasi' }}
             </option>
             @for (location of locations(); track location.id) {
-              <option [value]="location.code">
-                {{ location.code }} &mdash; {{ location.name }}
-              </option>
+              <option [value]="location.code">{{ location.name }}</option>
             }
           </select>
           <small id="location-help">

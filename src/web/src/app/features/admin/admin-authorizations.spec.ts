@@ -50,6 +50,11 @@ describe('AdminAuthorizations', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).not.toContain('Action codes');
     expect(fixture.nativeElement.textContent).toContain('Area kewenangan');
+    const locationOption = fixture.nativeElement.querySelector(
+      'select[formControlName="locationId"] option[value="location-id"]',
+    ) as HTMLOptionElement;
+    expect(locationOption.textContent?.trim()).toBe('Onshore Receiving Facility');
+    expect(locationOption.textContent).not.toContain('ORF');
 
     setSelect(fixture, 'locationId', 'location-id');
     const neverExpires = fixture.nativeElement.querySelector(

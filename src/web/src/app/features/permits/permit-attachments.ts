@@ -42,6 +42,8 @@ export class PermitAttachments {
   readonly jsaDocumentNumber = input('');
   readonly jsaRevision = input('');
   readonly jsaDate = input('');
+  /** Closure evidence selected by the Sponsor becomes the primary PTW download. */
+  readonly primaryAttachmentIds = input<string[]>([]);
   readonly permitChanged = output<PermitAttachmentPermitChange>();
 
   /** Ready print packages a signed field copy can be reconciled against. */
@@ -65,6 +67,16 @@ export class PermitAttachments {
   protected readonly hasUnavailableDownloads = computed(() =>
     this.attachments().some((attachment) => attachment.scanStatus !== 'CLEAN'),
   );
+  protected readonly primaryClosureAttachments = computed(() => {
+    const primaryIds = new Set(this.primaryAttachmentIds());
+    return this.attachments().filter((attachment) => primaryIds.has(attachment.id));
+  });
+  protected readonly displayedAttachments = computed(() => {
+    const primaryIds = new Set(this.primaryAttachmentIds());
+    return [...this.attachments()].sort(
+      (left, right) => Number(primaryIds.has(right.id)) - Number(primaryIds.has(left.id)),
+    );
+  });
   protected readonly jsaDocument = computed(
     () => this.mandatoryDocuments().find((option) => option.code === 'JSA') ?? null,
   );
@@ -195,6 +207,10 @@ export class PermitAttachments {
 
   protected documentComplete(documentCode: string): boolean {
     return this.attachmentsFor(documentCode).length > 0;
+  }
+
+  protected isPrimaryDocument(attachment: PermitAttachment): boolean {
+    return this.primaryAttachmentIds().includes(attachment.id);
   }
 
   protected documentLabel(attachment: PermitAttachment): string {

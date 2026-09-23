@@ -308,13 +308,19 @@
       </div>
     </div>
   } @else {
+    @if (primaryClosureAttachments().length > 0) {
+      <div class="primary-document-note" role="note">
+        <strong>Dokumen utama PTW</strong>
+        <span> Salinan bertanda tangan yang diajukan Sponsor untuk review dan penutupan PTW. </span>
+      </div>
+    }
     <div class="attachment-list-heading">
       <h4>Dokumen terlampir</h4>
       <span>{{ attachments().length }} file</span>
     </div>
     <ul class="attachment-list">
-      @for (attachment of attachments(); track attachment.id) {
-        <li>
+      @for (attachment of displayedAttachments(); track attachment.id) {
+        <li [class.primary-document]="isPrimaryDocument(attachment)">
           <span class="file-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24">
               <path d="M7 3h7l4 4v14H7z" />
@@ -324,6 +330,9 @@
           <div class="file-info">
             <strong [title]="attachment.fileName">{{ attachment.fileName }}</strong>
             <div class="file-badges">
+              @if (isPrimaryDocument(attachment)) {
+                <span class="category-badge primary-document-badge">Dokumen utama PTW</span>
+              }
               <span class="category-badge">{{ categoryLabel(attachment.category) }}</span>
               @if (documentLabel(attachment); as supportingLabel) {
                 <span class="category-badge document-code-badge">{{ supportingLabel }}</span>
@@ -338,6 +347,7 @@
             <button
               type="button"
               class="download"
+              [class.primary-download]="isPrimaryDocument(attachment)"
               [disabled]="attachment.scanStatus !== 'CLEAN'"
               [attr.aria-describedby]="
                 attachment.scanStatus !== 'CLEAN' ? 'scan-download-note' : null
@@ -347,7 +357,7 @@
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 4v11m0 0l-4-4m4 4 4-4M5 20h14" />
               </svg>
-              Unduh
+              {{ isPrimaryDocument(attachment) ? 'Unduh untuk review' : 'Unduh' }}
             </button>
             @if (canManage() && !fieldCopyOnly()) {
               <button type="button" class="remove" [disabled]="busy()" (click)="remove(attachment)">

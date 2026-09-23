@@ -91,7 +91,7 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 - Gunakan istilah **Diterbitkan** pada UI dan komunikasi pengguna untuk status domain internal
   `ISSUED`; jangan menampilkan `OPEN` sebagai istilah proses bisnis.
 - Status harus memakai teks dan tidak hanya warna.
-- Jangan menampilkan kode kontrak API (`HotWork`, `USER_SPONSOR`, kode katalog) secara mentah; petakan ke label Bahasa Indonesia di komponen. Field opsional harus memberi teks bantuan yang terasosiasi (`aria-describedby`).
+- Jangan menampilkan kode kontrak API (`HotWork`, `USER_SPONSOR`, kode lokasi seperti `ORF`, kode katalog) secara mentah; petakan ke label Bahasa Indonesia di komponen. Field opsional harus memberi teks bantuan yang terasosiasi (`aria-describedby`).
 - Pertahankan peringatan bahwa **Diterbitkan** belum otomatis mengizinkan pekerjaan dimulai.
 - Form panjang memakai reactive forms, error association/summary, dan remediation yang jelas.
 - Error command pada halaman panjang harus terlihat di dekat aksi pemicunya; summary global boleh
@@ -110,7 +110,7 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 - Setelah validasi HSE, sistem membuat tepat satu task `AREA_OPERATION_REVIEW` pada PermitVersion yang sama untuk pool reviewer SO/Officer pemilik wilayah (role `AreaOwnerSeniorOfficer`; kode dipertahankan untuk kompatibilitas data). Pemegang assignment yang scope-nya cocok dan pertama menyelesaikan task menetapkan checklist kondisi operasi Bagian 7; reviewer berikutnya tidak lagi menemukan task tersebut. Sponsor dan validator HSE tidak boleh menjalankan review ini.
 - Setelah review Bagian 7 selesai, sistem menyimpan decision/evidence immutable dan membuat tepat satu task `AREA_APPROVE_AND_ISSUE`. Manager pemilik area yang scope-nya cocok dan berbeda dari Sponsor, validator HSE, serta reviewer SO/Officer menjalankan satu command atomik approval dan penerbitan. Pengganti resmi belum boleh dipakai sebelum model assignment v1.8 lengkap tersedia.
 - Suspend berlaku langsung. Gas test, readiness, revalidasi, completion, inspeksi/restorasi, handback, dan tanda tangan lapangan tidak dimodelkan sebagai active digital work period pada MVP.
-- Sponsor meminta closure menggunakan signed field copy yang cocok dengan exact PermitVersion dan PrintPackage. Hanya pemilik area yang memverifikasi/menutup; PIC HSE tidak memperoleh closure approval task.
+- Sponsor meminta closure menggunakan signed field copy yang cocok dengan exact PermitVersion dan PrintPackage; file terpilih menjadi unduhan utama PTW untuk review dan arsip close. Verifikasi Bagian 10 dan close dilakukan lewat satu task pool `AREA_CLOSE_VERIFICATION` oleh Manager atau SO/Officer pemilik wilayah dengan assignment efektif dan scope lokasi cocok; aktor pertama menang, scope lain ditolak, dan PIC HSE tidak memperoleh closure approval task. Perluasan pool ke SO/Officer adalah konfigurasi Development, bukan pengesahan OPN-002.
 - Renewal tidak memperpanjang atau mengubah permit lama. Sponsor mengajukan signed field copy exact package/version; Pemilik Wilayah meninjau task `AREA_RENEWAL_REVIEW`, dan draft penerus baru dibuat atomik hanya setelah approval lalu mengikuti workflow normal dari awal.
 - Klasifikasi header dikontrol server: HOT memilih satu atau lebih `Api Terbuka`/`Percikan Api`, COLD tepat satu `Low Risk`/`High Risk`, dan CSE tidak memiliki pilihan tambahan.
 - Bagian 1 memakai work type multi-select dari katalog; opsi `Lain-lain` mewajibkan detail maksimum 80 karakter yang ikut tercetak.

@@ -22,6 +22,8 @@ public sealed class PermitService(
     // reviewer pool and may be assigned to an SO or Officer Pemilik Wilayah.
     private const string AreaOperationsReviewerRole = "AreaOwnerSeniorOfficer";
     private const string AreaOwnerManagerRole = "AreaOwnerManager";
+    private static readonly string[] AreaOwnerClosureRoles =
+        [AreaOperationsReviewerRole, AreaOwnerManagerRole];
 
     public async Task<PermitResponse> CreateAsync(
         PermitDraftRequest request,
@@ -853,7 +855,7 @@ public sealed class PermitService(
             idempotencyKey,
             correlationId,
             PermitPolicyOperations.RequestClosureEvidenceReplacement,
-            [AreaOwnerManagerRole],
+            AreaOwnerClosureRoles,
             (permit, actor, now, _) => permit.RequestClosureEvidenceReplacement(actor.Id, request.Reason, now),
             cancellationToken);
 
@@ -886,7 +888,7 @@ public sealed class PermitService(
             idempotencyKey,
             correlationId,
             PermitPolicyOperations.Close,
-            [AreaOwnerManagerRole],
+            AreaOwnerClosureRoles,
             (permit, actor, now, _) => permit.Close(
                 actor.Id,
                 request.Statement,
@@ -1083,7 +1085,7 @@ public sealed class PermitService(
 
         var task = await GetPendingTaskAsync(taskId, cancellationToken);
         if (!string.Equals(task.Type, expectedTaskType, StringComparison.Ordinal)
-            || !string.Equals(task.RequiredRole, allowedRoles.Single(), StringComparison.OrdinalIgnoreCase))
+            || !allowedRoles.Contains(task.RequiredRole, StringComparer.OrdinalIgnoreCase))
         {
             throw new InvalidRequestException("task.type.invalid", "Task tidak sesuai dengan command yang diminta.");
         }
