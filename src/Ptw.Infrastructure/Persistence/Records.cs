@@ -5,7 +5,9 @@ public sealed class PermitRecord
     public Guid Id { get; set; }
     public string? PermitNumber { get; set; }
     public string Status { get; set; } = null!;
+    /// <summary>Legacy aggregate mutation sequence stored in the original Version column.</summary>
     public int Version { get; set; }
+    public int BusinessVersion { get; set; }
     public string LocationId { get; set; } = null!;
     public string SponsorId { get; set; } = null!;
     public DateTimeOffset ValidFrom { get; set; }
@@ -21,6 +23,17 @@ public sealed class PermitRecord
 }
 
 public sealed class PermitVersionRecord
+{
+    public Guid Id { get; set; }
+    public Guid PermitId { get; set; }
+    public int Version { get; set; }
+    public string ContentJson { get; set; } = null!;
+    public string ContentHash { get; set; } = null!;
+    public DateTimeOffset CreatedAt { get; set; }
+    public string CreatedBy { get; set; } = null!;
+}
+
+public sealed class PermitRevisionRecord
 {
     public Guid Id { get; set; }
     public Guid PermitId { get; set; }
@@ -73,6 +86,8 @@ public sealed class PermitTaskRecord
     public Guid Id { get; set; }
     public Guid PermitId { get; set; }
     public int PermitVersion { get; set; }
+    public int? LegacyPermitVersion { get; set; }
+    public int BusinessPermitVersion { get; set; }
     public string Type { get; set; } = null!;
     public string Label { get; set; } = null!;
     public string RequiredRole { get; set; } = null!;
@@ -89,6 +104,8 @@ public sealed class PermitDecisionRecord
     public Guid Id { get; set; }
     public Guid PermitId { get; set; }
     public int PermitVersion { get; set; }
+    public int? LegacyPermitVersion { get; set; }
+    public int BusinessPermitVersion { get; set; }
     public Guid TaskId { get; set; }
     public string Decision { get; set; } = null!;
     public string ActorId { get; set; } = null!;
@@ -108,6 +125,8 @@ public sealed class PrintPackageSnapshotRecord
     public Guid Id { get; set; }
     public Guid PermitId { get; set; }
     public int PermitVersion { get; set; }
+    public int? LegacyPermitVersion { get; set; }
+    public int BusinessPermitVersion { get; set; }
     public Guid DecisionId { get; set; }
     public string RuleVersion { get; set; } = null!;
     public string PrintTemplateVersion { get; set; } = null!;
@@ -142,6 +161,10 @@ public sealed class PermitAttachmentRecord
     public Guid PermitId { get; set; }
     public int AddedInVersion { get; set; }
     public int? RemovedInVersion { get; set; }
+    public int? LegacyAddedInVersion { get; set; }
+    public int? LegacyRemovedInVersion { get; set; }
+    public int AddedInBusinessVersion { get; set; }
+    public int? RemovedInBusinessVersion { get; set; }
     public string FileName { get; set; } = null!;
     public long SizeBytes { get; set; }
     public string MediaType { get; set; } = null!;
@@ -156,6 +179,8 @@ public sealed class PermitAttachmentRecord
     public string? DocumentRevision { get; set; }
     public DateTimeOffset? DocumentDate { get; set; }
     public int TargetPermitVersion { get; set; }
+    public int? LegacyTargetPermitVersion { get; set; }
+    public int TargetBusinessPermitVersion { get; set; }
     public Guid? PrintPackageId { get; set; }
     public Guid? SupersedesAttachmentId { get; set; }
     public string UploadedBy { get; set; } = null!;

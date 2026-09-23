@@ -10,6 +10,7 @@ public sealed class Permit
         Draft = NormalizeAndValidate(draft);
         Status = PermitStatus.Draft;
         Version = 1;
+        ChangeSequence = 1;
         CreatedAt = createdAt.ToUniversalTime();
         UpdatedAt = CreatedAt;
     }
@@ -17,7 +18,13 @@ public sealed class Permit
     public Guid Id { get; }
     public string? PermitNumber { get; private set; }
     public PermitStatus Status { get; private set; }
+    /// <summary>The business revision of the PTW document.</summary>
     public int Version { get; private set; }
+    /// <summary>
+    /// Legacy aggregate mutation sequence retained for persistence compatibility and data migration.
+    /// Concurrency itself is enforced by the persisted row-version/ETag.
+    /// </summary>
+    public int ChangeSequence { get; private set; }
     public PermitDraft Draft { get; private set; }
     public DateTimeOffset CreatedAt { get; }
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -76,12 +83,14 @@ public sealed class Permit
         PermitRenewalRequestEvidence? renewalRequest = null,
         Guid? renewedFromPermitId = null,
         Guid? renewalPermitId = null,
-        AreaOperationsReviewEvidence? areaOperationsReview = null) =>
+        AreaOperationsReviewEvidence? areaOperationsReview = null,
+        int? changeSequence = null) =>
         new(id, NormalizeAndValidate(draft, allowLegacyIncompleteDraft: true), createdAt, draftIsNormalized: true)
         {
             PermitNumber = permitNumber,
             Status = status,
             Version = version,
+            ChangeSequence = changeSequence ?? version,
             UpdatedAt = updatedAt.ToUniversalTime(),
             SuspensionReason = suspensionReason,
             HseValidation = hseValidation,
@@ -182,7 +191,7 @@ public sealed class Permit
             now.ToUniversalTime(),
             (RenewalRequest?.Revision ?? 0) + 1,
             PermitRenewalReviewStatus.Pending);
-        Version++;
+        ChangeSequence++;
         Touch(now);
         Raise("permit_renewal_requested", new
         {
@@ -193,7 +202,7 @@ public sealed class Permit
             RenewalValidFrom = normalizedFrom,
             RenewalValidUntil = normalizedUntil,
             RenewalRequest.Revision,
-            Version
+            PermitVersion = Version
         });
     }
 
@@ -282,7 +291,7 @@ public sealed class Permit
         EnsureSafetyEquipmentIsAssignedByHse(draft);
         Draft = NormalizeAndValidate(draft);
         ClearReviewEvidence();
-        Version++;
+        ChangeSequence++;
         Touch(now);
         Raise("permit_draft_updated", new { Version });
     }
@@ -290,7 +299,7 @@ public sealed class Permit
     public void AddAttachment(Guid attachmentId, DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.Draft, PermitStatus.RevisionRequired);
-        Version++;
+        ChangeSequence++;
         Touch(now);
         Raise("permit_attachment_added", new { AttachmentId = attachmentId, Version });
     }
@@ -333,7 +342,7 @@ public sealed class Permit
                 "Lampiran tidak dapat diubah selama permintaan perpanjangan sedang ditinjau.");
         }
 
-        Version++;
+        ChangeSequence++;
         Touch(now);
         Raise("signed_field_copy_uploaded", new { AttachmentId = attachmentId, PrintPackageId = printPackageId, Version });
     }
@@ -341,7 +350,7 @@ public sealed class Permit
     public void RemoveAttachment(Guid attachmentId, DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.Draft, PermitStatus.RevisionRequired);
-        Version++;
+        ChangeSequence++;
         Touch(now);
         Raise("permit_attachment_removed", new { AttachmentId = attachmentId, Version });
     }
@@ -372,6 +381,7 @@ public sealed class Permit
             // A revision starts a new review cycle. Keep the cancelled workflow task
             // as immutable history and bind the fresh task to a new permit version.
             Version++;
+            ChangeSequence++;
         }
 
         MoveTo(PermitStatus.UnderValidation, "permit_submitted", now);
@@ -866,6 +876,7 @@ public sealed class Permit
         Draft = draftIsNormalized ? draft : NormalizeAndValidate(draft);
         Status = PermitStatus.Draft;
         Version = 1;
+        ChangeSequence = 1;
         CreatedAt = createdAt.ToUniversalTime();
         UpdatedAt = CreatedAt;
     }

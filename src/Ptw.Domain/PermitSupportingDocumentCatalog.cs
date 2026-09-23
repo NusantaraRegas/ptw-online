@@ -15,13 +15,14 @@ public sealed record PermitSupportingDocumentOption(
 public static class PermitSupportingDocumentCatalog
 {
     public const string JsaCode = "JSA";
+    public const string WorkProcedureCode = "WORK_PROCEDURE";
 
     private static readonly PermitSupportingDocumentOption[] Options =
     [
         new(JsaCode, "Job Safety Analisis (JSA)", 0, 0, Required: true, RequiresMetadata: true),
         new("HEAVY_EQUIPMENT_INSPECTION", "Check List Inspeksi Alat Berat", 0, 1, Required: false),
         new("ISOLATION_DEISOLATION", "Isolation / De-isolation", 0, 2, Required: false),
-        new("WORK_PROCEDURE", "Prosedur Pekerjaan", 0, 3, Required: false),
+        new(WorkProcedureCode, "Prosedur Pekerjaan", 0, 3, Required: false),
         new("PID_PLOT_PLAN", "P & ID, Plot Plan / Lay Out", 0, 4, Required: false),
         new("MOC", "Dokumen Perubahan (MOC)", 0, 5, Required: false),
         new("EXCAVATION_CLEARANCE", "Clearance Penggalian dari Electrical & Civil Eng.", 0, 6, Required: false),

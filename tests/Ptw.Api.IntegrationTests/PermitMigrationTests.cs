@@ -13,6 +13,73 @@ public sealed class PermitMigrationTests(PtwApiFactory factory)
     private const string TaskMigration = "20260903081421_PersistPermitWorkflowTasks";
     private const string AttachmentEvidenceMigration = "20260915074426_AddV16AttachmentEvidenceMetadata";
     private const string UserAccountsMigration = "20260921092617_AddUserAccountsAndSignatures";
+    private const string DemoModeMigration = "20260922030206_AddDemoModeSetting";
+
+    [Fact]
+    public async Task BusinessRevisionMigrationReconcilesLegacyVersionTwelveToRevisionOne()
+    {
+        var builder = new SqlConnectionStringBuilder(factory.ConnectionString)
+        {
+            InitialCatalog = $"PtwMigrationTest{Guid.NewGuid():N}"
+        };
+        var options = new DbContextOptionsBuilder<PtwDbContext>()
+            .UseSqlServer(builder.ConnectionString)
+            .Options;
+        await using var db = new PtwDbContext(options);
+
+        try
+        {
+            var migrator = db.Database.GetService<IMigrator>();
+            await migrator.MigrateAsync(DemoModeMigration);
+            var now = DateTimeOffset.UtcNow;
+            var permit = Permit(now, "Closed", "{}");
+            permit.Version = 12;
+            await InsertHistoricalPermitAsync(db, permit);
+            var legacyRevisionId = Guid.CreateVersion7();
+            const string hash = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+            const string actor = "sponsor.migration";
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO [ptw].[PermitVersion]
+                    ([Id], [PermitId], [Version], [ContentJson], [ContentHash], [CreatedAt], [CreatedBy])
+                VALUES
+                    ({legacyRevisionId}, {permit.Id}, 12, {permit.DraftJson}, {hash}, {now.AddMinutes(-2)}, {actor})
+                """);
+            var submitEventId = Guid.CreateVersion7();
+            const string submitEventType = "permit_submitted";
+            const string emptyPayload = "{}";
+            const string correlationId = "migration-test";
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO [audit].[AuditEvent]
+                    ([Id], [PermitId], [EventType], [ActorId], [OccurredAt], [PayloadJson], [CorrelationId])
+                VALUES
+                    ({submitEventId}, {permit.Id}, {submitEventType}, {actor},
+                     {now.AddMinutes(-1)}, {emptyPayload}, {correlationId})
+                """);
+            var legacyTask = Task(permit, "AREA_CLOSE_VERIFICATION", "AreaOwnerManager", now);
+            legacyTask.PermitVersion = 11;
+            await InsertHistoricalTaskAsync(db, legacyTask);
+
+            await migrator.MigrateAsync();
+            db.ChangeTracker.Clear();
+
+            var migrated = await db.Permits.SingleAsync(x => x.Id == permit.Id);
+            Assert.Equal(12, migrated.Version);
+            Assert.Equal(1, migrated.BusinessVersion);
+            var revision = await db.PermitRevisions.SingleAsync(x => x.PermitId == permit.Id);
+            Assert.Equal(1, revision.Version);
+            Assert.Equal(hash, revision.ContentHash);
+            var migratedTask = await db.PermitTasks.SingleAsync(x => x.Id == legacyTask.Id);
+            Assert.Equal(11, migratedTask.PermitVersion);
+            Assert.Equal(1, migratedTask.BusinessPermitVersion);
+            var audit = await db.AuditEvents.SingleAsync(x =>
+                x.PermitId == permit.Id && x.EventType == "permit_business_version_reconciled");
+            Assert.True(await db.OutboxMessages.AnyAsync(x => x.Id == audit.Id));
+        }
+        finally
+        {
+            await db.Database.EnsureDeletedAsync();
+        }
+    }
 
     [Fact]
     public async Task V16MigrationLeavesOneHseRouteAndOneAtomicAreaApprovalTask()
@@ -38,11 +105,15 @@ public sealed class PermitMigrationTests(PtwApiFactory factory)
             await InsertHistoricalPermitAsync(db, hsseCompleted);
             await InsertHistoricalPermitAsync(db, awaitingHsse);
             await InsertHistoricalPermitAsync(db, alreadyAwaitingApproval);
-            db.PermitTasks.AddRange(
-                Task(hsseCompleted, "GAS_DISTRIBUTION_VALIDATION", "GasDistributionValidator", now),
-                Task(awaitingHsse, "GAS_DISTRIBUTION_VALIDATION", "GasDistributionValidator", now),
+            await InsertHistoricalTaskAsync(
+                db,
+                Task(hsseCompleted, "GAS_DISTRIBUTION_VALIDATION", "GasDistributionValidator", now));
+            await InsertHistoricalTaskAsync(
+                db,
+                Task(awaitingHsse, "GAS_DISTRIBUTION_VALIDATION", "GasDistributionValidator", now));
+            await InsertHistoricalTaskAsync(
+                db,
                 Task(awaitingHsse, "HSSE_VALIDATION", "HSSEValidator", now));
-            await db.SaveChangesAsync();
 
             await migrator.MigrateAsync();
             db.ChangeTracker.Clear();
@@ -165,7 +236,7 @@ public sealed class PermitMigrationTests(PtwApiFactory factory)
 
             var task = await db.PermitTasks.SingleAsync(x =>
                 x.PermitId == permit.Id && x.Type == "SPONSOR_REVISION");
-            Assert.Equal(permit.Version, task.PermitVersion);
+            Assert.Equal(permit.Version, task.BusinessPermitVersion);
             Assert.Equal("Sponsor", task.RequiredRole);
             Assert.Equal(permit.SponsorId, task.AssignedActorId);
             Assert.Equal("PENDING", task.Status);
@@ -224,6 +295,17 @@ public sealed class PermitMigrationTests(PtwApiFactory factory)
                  {permit.LocationId}, {permit.SponsorId}, {permit.ValidFrom}, {permit.ValidUntil},
                  {permit.DraftJson}, {permit.CreatedAt}, {permit.UpdatedAt},
                  {permit.ActiveWorkPeriodId}, {permit.SuspensionReason}, {permit.WorkflowEvidenceJson})
+            """);
+
+    private static Task<int> InsertHistoricalTaskAsync(PtwDbContext db, PermitTaskRecord task) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [wf].[PermitTask]
+                ([Id], [PermitId], [PermitVersion], [Type], [Label], [RequiredRole],
+                 [AssignedActorId], [Status], [CreatedAt], [CompletedAt], [CompletedBy], [CancelledAt])
+            VALUES
+                ({task.Id}, {task.PermitId}, {task.PermitVersion}, {task.Type}, {task.Label},
+                 {task.RequiredRole}, {task.AssignedActorId}, {task.Status}, {task.CreatedAt},
+                 {task.CompletedAt}, {task.CompletedBy}, {task.CancelledAt})
             """);
 
     private static string HsseEvidence(DateTimeOffset now) => JsonSerializer.Serialize(new

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Ptw.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using Ptw.Infrastructure.Persistence;
 namespace Ptw.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PtwDbContext))]
-    partial class PtwDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260922074402_ReconcilePermitBusinessVersions")]
+    partial class ReconcilePermitBusinessVersions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -610,9 +613,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<int>("AddedInBusinessVersion")
-                        .HasColumnType("int");
-
                     b.Property<int>("AddedInVersion")
                         .HasColumnType("int");
 
@@ -664,9 +664,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<int?>("RemovedInBusinessVersion")
-                        .HasColumnType("int");
-
                     b.Property<int?>("RemovedInVersion")
                         .HasColumnType("int");
 
@@ -709,9 +706,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<int>("TargetBusinessPermitVersion")
-                        .HasColumnType("int");
-
                     b.Property<int>("TargetPermitVersion")
                         .HasColumnType("int");
 
@@ -731,8 +725,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.HasIndex("SupersedesAttachmentId");
-
-                    b.HasIndex("PermitId", "Category", "TargetBusinessPermitVersion");
 
                     b.HasIndex("PermitId", "Category", "TargetPermitVersion");
 
@@ -781,9 +773,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AuthorizationId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<int>("BusinessPermitVersion")
-                        .HasColumnType("int");
-
                     b.Property<DateTimeOffset>("DecidedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -828,9 +817,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("TaskId");
-
-                    b.HasIndex("PermitId", "BusinessPermitVersion", "Decision")
-                        .IsUnique();
 
                     b.HasIndex("PermitId", "PermitVersion", "Decision")
                         .IsUnique();
@@ -967,9 +953,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<int>("BusinessPermitVersion")
-                        .HasColumnType("int");
-
                     b.Property<DateTimeOffset?>("CancelledAt")
                         .HasColumnType("datetimeoffset");
 
@@ -1013,9 +996,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(80)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("PermitId", "BusinessPermitVersion", "Type")
-                        .IsUnique();
 
                     b.HasIndex("PermitId", "PermitVersion", "Type")
                         .IsUnique();
@@ -1236,9 +1216,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<int>("BusinessPermitVersion")
-                        .HasColumnType("int");
-
                     b.Property<string>("CampaignAssetVersion")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1287,9 +1264,6 @@ namespace Ptw.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DecisionId");
-
-                    b.HasIndex("PermitId", "BusinessPermitVersion")
-                        .IsUnique();
 
                     b.HasIndex("PermitId", "PermitVersion")
                         .IsUnique();

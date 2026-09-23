@@ -6,6 +6,7 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
 {
     public DbSet<PermitRecord> Permits => Set<PermitRecord>();
     public DbSet<PermitVersionRecord> PermitVersions => Set<PermitVersionRecord>();
+    public DbSet<PermitRevisionRecord> PermitRevisions => Set<PermitRevisionRecord>();
     public DbSet<AuditEventRecord> AuditEvents => Set<AuditEventRecord>();
     public DbSet<OutboxMessageRecord> OutboxMessages => Set<OutboxMessageRecord>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
@@ -62,6 +63,17 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         version.Property(x => x.ContentHash).HasMaxLength(64);
         version.Property(x => x.CreatedBy).HasMaxLength(200);
 
+        var revision = modelBuilder.Entity<PermitRevisionRecord>();
+        revision.ToTable("PermitRevision", "ptw");
+        revision.HasKey(x => x.Id);
+        revision.HasIndex(x => new { x.PermitId, x.Version }).IsUnique();
+        revision.Property(x => x.ContentHash).HasMaxLength(64);
+        revision.Property(x => x.CreatedBy).HasMaxLength(200);
+        revision.HasOne<PermitRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.PermitId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         var audit = modelBuilder.Entity<AuditEventRecord>();
         audit.ToTable("AuditEvent", "audit");
         audit.HasKey(x => x.Sequence);
@@ -101,6 +113,7 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         permitTask.Property(x => x.Status).HasMaxLength(20);
         permitTask.Property(x => x.CompletedBy).HasMaxLength(200);
         permitTask.HasIndex(x => new { x.PermitId, x.PermitVersion, x.Type }).IsUnique();
+        permitTask.HasIndex(x => new { x.PermitId, x.BusinessPermitVersion, x.Type }).IsUnique();
         permitTask.HasIndex(x => new { x.Status, x.RequiredRole, x.AssignedActorId, x.CreatedAt });
         permitTask.HasOne<PermitRecord>()
             .WithMany()
@@ -119,6 +132,7 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         permitDecision.Property(x => x.Statement).HasMaxLength(2000);
         permitDecision.Property(x => x.EvidenceHash).HasMaxLength(64).IsFixedLength();
         permitDecision.HasIndex(x => new { x.PermitId, x.PermitVersion, x.Decision }).IsUnique();
+        permitDecision.HasIndex(x => new { x.PermitId, x.BusinessPermitVersion, x.Decision }).IsUnique();
         permitDecision.HasOne<PermitRecord>()
             .WithMany()
             .HasForeignKey(x => x.PermitId)
@@ -142,6 +156,7 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         printSnapshot.Property(x => x.SnapshotHash).HasMaxLength(64).IsFixedLength();
         printSnapshot.Property(x => x.RenderStatus).HasMaxLength(20);
         printSnapshot.HasIndex(x => new { x.PermitId, x.PermitVersion }).IsUnique();
+        printSnapshot.HasIndex(x => new { x.PermitId, x.BusinessPermitVersion }).IsUnique();
         printSnapshot.HasOne<PermitRecord>()
             .WithMany()
             .HasForeignKey(x => x.PermitId)
@@ -182,7 +197,7 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
                 table.HasCheckConstraint("CK_PermitAttachment_Size", "[SizeBytes] > 0");
                 table.HasCheckConstraint(
                     "CK_PermitAttachment_Versions",
-                    "[RemovedInVersion] IS NULL OR [RemovedInVersion] > [AddedInVersion]");
+                    "[RemovedInVersion] IS NULL OR [RemovedInVersion] >= [AddedInVersion]");
                 table.HasCheckConstraint(
                     "CK_PermitAttachment_ScanStatus",
                     "[ScanStatus] IN ('PENDING', 'CLEAN', 'REJECTED')");
@@ -209,6 +224,7 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         permitAttachment.Property(x => x.RowVersion).IsRowVersion();
         permitAttachment.HasIndex(x => new { x.PermitId, x.RemovedInVersion, x.UploadedAt });
         permitAttachment.HasIndex(x => new { x.PermitId, x.Category, x.TargetPermitVersion });
+        permitAttachment.HasIndex(x => new { x.PermitId, x.Category, x.TargetBusinessPermitVersion });
         permitAttachment.HasIndex(x => new { x.PermitId, x.SupportingDocumentCode, x.RemovedInVersion });
         permitAttachment.HasIndex(x => x.SupersedesAttachmentId);
         permitAttachment.HasIndex(x => x.StorageKey).IsUnique();

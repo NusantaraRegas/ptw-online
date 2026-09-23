@@ -2,8 +2,8 @@ namespace Ptw.Domain;
 
 /// <summary>
 /// One document that must have uploaded evidence before a PTW can be submitted.
-/// Only JSA is also printed in Bagian 4; the remaining entries are submission evidence
-/// and must not be added to the controlled PDF checklist.
+/// JSA and Prosedur Pekerjaan also exist in the controlled Bagian 4 catalog. Making a
+/// document mandatory here gates submission but does not change its Bagian 4 selection.
 /// </summary>
 public sealed record PermitMandatoryDocumentOption(
     string Code,
@@ -20,6 +20,7 @@ public static class PermitMandatoryDocumentCatalog
     private static readonly PermitMandatoryDocumentOption[] Options =
     [
         new(PermitSupportingDocumentCatalog.JsaCode, "Job Safety Analisis (JSA)", RequiresMetadata: true),
+        new(PermitSupportingDocumentCatalog.WorkProcedureCode, "Prosedur Pekerjaan"),
         new(IdentityCode, "ID"),
         new(BpjsTkCode, "BPJS TK"),
         new(FtwCode, "FTW"),

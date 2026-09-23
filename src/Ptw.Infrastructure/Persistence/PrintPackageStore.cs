@@ -18,7 +18,7 @@ public sealed class PrintPackageStore(PtwDbContext dbContext, GeneratedDocumentS
     {
         var rows = await Query()
             .Where(x => x.Snapshot.PermitId == permitId)
-            .OrderByDescending(x => x.Snapshot.PermitVersion)
+            .OrderByDescending(x => x.Snapshot.BusinessPermitVersion)
             .ToListAsync(cancellationToken);
         return rows.ConvertAll(Map);
     }
@@ -109,7 +109,7 @@ public sealed class PrintPackageStore(PtwDbContext dbContext, GeneratedDocumentS
             due.Id,
             snapshot.Id,
             snapshot.PermitId,
-            snapshot.PermitVersion,
+            snapshot.BusinessPermitVersion,
             snapshot.SnapshotJson,
             snapshot.SnapshotHash,
             due.Attempts);
@@ -198,7 +198,7 @@ public sealed class PrintPackageStore(PtwDbContext dbContext, GeneratedDocumentS
     private static PrintPackageDocumentEntry Map(SnapshotDocument row) => new(
         row.Snapshot.Id,
         row.Snapshot.PermitId,
-        row.Snapshot.PermitVersion,
+        row.Snapshot.BusinessPermitVersion,
         row.Document.Id,
         row.Document.RenderStatus,
         row.Document.Attempts,

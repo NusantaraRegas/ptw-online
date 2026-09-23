@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 import { PermitCreate } from './permit-create';
 
 describe('PermitCreate', () => {
-  it('separates five mandatory uploads from the optional Bagian 4 checklist', async () => {
+  it('separates six mandatory uploads from the optional Bagian 4 checklist', async () => {
     await TestBed.configureTestingModule({
       imports: [PermitCreate],
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
@@ -21,6 +21,12 @@ describe('PermitCreate', () => {
         label: 'Job Safety Analisis (JSA)',
         uploadCategory: 'JSA',
         requiresMetadata: true,
+      },
+      {
+        code: 'WORK_PROCEDURE',
+        label: 'Prosedur Pekerjaan',
+        uploadCategory: 'SUPPORTING',
+        requiresMetadata: false,
       },
       { code: 'ID', label: 'ID', uploadCategory: 'SUPPORTING', requiresMetadata: false },
       {
@@ -47,6 +53,14 @@ describe('PermitCreate', () => {
         requiresMetadata: true,
       },
       {
+        code: 'WORK_PROCEDURE',
+        label: 'Prosedur Pekerjaan',
+        templateColumn: 0,
+        templateIndex: 3,
+        required: false,
+        requiresMetadata: false,
+      },
+      {
         code: 'MSDS',
         label: 'MSDS',
         templateColumn: 1,
@@ -58,7 +72,8 @@ describe('PermitCreate', () => {
     fixture.detectChanges();
 
     const mandatoryCards = fixture.nativeElement.querySelectorAll('.mandatory-document-option');
-    expect(mandatoryCards.length).toBe(5);
+    expect(mandatoryCards.length).toBe(6);
+    expect(fixture.nativeElement.textContent).toContain('Prosedur Pekerjaan');
     expect(fixture.nativeElement.textContent).toContain('BPJS TK');
     expect(fixture.nativeElement.textContent).toContain('E-SIMI');
     expect(fixture.nativeElement.textContent).not.toContain('Deklarasi SIMOPS');
@@ -67,6 +82,7 @@ describe('PermitCreate', () => {
     const additionalFieldset = Array.from<HTMLElement>(
       fixture.nativeElement.querySelectorAll('fieldset'),
     ).find((fieldset) => fieldset.querySelector('legend')?.textContent?.includes('Bagian 4'));
+    expect(additionalFieldset?.textContent).toContain('Prosedur Pekerjaan');
     expect(additionalFieldset?.textContent).toContain('MSDS');
     expect(additionalFieldset?.textContent).not.toContain('Job Safety Analisis');
   });

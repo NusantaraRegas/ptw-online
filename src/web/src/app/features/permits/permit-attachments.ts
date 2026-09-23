@@ -73,8 +73,9 @@ export class PermitAttachments {
   );
   protected readonly selectedSupportingDocuments = computed(() => {
     const selected = new Set(this.selectedDocumentCodes());
+    const mandatory = new Set(this.mandatoryDocuments().map((option) => option.code));
     return this.supportingDocuments().filter(
-      (option) => !option.required && selected.has(option.code),
+      (option) => !option.required && !mandatory.has(option.code) && selected.has(option.code),
     );
   });
   protected readonly selectedPrintPackageId = computed(() => {

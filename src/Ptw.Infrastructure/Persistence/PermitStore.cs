@@ -53,7 +53,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
     {
         var record = ToRecord(permit);
         dbContext.Permits.Add(record);
-        AddVersion(permit, actor.Id);
+        AddRevision(permit, actor.Id);
         var events = permit.DequeueEvents();
         AddEvents(events, actor.Id, correlationId);
         AddAuthorizationEvidence(permit.Id, actor.Id, correlationId, authorizationEvidence);
@@ -73,7 +73,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
     {
         var persistedSourceVersion = await dbContext.Permits.AsNoTracking()
             .Where(x => x.Id == source.Id)
-            .Select(x => x.Version)
+            .Select(x => x.BusinessVersion)
             .SingleAsync(cancellationToken);
         var sourceRecord = ToRecord(source);
         sourceRecord.RowVersion = DecodeETag(expectedSourceETag);
@@ -85,9 +85,9 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         dbContext.Permits.Add(renewalRecord);
         if (source.Version > persistedSourceVersion)
         {
-            AddVersion(source, actor.Id);
+            AddRevision(source, actor.Id);
         }
-        AddVersion(renewal, actor.Id);
+        AddRevision(renewal, actor.Id);
         var sourceEvents = source.DequeueEvents();
         AddEvents(sourceEvents, actor.Id, correlationId);
         AddEvents(renewal.DequeueEvents(), actor.Id, correlationId);
@@ -130,7 +130,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
     {
         var persistedVersion = await dbContext.Permits.AsNoTracking()
             .Where(x => x.Id == permit.Id)
-            .Select(x => x.Version)
+            .Select(x => x.BusinessVersion)
             .SingleAsync(cancellationToken);
         var record = ToRecord(permit);
         record.RowVersion = DecodeETag(expectedETag);
@@ -139,7 +139,11 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         dbContext.Entry(record).Property(x => x.RowVersion).OriginalValue = record.RowVersion;
         if (permit.Version > persistedVersion)
         {
-            AddVersion(permit, actor.Id);
+            AddRevision(permit, actor.Id);
+        }
+        else if (permit.Status == PermitStatus.Draft)
+        {
+            await UpdateWorkingRevisionAsync(permit, actor.Id, cancellationToken);
         }
         var events = permit.DequeueEvents();
         AddEvents(events, actor.Id, correlationId);
@@ -225,7 +229,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         int limit,
         CancellationToken cancellationToken)
     {
-        var query = dbContext.PermitVersions.AsNoTracking().Where(x => x.PermitId == permitId);
+        var query = dbContext.PermitRevisions.AsNoTracking().Where(x => x.PermitId == permitId);
         var count = await query.CountAsync(cancellationToken);
         var records = await query
             .OrderByDescending(x => x.Version)
@@ -274,7 +278,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             return new PermitTaskEntry(
                 x.Task.Id,
                 x.Task.PermitId,
-                x.Task.PermitVersion,
+                x.Task.BusinessPermitVersion,
                 x.Task.Type,
                 x.Task.Label,
                 x.Task.RequiredRole,
@@ -307,7 +311,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         return new PermitTaskEntry(
             record.Task.Id,
             record.Task.PermitId,
-            record.Task.PermitVersion,
+            record.Task.BusinessPermitVersion,
             record.Task.Type,
             record.Task.Label,
             record.Task.RequiredRole,
@@ -327,7 +331,12 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             .SingleOrDefaultAsync(x => x.Id == printPackageId, cancellationToken);
         return record is null
             ? null
-            : new PrintPackageEntry(record.Id, record.PermitId, record.PermitVersion, record.RenderStatus);
+            : new PrintPackageEntry(
+                record.Id,
+                record.PermitId,
+                record.BusinessPermitVersion,
+                record.PermitVersion,
+                record.RenderStatus);
     }
 
     private async Task ApplyWorkflowTasksAsync(
@@ -354,6 +363,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                 case "permit_attachment_removed":
                     await RefreshPendingTaskVersionIfExistsAsync(
                         permit.Id,
+                        permit.ChangeSequence,
                         permit.Version,
                         "SPONSOR_REVISION",
                         cancellationToken);
@@ -413,6 +423,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                 case "closure_resubmitted":
                     await RefreshPendingTaskVersionAsync(
                         permit.Id,
+                        permit.ChangeSequence,
                         permit.Version,
                         "AREA_CLOSE_VERIFICATION",
                         cancellationToken);
@@ -478,7 +489,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             "Bukti approval wajib tersedia ketika PTW diterbitkan.");
         var taskId = await dbContext.PermitTasks
             .Where(x => x.PermitId == permit.Id
-                && x.PermitVersion == permit.Version
+                && x.BusinessPermitVersion == permit.Version
                 && x.Type == "AREA_APPROVE_AND_ISSUE"
                 && x.Status == "PENDING")
             .Select(x => x.Id)
@@ -489,7 +500,8 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         {
             Id = decisionId,
             PermitId = permit.Id,
-            PermitVersion = permit.Version,
+            PermitVersion = permit.ChangeSequence,
+            BusinessPermitVersion = permit.Version,
             TaskId = taskId,
             Decision = "APPROVE_AND_ISSUE",
             ActorId = approval.ActorId,
@@ -544,7 +556,8 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         {
             Id = snapshotId,
             PermitId = permit.Id,
-            PermitVersion = permit.Version,
+            PermitVersion = permit.ChangeSequence,
+            BusinessPermitVersion = permit.Version,
             DecisionId = decisionId,
             RuleVersion = approval.RuleVersion,
             PrintTemplateVersion = approval.PrintTemplateVersion,
@@ -604,7 +617,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             "Bukti review SO/Officer Pemilik Wilayah wajib tersedia ketika task Bagian 7 diselesaikan.");
         var taskId = await dbContext.PermitTasks
             .Where(x => x.PermitId == permit.Id
-                && x.PermitVersion == permit.Version
+                && x.BusinessPermitVersion == permit.Version
                 && x.Type == "AREA_OPERATION_REVIEW"
                 && x.Status == "PENDING")
             .Select(x => x.Id)
@@ -614,7 +627,8 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         {
             Id = Guid.CreateVersion7(),
             PermitId = permit.Id,
-            PermitVersion = permit.Version,
+            PermitVersion = permit.ChangeSequence,
+            BusinessPermitVersion = permit.Version,
             TaskId = taskId,
             Decision = "AREA_OPERATION_REVIEW",
             ActorId = review.ActorId,
@@ -641,7 +655,8 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         {
             Id = Guid.CreateVersion7(),
             PermitId = permit.Id,
-            PermitVersion = permit.Version,
+            PermitVersion = permit.ChangeSequence,
+            BusinessPermitVersion = permit.Version,
             Type = type,
             Label = label,
             RequiredRole = role,
@@ -661,7 +676,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
     {
         var task = await dbContext.PermitTasks.SingleAsync(
             x => x.PermitId == permitId
-                && x.PermitVersion == permitVersion
+                && x.BusinessPermitVersion == permitVersion
                 && x.Type == type
                 && x.Status == "PENDING",
             cancellationToken);
@@ -672,6 +687,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
 
     private async Task RefreshPendingTaskVersionAsync(
         Guid permitId,
+        int changeSequence,
         int permitVersion,
         string type,
         CancellationToken cancellationToken)
@@ -681,11 +697,13 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                 && x.Type == type
                 && x.Status == "PENDING",
             cancellationToken);
-        task.PermitVersion = permitVersion;
+        task.PermitVersion = changeSequence;
+        task.BusinessPermitVersion = permitVersion;
     }
 
     private async Task RefreshPendingTaskVersionIfExistsAsync(
         Guid permitId,
+        int changeSequence,
         int permitVersion,
         string type,
         CancellationToken cancellationToken)
@@ -697,7 +715,8 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             cancellationToken);
         if (task is not null)
         {
-            task.PermitVersion = permitVersion;
+            task.PermitVersion = changeSequence;
+            task.BusinessPermitVersion = permitVersion;
         }
     }
 
@@ -738,10 +757,10 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         }
     }
 
-    private void AddVersion(Permit permit, string actorId)
+    private void AddRevision(Permit permit, string actorId)
     {
         var json = JsonSerializer.Serialize(permit.Draft, JsonOptions);
-        dbContext.PermitVersions.Add(new PermitVersionRecord
+        dbContext.PermitRevisions.Add(new PermitRevisionRecord
         {
             Id = Guid.CreateVersion7(),
             PermitId = permit.Id,
@@ -751,6 +770,21 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             CreatedAt = permit.UpdatedAt,
             CreatedBy = actorId
         });
+    }
+
+    private async Task UpdateWorkingRevisionAsync(
+        Permit permit,
+        string actorId,
+        CancellationToken cancellationToken)
+    {
+        var revision = await dbContext.PermitRevisions.SingleAsync(
+            x => x.PermitId == permit.Id && x.Version == permit.Version,
+            cancellationToken);
+        var json = JsonSerializer.Serialize(permit.Draft, JsonOptions);
+        revision.ContentJson = json;
+        revision.ContentHash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(json)));
+        revision.CreatedAt = permit.UpdatedAt;
+        revision.CreatedBy = actorId;
     }
 
     private void AddEvents(IReadOnlyList<DomainEvent> events, string actorId, string correlationId)
@@ -807,7 +841,8 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         Id = permit.Id,
         PermitNumber = permit.PermitNumber,
         Status = permit.Status.ToString(),
-        Version = permit.Version,
+        Version = permit.ChangeSequence,
+        BusinessVersion = permit.Version,
         LocationId = permit.Draft.LocationId,
         SponsorId = permit.Draft.SponsorId,
         ValidFrom = permit.Draft.ValidFrom,
@@ -841,7 +876,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             record.Id,
             record.PermitNumber,
             Enum.Parse<PermitStatus>(record.Status),
-            record.Version,
+            record.BusinessVersion,
             draft,
             record.CreatedAt,
             record.UpdatedAt,
@@ -854,7 +889,8 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             workflow.RenewalRequest,
             record.RenewedFromPermitId,
             renewalPermitId,
-            workflow.AreaOperationsReview);
+            workflow.AreaOperationsReview,
+            record.Version);
         return new StoredPermit(permit, EncodeETag(record.RowVersion));
     }
 

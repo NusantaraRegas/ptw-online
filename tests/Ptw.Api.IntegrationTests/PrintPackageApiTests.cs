@@ -266,7 +266,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         PermitResponse permit)
     {
         permit = await UploadJsaAsync(client, permit);
-        foreach (var code in new[] { "ID", "BPJS_TK", "FTW", "ESIMI" })
+        foreach (var code in new[] { "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW", "ESIMI" })
         {
             permit = await UploadSupportingDocumentAsync(client, permit, code);
         }

@@ -58,6 +58,7 @@ public sealed record PrintPackageEntry(
     Guid Id,
     Guid PermitId,
     int PermitVersion,
+    int ChangeSequence,
     string RenderStatus);
 public sealed record StoredAttachmentContent(
     string StorageKey,

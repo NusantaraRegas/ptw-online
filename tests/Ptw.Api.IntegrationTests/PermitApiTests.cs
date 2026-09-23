@@ -59,6 +59,31 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     }
 
     [Fact]
+    public async Task DraftSavesAndMandatoryUploadsKeepTheInitialBusinessVersion()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        var draft = await CreateAsync(sponsor, sponsorId, "ORF");
+
+        using var updateResponse = await sponsor.SendAsync(Command(
+            HttpMethod.Patch,
+            $"/api/v1/permits/{draft.Id}/draft",
+            draft.ETag,
+            draft.Draft with { Title = "Draft akhir versi pertama" },
+            idempotencyKey: null));
+        updateResponse.EnsureSuccessStatusCode();
+        draft = Required(await updateResponse.Content.ReadFromJsonAsync<PermitResponse>());
+        draft = await UploadMandatoryDocumentsAsync(sponsor, draft);
+
+        Assert.Equal(1, draft.Version);
+        var versions = Required(await sponsor.GetFromJsonAsync<PagedResponse<PermitVersionResponse>>(
+            $"/api/v1/permits/{draft.Id}/versions"));
+        var version = Assert.Single(versions.Items);
+        Assert.Equal(1, version.Version);
+        Assert.Equal("Draft akhir versi pertama", version.Snapshot.Title);
+    }
+
+    [Fact]
     public async Task SupportingDocumentReferenceDataMatchesTemplateAndOnlyRequiresJsa()
     {
         using var client = factory.CreateClient();
@@ -76,7 +101,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     }
 
     [Fact]
-    public async Task MandatoryDocumentReferenceDataRequiresJsaIdBpjsTkFtwAndESimi()
+    public async Task MandatoryDocumentReferenceDataRequiresWorkProcedureAndBaseEvidence()
     {
         using var client = factory.CreateClient();
 
@@ -85,7 +110,9 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var options = Required(
             await response.Content.ReadFromJsonAsync<PermitMandatoryDocumentOptionResponse[]>());
 
-        Assert.Equal(["JSA", "ID", "BPJS_TK", "FTW", "ESIMI"], options.Select(x => x.Code));
+        Assert.Equal(
+            ["JSA", "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW", "ESIMI"],
+            options.Select(x => x.Code));
         Assert.Equal("JSA", options[0].UploadCategory);
         Assert.All(options.Skip(1), option => Assert.Equal("SUPPORTING", option.UploadCategory));
     }
@@ -195,6 +222,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
 
     [Theory]
     [InlineData("JSA", "Job Safety Analisis")]
+    [InlineData("WORK_PROCEDURE", "Prosedur Pekerjaan")]
     [InlineData("ID", "ID")]
     [InlineData("BPJS_TK", "BPJS TK")]
     [InlineData("FTW", "FTW")]
@@ -351,7 +379,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.Empty(validated.Draft.SafetyEquipmentCodes ?? []);
 
         var areaReviewTask = await PendingTaskAsync(submitted.Id, "AREA_OPERATION_REVIEW");
-        Assert.Equal(submitted.Version, areaReviewTask.PermitVersion);
+        Assert.Equal(submitted.Version, areaReviewTask.BusinessPermitVersion);
         Assert.Equal("AreaOwnerSeniorOfficer", areaReviewTask.RequiredRole);
 
         await using (var scope = factory.Services.CreateAsyncScope())
@@ -550,6 +578,10 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             x => x.PermitId == issued.Id && x.Decision == "AREA_OPERATION_REVIEW");
         Assert.Equal("AREA_OPERATIONS_REVIEWER", operationsDecision.ApprovalCapacity);
         var snapshot = await db.PrintPackageSnapshots.AsNoTracking().SingleAsync(x => x.PermitId == issued.Id);
+        Assert.Equal(issued.Version, decision.BusinessPermitVersion);
+        Assert.Equal(issued.Version, operationsDecision.BusinessPermitVersion);
+        Assert.Equal(issued.Version, snapshot.BusinessPermitVersion);
+        Assert.True(snapshot.PermitVersion > snapshot.BusinessPermitVersion);
         var document = await db.GeneratedDocuments.AsNoTracking()
             .SingleAsync(x => x.PrintPackageSnapshotId == snapshot.Id);
         Assert.Equal(decision.Id, snapshot.DecisionId);
@@ -642,9 +674,9 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             x => x.Id == revisionNotification.Id);
         Assert.Equal("COMPLETED", completedRevisionNotification.Status);
         Assert.Equal(sponsorId, completedRevisionNotification.CompletedBy);
-        Assert.Equal(updated.Version, completedRevisionNotification.PermitVersion);
+        Assert.Equal(updated.Version, completedRevisionNotification.BusinessPermitVersion);
         Assert.Single(await db.PermitTasks.Where(x => x.PermitId == updated.Id
-            && x.PermitVersion == resubmitted.Version
+            && x.BusinessPermitVersion == resubmitted.Version
             && x.Type == "HSE_VALIDATION"
             && x.Status == "PENDING").ToListAsync());
     }
@@ -679,7 +711,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
         Assert.Equal("CANCELLED", (await db.PermitTasks.SingleAsync(x => x.Id == originalTask.Id)).Status);
         Assert.Single(await db.PermitTasks.Where(x => x.PermitId == resubmitted.Id
-            && x.PermitVersion == resubmitted.Version
+            && x.BusinessPermitVersion == resubmitted.Version
             && x.Type == "HSE_VALIDATION"
             && x.Status == "PENDING").ToListAsync());
     }
@@ -986,7 +1018,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
 
         var refreshedClosureTask = await PendingTaskAsync(issued.Id, "AREA_CLOSE_VERIFICATION");
         Assert.Equal(closureTask.Id, refreshedClosureTask.Id);
-        Assert.Equal(resubmitted.Version, refreshedClosureTask.PermitVersion);
+        Assert.Equal(resubmitted.Version, refreshedClosureTask.BusinessPermitVersion);
 
         using var ownerClose = await manager.SendAsync(Command(
             HttpMethod.Post,
@@ -1165,7 +1197,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             permit = await UploadJsaAsync(client, permit);
         }
 
-        foreach (var code in new[] { "ID", "BPJS_TK", "FTW", "ESIMI" })
+        foreach (var code in new[] { "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW", "ESIMI" })
         {
             if (string.Equals(omittedCode, code, StringComparison.OrdinalIgnoreCase))
             {

@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Ptw.Application;
@@ -114,7 +113,8 @@ public sealed class PermitAttachmentStore(
     {
         var permitRecord = await dbContext.Permits.SingleAsync(x => x.Id == permit.Id, cancellationToken);
         dbContext.Entry(permitRecord).Property(x => x.RowVersion).OriginalValue = DecodeETag(expectedETag);
-        permitRecord.Version = permit.Version;
+        permitRecord.Version = permit.ChangeSequence;
+        permitRecord.BusinessVersion = permit.Version;
         permitRecord.UpdatedAt = permit.UpdatedAt;
 
         PermitAttachmentRecord attachmentRecord;
@@ -123,17 +123,23 @@ public sealed class PermitAttachmentStore(
             attachmentRecord = await dbContext.PermitAttachments.SingleAsync(
                 x => x.Id == attachment.Id && x.PermitId == permit.Id && x.RemovedInVersion == null,
                 cancellationToken);
-            attachmentRecord.RemovedInVersion = attachment.RemovedInVersion;
+            attachmentRecord.RemovedInVersion = permit.ChangeSequence;
+            attachmentRecord.RemovedInBusinessVersion = attachment.RemovedInVersion;
             attachmentRecord.RemovedBy = actor.Id;
             attachmentRecord.RemovedAt = permit.UpdatedAt;
         }
         else
         {
-            attachmentRecord = ToRecord(attachment);
+            var targetChangeSequence = attachment.PrintPackageId is Guid printPackageId
+                ? await dbContext.PrintPackageSnapshots
+                    .Where(x => x.Id == printPackageId)
+                    .Select(x => x.PermitVersion)
+                    .SingleAsync(cancellationToken)
+                : permit.ChangeSequence;
+            attachmentRecord = ToRecord(attachment, permit.ChangeSequence, targetChangeSequence);
             dbContext.PermitAttachments.Add(attachmentRecord);
         }
 
-        AddVersion(permit, actor.Id);
         AddEvents(permit.DequeueEvents(), actor.Id, correlationId);
         if (permit.Status == PermitStatus.RevisionRequired)
         {
@@ -144,7 +150,8 @@ public sealed class PermitAttachmentStore(
                 cancellationToken);
             if (revisionTask is not null)
             {
-                revisionTask.PermitVersion = permit.Version;
+                revisionTask.PermitVersion = permit.ChangeSequence;
+                revisionTask.BusinessPermitVersion = permit.Version;
             }
         }
         dbContext.PermitAttachmentCommandReceipts.Add(new PermitAttachmentCommandReceiptRecord
@@ -175,21 +182,6 @@ public sealed class PermitAttachmentStore(
             ToEntry(attachmentRecord));
     }
 
-    private void AddVersion(Permit permit, string actorId)
-    {
-        var json = JsonSerializer.Serialize(permit.Draft, JsonOptions);
-        dbContext.PermitVersions.Add(new PermitVersionRecord
-        {
-            Id = Guid.CreateVersion7(),
-            PermitId = permit.Id,
-            Version = permit.Version,
-            ContentJson = json,
-            ContentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json))),
-            CreatedAt = permit.UpdatedAt,
-            CreatedBy = actorId
-        });
-    }
-
     private void AddEvents(IReadOnlyList<DomainEvent> events, string actorId, string correlationId)
     {
         foreach (var domainEvent in events)
@@ -216,37 +208,42 @@ public sealed class PermitAttachmentStore(
         }
     }
 
-    private static PermitAttachmentRecord ToRecord(PermitAttachmentEntry entry) => new()
-    {
-        Id = entry.Id,
-        PermitId = entry.PermitId,
-        AddedInVersion = entry.AddedInVersion,
-        RemovedInVersion = entry.RemovedInVersion,
-        FileName = entry.FileName,
-        SizeBytes = entry.SizeBytes,
-        MediaType = entry.MediaType,
-        Sha256 = entry.Sha256,
-        StorageKey = entry.StorageKey,
-        ScanStatus = entry.ScanStatus,
-        ScanEvidenceReference = entry.ScanEvidenceReference,
-        ScannedAt = entry.ScannedAt,
-        Category = entry.Category,
-        SupportingDocumentCode = entry.SupportingDocumentCode,
-        DocumentNumber = entry.DocumentNumber,
-        DocumentRevision = entry.DocumentRevision,
-        DocumentDate = entry.DocumentDate,
-        TargetPermitVersion = entry.TargetPermitVersion,
-        PrintPackageId = entry.PrintPackageId,
-        SupersedesAttachmentId = entry.SupersedesAttachmentId,
-        UploadedBy = entry.UploadedBy,
-        UploadedAt = entry.UploadedAt
-    };
+    private static PermitAttachmentRecord ToRecord(
+        PermitAttachmentEntry entry,
+        int changeSequence,
+        int targetChangeSequence) => new()
+        {
+            Id = entry.Id,
+            PermitId = entry.PermitId,
+            AddedInVersion = changeSequence,
+            AddedInBusinessVersion = entry.AddedInVersion,
+            RemovedInBusinessVersion = entry.RemovedInVersion,
+            FileName = entry.FileName,
+            SizeBytes = entry.SizeBytes,
+            MediaType = entry.MediaType,
+            Sha256 = entry.Sha256,
+            StorageKey = entry.StorageKey,
+            ScanStatus = entry.ScanStatus,
+            ScanEvidenceReference = entry.ScanEvidenceReference,
+            ScannedAt = entry.ScannedAt,
+            Category = entry.Category,
+            SupportingDocumentCode = entry.SupportingDocumentCode,
+            DocumentNumber = entry.DocumentNumber,
+            DocumentRevision = entry.DocumentRevision,
+            DocumentDate = entry.DocumentDate,
+            TargetPermitVersion = targetChangeSequence,
+            TargetBusinessPermitVersion = entry.TargetPermitVersion,
+            PrintPackageId = entry.PrintPackageId,
+            SupersedesAttachmentId = entry.SupersedesAttachmentId,
+            UploadedBy = entry.UploadedBy,
+            UploadedAt = entry.UploadedAt
+        };
 
     private static PermitAttachmentEntry ToEntry(PermitAttachmentRecord record) => new(
         record.Id,
         record.PermitId,
-        record.AddedInVersion,
-        record.RemovedInVersion,
+        record.AddedInBusinessVersion,
+        record.RemovedInBusinessVersion,
         record.FileName,
         record.SizeBytes,
         record.MediaType,
@@ -260,7 +257,7 @@ public sealed class PermitAttachmentStore(
         record.DocumentNumber,
         record.DocumentRevision,
         record.DocumentDate,
-        record.TargetPermitVersion,
+        record.TargetBusinessPermitVersion,
         record.PrintPackageId,
         record.SupersedesAttachmentId,
         record.UploadedBy,

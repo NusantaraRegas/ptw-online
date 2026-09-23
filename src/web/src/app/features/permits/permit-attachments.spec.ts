@@ -13,6 +13,14 @@ const supportingDocuments = [
     required: true,
     requiresMetadata: true,
   },
+  {
+    code: 'WORK_PROCEDURE',
+    label: 'Prosedur Pekerjaan',
+    templateColumn: 0,
+    templateIndex: 3,
+    required: false,
+    requiresMetadata: false,
+  },
 ];
 
 const mandatoryDocuments = [
@@ -21,6 +29,12 @@ const mandatoryDocuments = [
     label: 'Job Safety Analisis (JSA)',
     uploadCategory: 'JSA',
     requiresMetadata: true,
+  },
+  {
+    code: 'WORK_PROCEDURE',
+    label: 'Prosedur Pekerjaan',
+    uploadCategory: 'SUPPORTING',
+    requiresMetadata: false,
   },
   { code: 'ID', label: 'ID', uploadCategory: 'SUPPORTING', requiresMetadata: false },
   {
@@ -86,11 +100,14 @@ describe('PermitAttachments', () => {
     const fixture = TestBed.createComponent(PermitAttachments);
     fixture.componentRef.setInput('permitId', 'permit-id');
     fixture.componentRef.setInput('eTag', '"etag-value"');
+    fixture.componentRef.setInput('selectedDocumentCodes', ['JSA', 'WORK_PROCEDURE']);
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('risk-treatment.pdf');
     expect(fixture.nativeElement.textContent).toContain('JSA terkontrol');
     expect(fixture.nativeElement.textContent).toContain('Dokumen wajib pengajuan');
+    expect(fixture.nativeElement.textContent).toContain('Prosedur Pekerjaan');
+    expect(fixture.nativeElement.textContent).not.toContain('Dokumen tambahan Bagian 4');
     expect(fixture.nativeElement.textContent).toContain('BPJS TK');
     expect(fixture.nativeElement.textContent).toContain('Dokumen pendukung');
     expect(fixture.nativeElement.textContent).not.toContain('Sedang diperiksa');

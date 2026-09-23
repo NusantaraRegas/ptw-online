@@ -169,7 +169,7 @@ public sealed class PermitStateMachineTests
         permit.Submit("IGNORED", ReadyToSubmit(), Now.AddMinutes(5));
 
         Assert.Equal(PermitStatus.UnderValidation, permit.Status);
-        Assert.Equal(3, permit.Version);
+        Assert.Equal(2, permit.Version);
         Assert.Null(permit.HseValidation);
         Assert.Null(permit.AreaOperationsReview);
     }
@@ -187,6 +187,19 @@ public sealed class PermitStateMachineTests
         Assert.Equal(reviewedVersion + 1, permit.Version);
         Assert.Null(permit.HseValidation);
         Assert.Null(permit.AreaOperationsReview);
+    }
+
+    [Fact]
+    public void DraftAndAttachmentMutationsDoNotCreateBusinessRevisions()
+    {
+        var permit = CreatePermit();
+
+        permit.UpdateDraft(ValidDraft() with { Title = "Draft diperbarui" }, Now.AddMinutes(1));
+        permit.AddAttachment(Guid.NewGuid(), Now.AddMinutes(2));
+        permit.RemoveAttachment(Guid.NewGuid(), Now.AddMinutes(3));
+
+        Assert.Equal(1, permit.Version);
+        Assert.Equal(4, permit.ChangeSequence);
     }
 
     [Fact]
@@ -681,11 +694,13 @@ public sealed class PermitStateMachineTests
     }
 
     [Fact]
-    public void MandatoryUploadCatalogKeepsNonTemplateEvidenceSeparateFromBagian4()
+    public void MandatoryUploadCatalogIncludesWorkProcedureWithoutChangingBagian4Policy()
     {
         Assert.Equal(
-            ["JSA", "ID", "BPJS_TK", "FTW", "ESIMI"],
+            ["JSA", "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW", "ESIMI"],
             PermitMandatoryDocumentCatalog.Resolve().Select(option => option.Code));
+        Assert.False(
+            PermitSupportingDocumentCatalog.Resolve(PermitSupportingDocumentCatalog.WorkProcedureCode).Required);
         Assert.DoesNotContain(
             PermitSupportingDocumentCatalog.Resolve(),
             option => option.Code == PermitMandatoryDocumentCatalog.IdentityCode);

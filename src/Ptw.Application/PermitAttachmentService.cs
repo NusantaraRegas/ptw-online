@@ -71,7 +71,10 @@ public sealed class PermitAttachmentService(
         var storedPermit = await GetOwnedPermitAsync(permitId, cancellationToken);
         EnsurePermitAllowsCategory(storedPermit.Permit, normalizedCategory);
         EnsureSupportingDocumentWasSelected(storedPermit.Permit, normalizedSupportingDocumentCode);
-        var targetPermitVersion = storedPermit.Permit.Version;
+        var workingPermitVersion = storedPermit.Permit.Status == PermitStatus.RevisionRequired
+            ? storedPermit.Permit.Version + 1
+            : storedPermit.Permit.Version;
+        var targetPermitVersion = workingPermitVersion;
         if (printPackageId is Guid packageId)
         {
             var package = await permitStore.FindPrintPackageAsync(packageId, cancellationToken);
@@ -180,7 +183,7 @@ public sealed class PermitAttachmentService(
             var attachment = new PermitAttachmentEntry(
                 attachmentId,
                 permitId,
-                storedPermit.Permit.Version,
+                workingPermitVersion,
                 null,
                 normalizedName,
                 storedContent.SizeBytes,
@@ -249,7 +252,13 @@ public sealed class PermitAttachmentService(
         var attachment = await attachmentStore.FindActiveAsync(permitId, attachmentId, cancellationToken)
             ?? throw new ResourceNotFoundException("Lampiran", attachmentId);
         storedPermit.Permit.RemoveAttachment(attachmentId, clock.UtcNow);
-        var removed = attachment with { RemovedInVersion = storedPermit.Permit.Version };
+        var workingPermitVersion = storedPermit.Permit.Status == PermitStatus.RevisionRequired
+            ? storedPermit.Permit.Version + 1
+            : storedPermit.Permit.Version;
+        var removed = attachment with
+        {
+            RemovedInVersion = Math.Max(workingPermitVersion, attachment.AddedInVersion)
+        };
         var result = await attachmentStore.RemoveAsync(
             storedPermit.Permit,
             removed,
