@@ -34,15 +34,16 @@ public sealed class AuthenticationController(
                 "Login lokal tidak tersedia pada lingkungan ini sampai kontrak IdP disahkan.");
         }
 
-        var stored = await authenticationService.AuthenticateAsync(
+        var authenticated = await authenticationService.AuthenticateAsync(
             request.UserName,
             request.Password,
             cancellationToken);
+        var account = authenticated.Account.Account;
         var claims = new[]
         {
-            new Claim(ClaimTypes.NameIdentifier, stored.Account.SubjectId),
-            new Claim(ClaimTypes.Name, stored.Account.DisplayName),
-            new Claim("identity_source", "development-local")
+            new Claim(ClaimTypes.NameIdentifier, account.SubjectId),
+            new Claim(ClaimTypes.Name, account.DisplayName),
+            new Claim("identity_source", authenticated.IdentitySource)
         };
         var principal = new ClaimsPrincipal(new ClaimsIdentity(
             claims,

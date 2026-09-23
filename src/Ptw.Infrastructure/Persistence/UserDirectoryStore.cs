@@ -39,6 +39,21 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         return ToStored(account, signature);
     }
 
+    public async Task<StoredUserAccount?> FindByUserNameAsync(string userName, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeUserName(userName);
+        var account = await dbContext.UserAccounts.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.NormalizedUserName == normalized, cancellationToken);
+        if (account is null)
+        {
+            return null;
+        }
+
+        var signature = await dbContext.UserSignatureVersions.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.SubjectId == account.SubjectId && x.IsActive, cancellationToken);
+        return ToStored(account, signature);
+    }
+
     public async Task<StoredUserAccount?> AuthenticateAsync(
         string userName,
         string password,

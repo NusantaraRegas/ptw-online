@@ -800,6 +800,25 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     public async Task DevelopmentAttachmentUploadAcceptsVerifiedPdfJpegAndPngSignaturesAsCleanEvidence()
     {
         var sponsorId = Unique("sponsor");
+        const string sponsorDisplayName = "Siti Sponsor Lampiran";
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+            var now = DateTimeOffset.UtcNow;
+            db.UserAccounts.Add(new UserAccountRecord
+            {
+                SubjectId = sponsorId,
+                UserName = sponsorId,
+                NormalizedUserName = sponsorId.ToUpperInvariant(),
+                DisplayName = sponsorDisplayName,
+                IsActive = true,
+                Version = 1,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            await db.SaveChangesAsync();
+        }
+
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
         var permit = await CreateAsync(sponsor, sponsorId, "ORF");
         var files = new[]
@@ -836,9 +855,21 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             Assert.Equal("SUPPORTING", mutation.Attachment.Category);
             Assert.Equal(mediaType, mutation.Attachment.MediaType);
             Assert.Equal(64, mutation.Attachment.Sha256.Length);
+            Assert.Equal(sponsorId, mutation.Attachment.UploadedBy);
+            Assert.Equal(sponsorDisplayName, mutation.Attachment.UploadedByName);
             firstAttachment ??= mutation.Attachment;
             permit = permit with { ETag = mutation.ETag, Version = mutation.PermitVersion };
         }
+
+        using var listResponse = await sponsor.GetAsync($"/api/v1/permits/{permit.Id}/attachments");
+        listResponse.EnsureSuccessStatusCode();
+        var listedAttachments = Required(
+            await listResponse.Content.ReadFromJsonAsync<List<PermitAttachmentResponse>>());
+        Assert.All(listedAttachments, attachment =>
+        {
+            Assert.Equal(sponsorId, attachment.UploadedBy);
+            Assert.Equal(sponsorDisplayName, attachment.UploadedByName);
+        });
 
         using var cleanDownload = await sponsor.GetAsync(
             $"/api/v1/permits/{permit.Id}/attachments/{Required(firstAttachment).Id}/content");

@@ -33,7 +33,7 @@ tanda tangan lapangan tetap dikendalikan pada hardcopy.
 src/Ptw.Domain          aggregate, state machine, invariant, katalog checklist formulir, UserAccount/UserAuthorizationAssignment — tanpa EF/ASP.NET/IO
 src/Ptw.Contracts       DTO netral — tanpa domain behavior
 src/Ptw.Application     use case, authorization, ports (IPermitStore, IPrintPackage...), UserAuthorizationRoleProfiles (profil role assignment langsung), DemoModeService (mode demo persisten)
-src/Ptw.Infrastructure  EF Core, storage, audit, outbox, Printing/ (renderer + template)
+src/Ptw.Infrastructure  EF Core, storage, audit, outbox, Printing/ (renderer + template), Security/ (ActiveDirectorySettings + LdapDirectoryAuthenticator, port IDirectoryAuthenticator)
 src/Ptw.Api             mapping HTTP, Security/ (DevelopmentAuthenticationHandler, HttpActorContext), login cookie lokal, ApiExceptionHandler
 src/Ptw.Worker          job idempotent dan bounded
 src/web                 Angular: core/*-api.ts (HTTP) + features/* (komponen)
@@ -178,13 +178,14 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 - [ ] Bagian 4: JSA wajib, setiap dokumen terpilih memerlukan lampiran bertaut, dan metadata lampiran JSA harus cocok dengan draft sebelum submit. Validasi ini di server, bukan di UI.
 - [ ] Dokumen dasar JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, dan E-SIMI (`PermitMandatoryDocumentCatalog`) masing-masing memiliki lampiran bertaut sebelum submit; JSA harus diunggah dengan kategori `JSA`, dan kewajiban Prosedur Pekerjaan tidak mengubah pilihan Bagian 4.
 - [ ] Development identity header hanya aktif pada environment `Development` **dan** saat mode demo aktif. Mode demo tersimpan di `cfg.DemoModeSetting`, hanya dapat diubah Administrator di Development lewat `POST /api/v1/admin/settings/demo-mode/enable|disable` dengan `If-Match`, `Idempotency-Key`, audit konfigurasi, outbox, dan receipt; saat nonaktif `DevelopmentAuthenticationHandler` menolak header `X-Dev-*` (`401`) dan `GET /api/v1/auth/options` menyembunyikan tombol demo. `DemoMode:EnabledByDefault` hanya dibaca pada Development; di luar Development nilainya selalu false.
-- [ ] Akun lokal, login cookie HTTP-only, dan `UserAuthorizationApproval:AllowAdministratorSelfApproval=true` hanya untuk `Development`; default kode dan konfigurasi non-Development tetap mewajibkan maker dan checker berbeda. Role dan scope dihitung ulang dari assignment approved/effective pada setiap request, bukan dari cookie.
+- [ ] Akun lokal, login cookie HTTP-only, dan `UserAuthorizationApproval:AllowAdministratorSelfApproval=true` hanya untuk `Development`; default kode dan konfigurasi non-Development tetap mewajibkan maker dan checker berbeda. Role dan scope dihitung ulang dari assignment approved/effective pada setiap request, bukan dari cookie. Login memverifikasi kredensial ke Active Directory (`IDirectoryAuthenticator`, LDAP simple bind) lebih dulu lalu fallback ke password lokal; kedua jalur mewajibkan `UserAccount` terdaftar dan aktif, dan AD tidak pernah memprovisikan user, role, atau scope.
 - [ ] Assignment langsung (`POST /api/v1/admin/authorizations/direct`) hanya menerima user, role, area bila role area-scoped, dan periode; action code dan kompetensi diturunkan server dari `UserAuthorizationRoleProfiles`, input action code dari klien diabaikan, dan tanpa profil terkonfigurasi jalur ini fail-closed. Profil di `appsettings.Development.json` adalah konfigurasi UX/UAT, bukan matriks OPN-002; jangan menyalinnya ke production.
 - [ ] `DevelopmentUploadTrustScanner` hanya terdaftar saat environment `Development` **dan** `Attachments:RequireMalwareScan=false`; di luar itu `UnavailableMalwareScanner` tetap fail-closed. Jangan melonggarkan kondisi ini atau membawanya ke konfigurasi production.
 - [ ] Tidak ada secret, `.env`, token, connection string ber-secret, PII nyata, isi attachment, atau build output yang masuk Git.
 - [ ] Log tidak memuat token, secret, isi dokumen, atau PII berlebih; correlation ID (`X-Correlation-ID`) tetap dipertahankan.
 - [ ] File attachment berstatus selain `CLEAN` tidak dapat diunduh; hanya paket cetak `READY` yang merupakan dokumen resmi.
 - [ ] OpenAPI, CORS, TLS, CSP, upload limit, dan rate limit tetap fail-safe; OpenAPI tidak terekspos di luar Development.
+- [ ] Konfigurasi `AD:*` tidak memuat kredensial service account (hanya simple bind dengan kredensial pengguna); `AD:Enabled` tidak ditaruh di `appsettings.json` dasar; bind tanpa `UseStartTls`/`UseSsl` dicatat sebagai clear-text dan hanya diterima untuk Development. Image `api` harus tetap memasang `libldap`, dan service `api` di compose tetap berada di network `frontend` agar LDAP keluar tidak diam-diam gagal ke password lokal.
 - [ ] Tidak ada dependency vulnerability high/critical yang dibiarkan, dan tidak ada audit yang dinonaktifkan agar build hijau.
 
 ### Gate E — Paket cetak

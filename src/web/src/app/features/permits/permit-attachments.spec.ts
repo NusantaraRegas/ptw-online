@@ -82,6 +82,7 @@ describe('PermitAttachments', () => {
                   printPackageId: null,
                   supersedesAttachmentId: null,
                   uploadedBy: 'sponsor.demo',
+                  uploadedByName: 'Siti Sponsor',
                   uploadedAt: '2026-09-04T12:00:00.000Z',
                 },
               ]),
@@ -110,6 +111,8 @@ describe('PermitAttachments', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Dokumen tambahan Bagian 4');
     expect(fixture.nativeElement.textContent).toContain('BPJS TK');
     expect(fixture.nativeElement.textContent).toContain('Dokumen pendukung');
+    expect(fixture.nativeElement.textContent).toContain('diunggah oleh Siti Sponsor');
+    expect(fixture.nativeElement.textContent).not.toContain('sponsor.demo');
     expect(fixture.nativeElement.textContent).not.toContain('Sedang diperiksa');
     expect(fixture.nativeElement.textContent).toContain('belum tersedia untuk diunduh');
     expect((fixture.nativeElement.querySelector('.download') as HTMLButtonElement).disabled).toBe(
@@ -213,6 +216,7 @@ describe('PermitAttachments', () => {
         printPackageId: null,
         supersedesAttachmentId: null,
         uploadedBy: 'sponsor.demo',
+        uploadedByName: 'Sponsor Demo',
         uploadedAt: '2026-09-04T12:00:00.000Z',
       },
       {
@@ -236,6 +240,7 @@ describe('PermitAttachments', () => {
         printPackageId: 'print-package-id',
         supersedesAttachmentId: null,
         uploadedBy: 'sponsor.demo',
+        uploadedByName: 'Sponsor Demo',
         uploadedAt: '2026-09-04T13:00:00.000Z',
       },
     ];

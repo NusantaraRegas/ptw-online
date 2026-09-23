@@ -41,6 +41,8 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
 
     public string ConnectionString => _connectionString;
 
+    public FakeDirectoryAuthenticator DirectoryAuthenticator { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
@@ -71,6 +73,8 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
             services.RemoveAll<IssuancePolicySettings>();
             services.RemoveAll<LocationReleaseSettings>();
             services.RemoveAll<UserAuthorizationRoleProfileSettings>();
+            services.RemoveAll<IDirectoryAuthenticator>();
+            services.AddSingleton<IDirectoryAuthenticator>(DirectoryAuthenticator);
             services.AddSingleton(new IssuancePolicySettings
             {
                 Approved = true,

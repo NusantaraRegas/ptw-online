@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Ptw.Application;
 using Ptw.Infrastructure.Persistence;
+using Ptw.Infrastructure.Security;
 
 namespace Ptw.Infrastructure;
 
@@ -31,6 +33,15 @@ public static class InfrastructureServices
                 || configuredDemoMode);
         services.AddSingleton(new DemoModeDefaults(demoModeEnabledByDefault));
         services.AddSingleton<IPermitNumberGenerator, PermitNumberGenerator>();
+        var activeDirectorySettings = ActiveDirectorySettings.FromConfiguration(configuration);
+        services.AddSingleton(activeDirectorySettings);
+        // Fail-safe: without a configured directory, login relies on local credentials only.
+        services.AddSingleton<IDirectoryAuthenticator>(provider =>
+            activeDirectorySettings.Enabled
+                ? new LdapDirectoryAuthenticator(
+                    activeDirectorySettings,
+                    provider.GetRequiredService<ILogger<LdapDirectoryAuthenticator>>())
+                : new DisabledDirectoryAuthenticator());
         var attachmentSettings = new AttachmentSettings
         {
             Enabled = bool.TryParse(configuration["Attachments:Enabled"], out var enabled) && enabled,

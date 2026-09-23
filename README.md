@@ -46,7 +46,7 @@ Increment P0 lifecycle v1.8 telah tersedia:
 - submit membuat tepat satu task `HSE_VALIDATION`; tidak ada validator Distribusi Gas;
 - Sponsor yang juga PIC HSE tidak dapat memvalidasi PTW miliknya sendiri;
 - permintaan revisi membuat notifikasi tugas `SPONSOR_REVISION` yang ditugaskan langsung kepada Sponsor PTW; notifikasi tetap terlihat berdasarkan identitas Sponsor walaupun role aktifnya berubah, mengikuti exact versi draft selama perbaikan, diperbarui berkala pada ikon lonceng, dan selesai otomatis ketika PTW diajukan ulang. Migrasi rekonsiliasi membentuk task yang hilang untuk PTW existing yang sudah berstatus `REVISION_REQUIRED`;
-- ringkasan PTW dan workflow menampilkan nama lengkap profil server untuk Sponsor, validator HSE, reviewer SO/Officer, dan approver Manager, serta label Bahasa Indonesia untuk kelas izin dan tipe pengaju; username/Subject ID tetap menjadi identifier internal dan tidak digunakan sebagai fallback nama pada UI. Evidence HSE baru membekukan nama actor, sedangkan evidence lama diperkaya dari direktori pengguna saat dibaca;
+- ringkasan PTW, workflow, dan metadata pengunggah lampiran menampilkan nama lengkap profil server untuk Sponsor, validator HSE, reviewer SO/Officer, approver Manager, serta pengunggah dokumen, dan memakai label Bahasa Indonesia untuk kelas izin serta tipe pengaju; username/Subject ID tetap menjadi identifier internal dan tidak digunakan sebagai fallback nama pada UI. Evidence HSE baru membekukan nama actor, sedangkan evidence dan lampiran lama diperkaya dari direktori pengguna saat dibaca;
 - halaman **PTW Saya** menyediakan pencarian server-side berdasarkan nomor PTW, judul, perusahaan, atau lokasi. Pencarian tetap menerapkan filter Sponsor/role dan scope lokasi sebelum mengambil 200 hasil terbaru;
 - setelah validasi HSE, Development/UAT membuat tepat satu task `AREA_OPERATION_REVIEW` untuk pool SO/Officer pemilik wilayah. Pemegang assignment yang pertama menyelesaikan task menetapkan checklist kondisi operasi Bagian 7; hanya setelah review itu selesai sistem membuat tepat satu task `AREA_APPROVE_AND_ISSUE` untuk Manager pemilik wilayah. Command Manager tetap atomik dan menyimpan decision, status `ISSUED`, audit, outbox, `PrintPackageSnapshot`, serta placeholder `GeneratedDocument` dalam satu `SaveChanges` transaction;
 - release lokasi dikonfigurasi server-side; Development mengaktifkan ORF, Site-Office, dan Water-Based Activity, sedangkan lokasi lain ditolak fail-closed;
@@ -81,7 +81,7 @@ Ruleset resmi, acting assignment v1.8 lengkap, malware scanner produksi, E-SIMI 
 
 ### Topologi runtime
 
-Compose development menjalankan lima service dan tiga volume. Nginx melayani SPA dan menjadi reverse proxy ke API; `migrate` menjalankan EF Core migration satu kali sebelum `api` dan `worker` dimulai.
+Compose development menjalankan lima service dan tiga volume. Nginx melayani SPA dan menjadi reverse proxy ke API; `migrate` menjalankan EF Core migration satu kali sebelum `api` dan `worker` dimulai. Service `api` bergabung ke network `frontend` dan `backend` karena login memerlukan koneksi LDAP keluar ke domain controller Active Directory (`AD:Server`); network `backend` bersifat internal sehingga tanpa `frontend` seluruh login diam-diam jatuh ke password lokal. Image `api` memasang pustaka klien OpenLDAP (`libldap`) yang dibutuhkan `System.DirectoryServices.Protocols` di Linux.
 
 ```mermaid
 flowchart LR
@@ -98,8 +98,11 @@ flowchart LR
     Gen[/"generated-document-data<br/>volume paket cetak"/]
   end
 
+  AD["Active Directory<br/>LDAP :389 (AD:Server)"]
+
   Browser -->|"HTTP :8080"| Web
   Web -->|"/api/* dan /health/*"| Api
+  Api -->|"simple bind saat login"| AD
   Api --> Db
   Api --> Att
   Api -->|"baca dokumen READY"| Gen
@@ -390,7 +393,7 @@ npm start
 
 Development identity hanya aktif pada environment `Development`. Profil yang relevan untuk flow v1.8 adalah Sponsor, PIC HSE (`HSEValidator`), pool SO/Officer pemilik wilayah (kode kompatibilitas `AreaOwnerSeniorOfficer`, termasuk review Bagian 7 dan penutupan), dan Manager pemilik area (`AreaOwnerManager`). Manager maupun pool SO/Officer dapat menindak satu task penutupan sesuai scope; penerbitan tetap khusus Manager. Identitas dan Sponsor aktif berasal dari `/api/v1/me`; header development diabaikan di luar Development.
 
-Administrator dapat membuat akun lokal Development melalui **Administrasi > Pengguna**, lalu membuat, mengajukan, dan menyetujui assignment role melalui **Otorisasi pengguna**. Konfigurasi Development mengizinkan Administrator pembuat menjadi approver assignment yang sama; kedua identitas tetap direkam pada audit dan dapat bernilai sama. Default non-Development tetap mewajibkan maker-checker berbeda. Layar login memakai cookie HTTP-only; role dan scope tidak disimpan di cookie sebagai authority, tetapi dihitung ulang dari assignment approved/effective pada setiap request. Login lokal sengaja ditolak di luar environment `Development` sampai kontrak IdP/SSO OPN-007 disahkan. Mode demo dapat diaktifkan atau dinonaktifkan oleh Administrator melalui **Administrasi > Pengaturan aplikasi**; perubahan memakai concurrency, idempotency, audit, dan outbox. Saat nonaktif, tombol login disembunyikan dan autentikasi identitas demo ditolak server.
+Administrator dapat membuat akun lokal Development melalui **Administrasi > Pengguna**, lalu membuat, mengajukan, dan menyetujui assignment role melalui **Otorisasi pengguna**. Konfigurasi Development mengizinkan Administrator pembuat menjadi approver assignment yang sama; kedua identitas tetap direkam pada audit dan dapat bernilai sama. Default non-Development tetap mewajibkan maker-checker berbeda. Layar login memakai cookie HTTP-only; role dan scope tidak disimpan di cookie sebagai authority, tetapi dihitung ulang dari assignment approved/effective pada setiap request. Login memverifikasi kredensial ke Active Directory Pertamina terlebih dahulu (simple bind LDAP `username@domain`, konfigurasi `AD:Server`/`AD:Domain`/`AD:Port`, opsional `AD:UseStartTls`/`AD:UseSsl`); bila AD menolak atau tidak dapat dijangkau, password akun lokal diperiksa. Kedua jalur mewajibkan akun yang sudah didaftarkan Administrator dan aktif; AD tidak memprovisikan user, role, atau scope. Tanpa `AD:Server`, login hanya memakai password lokal; `AD:Enabled=false` mematikannya secara eksplisit (jangan menaruh `Enabled` di `appsettings.json` dasar karena nilainya menimpa konfigurasi environment yang hanya mengisi `Server`). Login lokal sengaja ditolak di luar environment `Development` sampai kontrak IdP/SSO OPN-007 disahkan. Mode demo dapat diaktifkan atau dinonaktifkan oleh Administrator melalui **Administrasi > Pengaturan aplikasi**; perubahan memakai concurrency, idempotency, audit, dan outbox. Saat nonaktif, tombol login disembunyikan dan autentikasi identitas demo ditolak server.
 
 Form assignment langsung hanya meminta pengguna, role, area kewenangan bila role bersifat area-scoped, waktu mulai, dan tanggal akhir opsional. Checkbox **Tanpa tanggal berakhir** disimpan sebagai `EffectiveUntil = null`; akun masih dapat dinonaktifkan, sedangkan command pencabutan assignment eksplisit belum tersedia. Action code dan kompetensi tidak diterima dari form sederhana, tetapi diturunkan server dari `UserAuthorizationRoleProfiles`. Profil yang tersedia saat ini hanya konfigurasi Development untuk UX/UAT dan bukan matriks produksi OPN-002. Endpoint assignment generik tetap tersedia untuk kompatibilitas serta framework delegasi yang masih fail-closed.
 

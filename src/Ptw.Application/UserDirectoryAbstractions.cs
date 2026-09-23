@@ -26,10 +26,48 @@ public sealed record ResolvedUserIdentity(
     IReadOnlySet<string> LocationScopes,
     IReadOnlySet<string> CompetencyCodes);
 
+/// <summary>
+/// Outcome of verifying a credential against an external directory (Active Directory via LDAP).
+/// </summary>
+public enum DirectoryAuthenticationResult
+{
+    /// <summary>No directory is configured; the caller must rely on local credentials.</summary>
+    Disabled,
+    /// <summary>The directory accepted the username and password.</summary>
+    Succeeded,
+    /// <summary>The directory rejected the username and password.</summary>
+    InvalidCredentials,
+    /// <summary>The directory could not be reached or answered with an unexpected error.</summary>
+    Unavailable
+}
+
+/// <summary>
+/// Port for external credential verification. Implementations only answer whether the directory
+/// accepts the credential; account registration, roles, and scope remain the local directory's.
+/// </summary>
+public interface IDirectoryAuthenticator
+{
+    Task<DirectoryAuthenticationResult> AuthenticateAsync(
+        string userName,
+        string password,
+        CancellationToken cancellationToken);
+}
+
+public sealed record AuthenticatedUser(StoredUserAccount Account, string IdentitySource);
+
+public static class IdentitySources
+{
+    // Both values keep the "development" prefix on purpose: the login endpoint is Development-only
+    // and HttpActorContext derives the actor's development flag from that prefix.
+    public const string Local = "development-local";
+    public const string ActiveDirectory = "development-active-directory";
+}
+
 public interface IUserDirectoryStore
 {
     Task<IReadOnlyList<StoredUserAccount>> ListAsync(CancellationToken cancellationToken);
     Task<StoredUserAccount?> FindAsync(string subjectId, CancellationToken cancellationToken);
+    Task<StoredUserAccount?> FindByUserNameAsync(string userName, CancellationToken cancellationToken);
     Task<StoredUserAccount?> AuthenticateAsync(string userName, string password, CancellationToken cancellationToken);
     Task<ResolvedUserIdentity?> ResolveIdentityAsync(
         string subjectId,

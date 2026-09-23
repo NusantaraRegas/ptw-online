@@ -17,6 +17,7 @@ public sealed class PermitAttachmentService(
     IPermitAttachmentStore attachmentStore,
     IAttachmentStorage storage,
     IMalwareScanner malwareScanner,
+    IUserDirectoryStore userDirectoryStore,
     IActorContext actorContext,
     IClock clock,
     AttachmentPolicy policy)
@@ -29,9 +30,15 @@ public sealed class PermitAttachmentService(
         CancellationToken cancellationToken)
     {
         await EnsureCanReadPermitAsync(permitId, cancellationToken);
-        return (await attachmentStore.ListActiveAsync(permitId, cancellationToken))
-            .Select(ToResponse)
-            .ToArray();
+        var attachments = await attachmentStore.ListActiveAsync(permitId, cancellationToken);
+        var uploaderNames = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var responses = new List<PermitAttachmentResponse>(attachments.Count);
+        foreach (var attachment in attachments)
+        {
+            responses.Add(await ToResponseAsync(attachment, uploaderNames, cancellationToken));
+        }
+
+        return responses;
     }
 
     public async Task<PermitAttachmentMutationResponse> UploadAsync(
@@ -160,7 +167,7 @@ public sealed class PermitAttachmentService(
             if (prior is not null)
             {
                 await storage.DeleteOrphanAsync(storedContent.StorageKey, cancellationToken);
-                return ToMutationResponse(prior);
+                return await ToMutationResponseAsync(prior, cancellationToken);
             }
 
             var activeAttachments = await attachmentStore.ListActiveAsync(permitId, cancellationToken);
@@ -211,7 +218,7 @@ public sealed class PermitAttachmentService(
                 correlationId,
                 new IdempotencyContext(actor.Id, AddOperation, idempotencyKey, requestHash),
                 cancellationToken);
-            return ToMutationResponse(result);
+            return await ToMutationResponseAsync(result, cancellationToken);
         }
         catch
         {
@@ -245,7 +252,7 @@ public sealed class PermitAttachmentService(
             cancellationToken);
         if (prior is not null)
         {
-            return ToMutationResponse(prior);
+            return await ToMutationResponseAsync(prior, cancellationToken);
         }
 
         EnsurePermitEditable(storedPermit.Permit);
@@ -267,7 +274,7 @@ public sealed class PermitAttachmentService(
             correlationId,
             new IdempotencyContext(actor.Id, RemoveOperation, idempotencyKey, requestHash),
             cancellationToken);
-        return ToMutationResponse(result);
+        return await ToMutationResponseAsync(result, cancellationToken);
     }
 
     public async Task<PermitAttachmentDownload> DownloadAsync(
@@ -618,29 +625,69 @@ public sealed class PermitAttachmentService(
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
     }
 
-    private static PermitAttachmentMutationResponse ToMutationResponse(StoredPermitAttachment value) =>
-        new(ToResponse(value.Attachment), value.Permit.Permit.Version, value.Permit.ETag);
+    private async Task<PermitAttachmentMutationResponse> ToMutationResponseAsync(
+        StoredPermitAttachment value,
+        CancellationToken cancellationToken) =>
+        new(
+            await ToResponseAsync(value.Attachment, null, cancellationToken),
+            value.Permit.Permit.Version,
+            value.Permit.ETag);
 
-    private static PermitAttachmentResponse ToResponse(PermitAttachmentEntry value) => new(
-        value.Id,
-        value.PermitId,
-        value.AddedInVersion,
-        value.RemovedInVersion,
-        value.FileName,
-        value.SizeBytes,
-        value.MediaType,
-        value.Sha256,
-        value.ScanStatus,
-        value.ScanEvidenceReference,
-        value.ScannedAt,
-        value.Category,
-        value.SupportingDocumentCode,
-        value.DocumentNumber,
-        value.DocumentRevision,
-        value.DocumentDate,
-        value.TargetPermitVersion,
-        value.PrintPackageId,
-        value.SupersedesAttachmentId,
-        value.UploadedBy,
-        value.UploadedAt);
+    private async Task<PermitAttachmentResponse> ToResponseAsync(
+        PermitAttachmentEntry value,
+        Dictionary<string, string?>? uploaderNames,
+        CancellationToken cancellationToken)
+    {
+        var uploadedByName = await ResolveUploaderNameAsync(
+            value.UploadedBy,
+            uploaderNames,
+            cancellationToken);
+        return new PermitAttachmentResponse(
+            value.Id,
+            value.PermitId,
+            value.AddedInVersion,
+            value.RemovedInVersion,
+            value.FileName,
+            value.SizeBytes,
+            value.MediaType,
+            value.Sha256,
+            value.ScanStatus,
+            value.ScanEvidenceReference,
+            value.ScannedAt,
+            value.Category,
+            value.SupportingDocumentCode,
+            value.DocumentNumber,
+            value.DocumentRevision,
+            value.DocumentDate,
+            value.TargetPermitVersion,
+            value.PrintPackageId,
+            value.SupersedesAttachmentId,
+            value.UploadedBy,
+            uploadedByName,
+            value.UploadedAt);
+    }
+
+    private async Task<string?> ResolveUploaderNameAsync(
+        string actorId,
+        Dictionary<string, string?>? uploaderNames,
+        CancellationToken cancellationToken)
+    {
+        if (uploaderNames is not null && uploaderNames.TryGetValue(actorId, out var cached))
+        {
+            return cached;
+        }
+
+        var account = await userDirectoryStore.FindAsync(actorId, cancellationToken);
+        var displayName = NormalizeOptional(account?.Account.DisplayName);
+        var userName = NormalizeOptional(account?.Account.UserName);
+        if (displayName is not null
+            && (string.Equals(displayName, actorId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(displayName, userName, StringComparison.OrdinalIgnoreCase)))
+        {
+            displayName = null;
+        }
+
+        uploaderNames?.Add(actorId, displayName);
+        return displayName;
+    }
 }

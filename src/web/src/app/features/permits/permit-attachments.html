@@ -339,7 +339,8 @@
               }
             </div>
             <span class="file-meta">
-              {{ formatSize(attachment.sizeBytes) }} • diunggah oleh {{ attachment.uploadedBy }} •
+              {{ formatSize(attachment.sizeBytes) }} • diunggah oleh
+              {{ attachment.uploadedByName || 'Profil pengguna tidak tersedia' }} •
               {{ attachment.uploadedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
             </span>
           </div>

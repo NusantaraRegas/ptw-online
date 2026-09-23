@@ -23,6 +23,7 @@ export interface PermitAttachment {
   printPackageId: string | null;
   supersedesAttachmentId: string | null;
   uploadedBy: string;
+  uploadedByName: string | null;
   uploadedAt: string;
 }
 

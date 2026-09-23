@@ -293,6 +293,7 @@ public sealed record PermitAttachmentResponse(
     Guid? PrintPackageId,
     Guid? SupersedesAttachmentId,
     string UploadedBy,
+    string? UploadedByName,
     DateTimeOffset UploadedAt);
 
 public sealed record PermitAttachmentMutationResponse(

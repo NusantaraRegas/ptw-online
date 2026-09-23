@@ -50,7 +50,9 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-    networks: [backend]
+    # `frontend` is needed for outbound LDAP to the Active Directory domain controller (AD:Server);
+    # `backend` alone is internal-only and would silently force every login onto local passwords.
+    networks: [frontend, backend]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/ready"]
       interval: 10s
