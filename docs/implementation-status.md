@@ -47,6 +47,7 @@ BRD/PRD/FSD v1.8 (22 September 2026) menggantikan v1.7 dan menyelaraskan require
 | PermitVersion adalah revisi bisnis | `Permit`, `PermitStore`, `PermitAttachmentStore` | draft dan mutasi lampiran mempertahankan versi; submit ulang dari `REVISION_REQUIRED` menaikkan tepat satu versi; histori menampilkan snapshot per revisi bisnis | `SeparatePermitBusinessRevision`, `ReconcilePermitBusinessVersions`, dan `PreserveLegacyPermitVersionLineage` menambah `BusinessVersion`/`PermitRevision`, mempertahankan lineage serta snapshot paket legacy, dan merekonsiliasi relasi dengan audit + outbox | domain `DraftAndAttachmentMutationsDoNotCreateBusinessRevisions`, API `DraftSavesAndMandatoryUploadsKeepTheInitialBusinessVersion`, dan migration v12 menjadi v1 tanpa mengubah versi paket legacy |
 | Nama actor pada ringkasan workflow | `PermitValidationEvidence`, `PermitService`, `PermitMapper`, Angular validation progress dan permit detail | nama lengkap Sponsor (`PermitResponse.SponsorName`, null tanpa profil) dan HSE/SO/Officer/Manager berasal dari profil server; detail PTW memakai label Bahasa Indonesia untuk kelas izin dan tipe pengaju; evidence HSE baru menyimpan nama dan data legacy diperkaya saat dibaca; username tidak menjadi fallback UI | n/a (field opsional dalam JSON evidence yang kompatibel dengan data lama) | domain + API integration legacy enrichment + Angular workflow regression |
 | Komentar keputusan approver | `Permit.EnsureEvidence`, `Permit.EnsureReason`, workflow evidence, dan audit append-only | seluruh aksi approve/validate, reject, revision, serta tindak lanjut evidence menolak komentar kosong/spasi; UI mengunci tombol sampai komentar valid. Komentar HSE, SO/Officer, dan Manager tampil pada ringkasan workflow, sedangkan alasan revisi/penolakan tampil pada riwayat PTW | n/a (memakai evidence dan payload audit yang tersedia) | domain blank-comment regression + Angular detail/progress/history regression |
+| Pencarian PTW berscope | Angular `PermitList`, `PermitService`, `PermitStore` | `GET /api/v1/permits?search=...`; pencarian nomor, judul, perusahaan, dan lokasi dilakukan sebelum batas 200 hasil, setelah filter Sponsor/role dan scope lokasi diterapkan di query | n/a | API integration pencarian + isolasi scope lokasi dan Angular debounce/request regression |
 | Location release dan routing pemilik wilayah | `LocationReleaseSettings`, `PermitService.SubmitAsync` | `/permits/{id}/submit`, task area approval | n/a | `SubmissionRejectsLocationOutsideTheReleasedRoutes`, `ReleasedLocationRoutesApprovalToManagerWithMatchingScope` |
 | Approval + issuance satu command | `Permit.ApproveAndIssue`, `PermitService` | `/tasks/{id}/approve-and-issue` | tables `wf.Decision`, `doc.PrintPackageSnapshot`, `doc.GeneratedDocument` | `ApproveAndIssueCommitsDecisionStateAuditOutboxAndPrintSnapshotAtomically` |
 | Suspend/resolve | `Permit.Suspend`, `ResolveSuspension` | `/suspensions`, `/suspensions/resolve` | lifecycle mapping | domain tests + Angular API tests |
@@ -114,11 +115,11 @@ Penggantinya adalah task HSE tunggal, atomic approve-and-issue, direct suspend, 
 | Pemeriksaan | Hasil |
 | --- | --- |
 | .NET 10 solution build Release | Lulus, 0 warning/0 error |
-| Domain tests | 59/59 lulus |
+| Domain tests | 60/60 lulus |
 | Print/document regression tests | 28/28 lulus |
-| API integration + SQL Server 2025 database test terisolasi | 63/63 lulus |
+| API integration + SQL Server 2025 database test terisolasi | 64/64 lulus |
 | Angular production build | Lulus |
-| Angular tests | 89/89 lulus |
+| Angular tests | 93/93 lulus |
 | Prettier check | Lulus |
 | `dotnet format --verify-no-changes` | Lulus |
 | NuGet vulnerable audit | Lulus; tidak ada package rentan |

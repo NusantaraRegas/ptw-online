@@ -1,13 +1,25 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import {
+  catchError,
+  debounce,
+  distinctUntilChanged,
+  map,
+  of,
+  startWith,
+  switchMap,
+  tap,
+  timer,
+} from 'rxjs';
 import { Permit, PermitApi } from '../../core/permit-api';
 import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
 
 @Component({
   selector: 'app-permit-list',
-  imports: [RouterLink, DatePipe],
+  imports: [RouterLink, DatePipe, ReactiveFormsModule],
   template: ` <div class="page-title">
       <div>
         <p class="eyebrow">Manajemen PTW</p>
@@ -20,8 +32,31 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
     </div>
     <section class="card list-card">
       <div class="toolbar">
-        <strong>{{ permits().length }} PTW</strong
-        ><span>Diurutkan berdasarkan aktivitas terbaru</span>
+        <div class="list-summary" aria-live="polite">
+          <strong>{{ permits().length }} PTW</strong>
+          <span>
+            {{ searchTerm() ? 'hasil pencarian' : 'Diurutkan berdasarkan aktivitas terbaru' }}
+          </span>
+        </div>
+        <label class="search-field" for="permit-search">
+          <span class="visually-hidden">Cari PTW</span>
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7"></circle>
+            <path d="m16 16 5 5"></path>
+          </svg>
+          <input
+            id="permit-search"
+            type="search"
+            maxlength="100"
+            autocomplete="off"
+            placeholder="Cari nomor PTW, judul, perusahaan, atau lokasi"
+            aria-describedby="permit-search-help"
+            [formControl]="searchControl"
+          />
+          <span id="permit-search-help" class="visually-hidden">
+            Hasil diperbarui otomatis setelah Anda berhenti mengetik.
+          </span>
+        </label>
       </div>
       @if (loading()) {
         <div class="state">Memuat data PTW…</div>
@@ -53,9 +88,11 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
         @if (!loading() && !error()) {
           <div class="state">
             {{
-              canCreatePermit()
-                ? 'Belum ada PTW. Buat draft pertama Anda.'
-                : 'Belum ada PTW yang tersedia untuk akun dan cakupan lokasi Anda.'
+              searchTerm()
+                ? 'Tidak ada PTW yang cocok. Coba kata pencarian lain.'
+                : canCreatePermit()
+                  ? 'Belum ada PTW. Buat draft pertama Anda.'
+                  : 'Belum ada PTW yang tersedia untuk akun dan cakupan lokasi Anda.'
             }}
           </div>
         }
@@ -68,18 +105,75 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
       }
       .toolbar {
         min-height: 58px;
-        padding: 0 20px;
+        padding: 10px 20px;
         display: flex;
         align-items: center;
-        gap: 10px;
+        justify-content: space-between;
+        gap: 20px;
         border-bottom: 1px solid #e5eaeb;
       }
-      .toolbar strong {
+      .list-summary {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        white-space: nowrap;
+      }
+      .list-summary strong {
         font-size: 12px;
       }
-      .toolbar span {
+      .list-summary span {
         color: #96a4a8;
         font-size: 9px;
+      }
+      .search-field {
+        width: min(100%, 390px);
+        min-height: 38px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 12px;
+        border: 1px solid #cedade;
+        border-radius: 10px;
+        background: #fff;
+        transition:
+          border-color 160ms ease,
+          box-shadow 160ms ease;
+      }
+      .search-field:focus-within {
+        border-color: var(--nr-blue);
+        box-shadow: 0 0 0 3px rgb(0 117 191 / 12%);
+      }
+      .search-field svg {
+        width: 17px;
+        height: 17px;
+        flex: 0 0 auto;
+        fill: none;
+        stroke: #667a82;
+        stroke-linecap: round;
+        stroke-width: 2;
+      }
+      .search-field input {
+        width: 100%;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        outline: 0;
+        color: var(--nr-ink);
+        background: transparent;
+        font-size: 11px;
+      }
+      .search-field input::placeholder {
+        color: #87989e;
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
       .permit-item {
         min-height: 78px;
@@ -138,6 +232,14 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
         background: #fff7f5;
       }
       @media (max-width: 650px) {
+        .toolbar {
+          align-items: stretch;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .search-field {
+          width: 100%;
+        }
         .permit-item {
           grid-template-columns: auto 1fr auto;
           padding: 12px;
@@ -157,6 +259,8 @@ export class PermitList {
   protected readonly identity = signal<CurrentIdentity | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal('');
+  protected readonly searchControl = new FormControl('', { nonNullable: true });
+  protected readonly searchTerm = signal('');
   protected readonly canCreatePermit = computed(() =>
     (this.identity()?.roles ?? []).some((role) => ['Sponsor', 'Administrator'].includes(role)),
   );
@@ -185,16 +289,34 @@ export class PermitList {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ next: (identity) => this.identity.set(identity) });
 
-    this.api
-      .list()
-      .pipe(takeUntilDestroyed(this.destroyRef))
+    this.searchControl.valueChanges
+      .pipe(
+        startWith(this.searchControl.value),
+        map((value) => value.trim()),
+        debounce((value) => (value ? timer(300) : of(0))),
+        distinctUntilChanged(),
+        tap((search) => {
+          this.searchTerm.set(search);
+          this.loading.set(true);
+          this.error.set('');
+        }),
+        switchMap((search) =>
+          this.api.list(search || undefined).pipe(
+            catchError(() => {
+              this.error.set(
+                'API belum tersedia. Pastikan SQL Server dan Ptw.Api sedang berjalan.',
+              );
+              return of(null);
+            }),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
         next: (result) => {
-          this.permits.set(result.items);
-          this.loading.set(false);
-        },
-        error: () => {
-          this.error.set('API belum tersedia. Pastikan SQL Server dan Ptw.Api sedang berjalan.');
+          if (result) {
+            this.permits.set(result.items);
+          }
           this.loading.set(false);
         },
       });

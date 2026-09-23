@@ -103,4 +103,57 @@ describe('PermitList', () => {
       'Ditangguhkan',
     ]);
   });
+
+  it('searches PTW through the API after the user stops typing', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PermitList],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PermitList);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+
+    http.expectOne('/api/v1/me').flush({
+      userId: 'sponsor.only.demo',
+      displayName: 'Sponsor Only Demo',
+      roles: ['Sponsor'],
+      locationScopes: ['ORF'],
+      competencyCodes: [],
+      isDevelopmentIdentity: true,
+    });
+    http.expectOne('/api/v1/permits').flush({ items: [], count: 0 });
+
+    const search = fixture.nativeElement.querySelector('#permit-search') as HTMLInputElement;
+    search.value = 'pengelasan pipa';
+    search.dispatchEvent(new Event('input'));
+    http.expectNone((request) => request.params.has('search'));
+    await new Promise((resolve) => setTimeout(resolve, 310));
+
+    const request = http.expectOne(
+      (candidate) =>
+        candidate.url === '/api/v1/permits' && candidate.params.get('search') === 'pengelasan pipa',
+    );
+    request.flush({
+      items: [
+        {
+          id: 'matching-permit',
+          permitNumber: 'PTW-2026-001',
+          status: 'DRAFT',
+          updatedAt: '2026-09-23T08:00:00Z',
+          draft: {
+            permitClass: 'HotWork',
+            title: 'Pengelasan Pipa',
+            locationId: 'ORF',
+            company: 'PT Kontraktor',
+          },
+        },
+      ],
+      count: 1,
+    });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('.permit-item')).toHaveLength(1);
+    expect(fixture.nativeElement.textContent).toContain('1 PTW');
+    expect(fixture.nativeElement.textContent).toContain('hasil pencarian');
+  });
 });

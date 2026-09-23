@@ -11,8 +11,10 @@ public sealed class PermitsController(
     PermitAttachmentService attachmentService) : ControllerBase
 {
     [HttpGet]
-    public Task<PagedResponse<PermitResponse>> List(CancellationToken cancellationToken) =>
-        service.ListAsync(cancellationToken);
+    public Task<PagedResponse<PermitResponse>> List(
+        [FromQuery] string? search,
+        CancellationToken cancellationToken) =>
+        service.ListAsync(search, cancellationToken);
 
     [HttpGet("/api/v1/tasks")]
     public Task<PagedResponse<PermitTaskResponse>> ListTasks(CancellationToken cancellationToken) =>

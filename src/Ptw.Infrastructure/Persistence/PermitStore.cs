@@ -25,12 +25,31 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         return ToStored(record, renewalPermitId);
     }
 
-    public async Task<IReadOnlyList<StoredPermit>> ListAsync(string? sponsorId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<StoredPermit>> ListAsync(
+        string? sponsorId,
+        IReadOnlySet<string> locationScopes,
+        string? search,
+        CancellationToken cancellationToken)
     {
         var query = dbContext.Permits.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(sponsorId))
         {
             query = query.Where(x => x.SponsorId == sponsorId);
+        }
+
+        if (!locationScopes.Contains("*"))
+        {
+            var scopedLocations = locationScopes.ToArray();
+            query = query.Where(x => scopedLocations.Contains(x.LocationId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = $"%{EscapeLikePattern(search)}%";
+            query = query.Where(x =>
+                (x.PermitNumber != null && EF.Functions.Like(x.PermitNumber, pattern, @"\"))
+                || EF.Functions.Like(x.LocationId, pattern, @"\")
+                || EF.Functions.Like(x.DraftJson, pattern, @"\"));
         }
 
         var records = await query.OrderByDescending(x => x.UpdatedAt).Take(200).ToListAsync(cancellationToken);
@@ -43,6 +62,12 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             record,
             renewals.GetValueOrDefault(record.Id))).ToArray();
     }
+
+    private static string EscapeLikePattern(string value) => value
+        .Replace(@"\", @"\\", StringComparison.Ordinal)
+        .Replace("%", @"\%", StringComparison.Ordinal)
+        .Replace("_", @"\_", StringComparison.Ordinal)
+        .Replace("[", @"\[", StringComparison.Ordinal);
 
     public async Task<StoredPermit> AddAsync(
         Permit permit,

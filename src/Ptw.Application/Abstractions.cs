@@ -77,7 +77,11 @@ public sealed record AttachmentPolicy(
 public interface IPermitStore
 {
     Task<StoredPermit?> FindAsync(Guid id, CancellationToken cancellationToken);
-    Task<IReadOnlyList<StoredPermit>> ListAsync(string? sponsorId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<StoredPermit>> ListAsync(
+        string? sponsorId,
+        IReadOnlySet<string> locationScopes,
+        string? search,
+        CancellationToken cancellationToken);
     Task<StoredPermit> AddAsync(
         Permit permit,
         Actor actor,

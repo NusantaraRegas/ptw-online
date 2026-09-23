@@ -91,6 +91,30 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     }
 
     [Fact]
+    public async Task PermitListSearchesAcrossAllScopedPermits()
+    {
+        var sponsorId = Unique("sponsor");
+        var marker = $"cari-{Guid.NewGuid():N}";
+        using var sponsor = Client(sponsorId, "Sponsor", "*");
+        using var createOrf = await sponsor.PostAsJsonAsync(
+            "/api/v1/permits",
+            Draft(sponsorId, "ORF") with { Title = $"Pengelasan {marker}" });
+        createOrf.EnsureSuccessStatusCode();
+        using var createWaterBased = await sponsor.PostAsJsonAsync(
+            "/api/v1/permits",
+            Draft(sponsorId, "WATER_BASED") with { Title = $"Inspeksi {marker}" });
+        createWaterBased.EnsureSuccessStatusCode();
+
+        using var areaOwner = Client(Unique("area-owner"), "AreaOwnerManager", "ORF");
+        var result = Required(await areaOwner.GetFromJsonAsync<PagedResponse<PermitResponse>>(
+            $"/api/v1/permits?search={Uri.EscapeDataString(marker)}"));
+
+        var permit = Assert.Single(result.Items);
+        Assert.Equal("ORF", permit.Draft.LocationId);
+        Assert.Contains(marker, permit.Draft.Title, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DraftSavesAndMandatoryUploadsKeepTheInitialBusinessVersion()
     {
         var sponsorId = Unique("sponsor");

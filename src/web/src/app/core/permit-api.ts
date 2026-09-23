@@ -291,8 +291,10 @@ export interface PagedHistory<T> {
 @Injectable({ providedIn: 'root' })
 export class PermitApi {
   constructor(private readonly http: HttpClient) {}
-  list(): Observable<PagedPermits> {
-    return this.http.get<PagedPermits>('/api/v1/permits');
+  list(search?: string): Observable<PagedPermits> {
+    return this.http.get<PagedPermits>('/api/v1/permits', {
+      params: search ? { search } : {},
+    });
   }
 
   listTasks(): Observable<PagedPermitTasks> {

@@ -56,17 +56,22 @@ public sealed class PermitService(
         return await ToResponseAsync(stored, cancellationToken);
     }
 
-    public async Task<PagedResponse<PermitResponse>> ListAsync(CancellationToken cancellationToken)
+    public async Task<PagedResponse<PermitResponse>> ListAsync(
+        string? search,
+        CancellationToken cancellationToken)
     {
         var actor = actorContext.Current;
+        search = NormalizeSearch(search);
         var sponsorFilter = actor.Roles.Overlaps(
             ["Auditor", "Administrator", HseValidatorRole, AreaOperationsReviewerRole, AreaOwnerManagerRole])
             ? null
             : actor.Id;
-        var storedItems = (await store.ListAsync(sponsorFilter, cancellationToken))
-            .Where(x => HasLocationScope(actor, x.Permit.Draft.LocationId))
-            .ToArray();
-        var items = new List<PermitResponse>(storedItems.Length);
+        var storedItems = await store.ListAsync(
+            sponsorFilter,
+            actor.LocationScopes,
+            search,
+            cancellationToken);
+        var items = new List<PermitResponse>(storedItems.Count);
         var accountCache = new Dictionary<string, StoredUserAccount?>(StringComparer.OrdinalIgnoreCase);
         foreach (var stored in storedItems)
         {
@@ -74,6 +79,24 @@ public sealed class PermitService(
         }
 
         return new PagedResponse<PermitResponse>(items, items.Count);
+    }
+
+    private static string? NormalizeSearch(string? search)
+    {
+        search = search?.Trim();
+        if (string.IsNullOrEmpty(search))
+        {
+            return null;
+        }
+
+        if (search.Length > 100)
+        {
+            throw new InvalidRequestException(
+                "permit.search_too_long",
+                "Kata pencarian PTW maksimum 100 karakter.");
+        }
+
+        return search;
     }
 
     public async Task<PagedResponse<PermitTaskResponse>> ListTasksAsync(CancellationToken cancellationToken)
