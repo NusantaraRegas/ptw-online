@@ -122,6 +122,27 @@ time {
   display: block;
   overflow-wrap: anywhere;
 }
+.decision-comment {
+  margin-top: 9px;
+  padding: 9px 10px;
+  border-left: 3px solid #bdd9df;
+  border-radius: 0 7px 7px 0;
+  background: #f5f9fa;
+}
+.decision-comment span {
+  color: #70868e;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.decision-comment p {
+  margin: 4px 0 0;
+  color: #294650;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 .actor-id {
   margin-top: 2px;
   color: #47636d;

@@ -60,6 +60,7 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 - Aggregate, task/decision bila ada, audit event, outbox message, dan idempotency result harus commit atomik dalam satu transaction.
 - Audit bersifat append-only. Jangan menyediakan application path untuk update/delete historical audit.
 - Snapshot yang menjadi dasar keputusan tidak boleh berubah.
+- Setiap keputusan validator/approver (validasi HSE, review Bagian 7, approve-and-issue, reject, permintaan revisi, permintaan evidence, dan closure) wajib membawa komentar non-kosong; domain menolak statement/reason yang hanya spasi (`permit.evidence_required`/`permit.reason_required`), dan UI hanya membantu dengan mengunci tombol. Komentar tersimpan pada evidence workflow dan payload audit, bukan pada field bebas terpisah.
 - Gunakan `datetimeoffset`, `decimal` untuk gas readings, foreign keys/check constraints, dan index scoped yang sesuai.
 - External HTTP call tidak boleh dilakukan di dalam database transaction.
 - Migration harus additive/expand-contract. Jangan memakai `EnsureCreated` atau destructive migration satu langkah.
@@ -91,7 +92,7 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 - Gunakan istilah **Diterbitkan** pada UI dan komunikasi pengguna untuk status domain internal
   `ISSUED`; jangan menampilkan `OPEN` sebagai istilah proses bisnis.
 - Status harus memakai teks dan tidak hanya warna.
-- Jangan menampilkan kode kontrak API (`HotWork`, `USER_SPONSOR`, kode lokasi seperti `ORF`, kode katalog) secara mentah; petakan ke label Bahasa Indonesia di komponen. Field opsional harus memberi teks bantuan yang terasosiasi (`aria-describedby`).
+- Jangan menampilkan kode kontrak API (`HotWork`, `USER_SPONSOR`, kode lokasi seperti `ORF`, kode katalog) secara mentah; petakan ke label Bahasa Indonesia di komponen. Pilihan Bagian 5 pada detail PTW ditampilkan dengan label katalog, dan komentar validasi HSE, review SO/Officer, serta approval Manager ditampilkan pada ringkasan workflow; alasan revisi/penolakan dibaca dari payload audit pada riwayat PTW. Field opsional harus memberi teks bantuan yang terasosiasi (`aria-describedby`).
 - Pertahankan peringatan bahwa **Diterbitkan** belum otomatis mengizinkan pekerjaan dimulai.
 - Form panjang memakai reactive forms, error association/summary, dan remediation yang jelas.
 - Error command pada halaman panjang harus terlihat di dekat aksi pemicunya; summary global boleh

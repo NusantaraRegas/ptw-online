@@ -36,6 +36,12 @@
             {{ workflow().hse.completedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
           </time>
         }
+        @if (workflow().hse.statement) {
+          <div class="decision-comment">
+            <span>Komentar keputusan</span>
+            <p>{{ workflow().hse.statement }}</p>
+          </div>
+        }
       </div>
     </li>
     <li class="validation-item" [class.completed]="workflow().areaOperations.completed">
@@ -63,6 +69,12 @@
             WIB
           </time>
         }
+        @if (workflow().areaOperations.statement) {
+          <div class="decision-comment">
+            <span>Komentar keputusan</span>
+            <p>{{ workflow().areaOperations.statement }}</p>
+          </div>
+        }
       </div>
     </li>
   </ol>
@@ -87,6 +99,12 @@
         <time [attr.datetime]="workflow().approval.approvedAt">
           {{ workflow().approval.approvedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
         </time>
+      }
+      @if (workflow().approval.statement) {
+        <div class="decision-comment">
+          <span>Komentar keputusan</span>
+          <p>{{ workflow().approval.statement }}</p>
+        </div>
       }
     </div>
   </div>

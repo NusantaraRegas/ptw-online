@@ -146,6 +146,77 @@ h3 {
   font-size: 10px;
 }
 
+.permit-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.permit-status::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+}
+.permit-status[data-status='DRAFT'] {
+  border-color: #d8e2e4;
+  color: #52636a;
+  background: #edf2f3;
+}
+.permit-status[data-status='REVISION_REQUIRED'] {
+  border-color: #f3d2aa;
+  color: #8a4b10;
+  background: #fff0dc;
+}
+.permit-status[data-status='UNDER_VALIDATION'] {
+  border-color: #bddff0;
+  color: #17638c;
+  background: #e4f3fb;
+}
+.permit-status[data-status='AWAITING_AREA_APPROVAL'] {
+  border-color: #d8cff4;
+  color: #5d4b99;
+  background: #eeeafb;
+}
+.permit-status[data-status='ISSUED'] {
+  border-color: #bee1cd;
+  color: #176440;
+  background: #e2f4ea;
+}
+.permit-status[data-status='SUSPENDED'] {
+  border-color: #f0bec1;
+  color: #9b2f35;
+  background: #fde7e8;
+}
+.permit-status[data-status='CLOSURE_REQUESTED'] {
+  border-color: #b8dfe0;
+  color: #0d6670;
+  background: #e0f3f3;
+}
+.permit-status[data-status='CLOSED'] {
+  border-color: #cfdadd;
+  color: #40555d;
+  background: #e8edef;
+}
+.permit-status[data-status='REJECTED'] {
+  border-color: #efbdd0;
+  color: #a1294a;
+  background: #fae6ed;
+}
+.permit-status[data-status='CANCELLED'] {
+  border-color: #dbd6e1;
+  color: #696276;
+  background: #efedf2;
+}
+.permit-status[data-status='EXPIRED'] {
+  border-color: #e8d7a6;
+  color: #795a18;
+  background: #f7efd8;
+}
+
 app-permit-attachments .primary-document-note {
   margin-top: 18px;
   padding: 12px 14px;
@@ -161,11 +232,11 @@ app-permit-attachments .attachment-list li.primary-document {
   background: #f0faf5;
 }
 
-app-permit-attachments .file-actions .primary-download {
-  border-color: #157047;
-  color: white;
-  background: #157047;
+app-permit-attachments .category-badge.primary-document-badge {
+  color: #185f40;
+  background: #dff3e8;
 }
+
 .evidence-card h2 {
   margin: 0;
   color: var(--nr-ink);
@@ -1228,6 +1299,174 @@ app-permit-detail .area-operation-summary > small {
   line-height: 1.45;
 }
 
+app-permit-detail .safety-overview {
+  padding: 18px;
+  margin-top: 24px;
+  border: 1px solid #dbe7e5;
+  border-radius: 14px;
+  background: #f7faf9;
+}
+app-permit-detail .safety-overview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+app-permit-detail .safety-overview-header > div > span,
+app-permit-detail .safety-panel header > div > span {
+  color: #789097;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+app-permit-detail .safety-overview h3,
+app-permit-detail .safety-panel h4 {
+  margin: 3px 0 0;
+  color: #294650;
+  line-height: 1.35;
+}
+app-permit-detail .safety-overview h3 {
+  font-size: 15px;
+}
+app-permit-detail .safety-validation-status {
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #85611e;
+  background: #fff1cf;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+app-permit-detail .safety-validation-status.completed {
+  color: #176440;
+  background: #dff2e8;
+}
+app-permit-detail .safety-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 12px;
+}
+app-permit-detail .safety-panel {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid #e0e9e8;
+  border-radius: 11px;
+  background: white;
+}
+app-permit-detail .safety-panel > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+app-permit-detail .safety-panel h4 {
+  font-size: 12px;
+}
+app-permit-detail .safety-panel-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  color: #3c7180;
+  background: #e9f3f5;
+}
+app-permit-detail .safety-panel-icon.equipment-icon {
+  color: #237052;
+  background: #e6f4ed;
+}
+app-permit-detail .safety-panel-icon svg,
+app-permit-detail .safety-equipment-chips svg,
+app-permit-detail .safety-validator svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+app-permit-detail .safety-panel-icon svg {
+  width: 18px;
+}
+app-permit-detail .safety-panel > p {
+  margin: 13px 0 0;
+  color: #657b83;
+  font-size: 10px;
+  line-height: 1.55;
+}
+app-permit-detail .hazard-reference {
+  margin: 13px 0 0;
+}
+app-permit-detail .hazard-reference div {
+  padding: 10px;
+  border-radius: 8px;
+  background: #f5f8f8;
+}
+app-permit-detail .hazard-reference dt {
+  font-size: 8px;
+}
+app-permit-detail .hazard-reference dd {
+  margin-top: 3px;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+app-permit-detail .safety-equipment-chips {
+  margin-top: 13px;
+  gap: 6px;
+}
+app-permit-detail .safety-equipment-chips .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #d3e9dd;
+  border-radius: 999px;
+}
+app-permit-detail .safety-equipment-chips svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.2;
+}
+app-permit-detail .safety-validator {
+  padding-top: 12px;
+  margin-top: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid #e5edeb;
+}
+app-permit-detail .safety-validator > span {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: #176440;
+  background: #dff2e8;
+}
+app-permit-detail .safety-validator svg {
+  width: 13px;
+}
+app-permit-detail .safety-validator small,
+app-permit-detail .safety-validator strong {
+  display: block;
+}
+app-permit-detail .safety-validator small {
+  color: #7b8e95;
+  font-size: 8px;
+}
+app-permit-detail .safety-validator strong {
+  margin-top: 2px;
+  color: #294650;
+  font-size: 10px;
+}
+app-permit-detail .safety-empty-state {
+  padding: 10px;
+  border-radius: 8px;
+  background: #f6f9f9;
+}
+
 @media (max-width: 650px) {
   app-permit-detail .operational-condition-options {
     grid-template-columns: 1fr;
@@ -1237,5 +1476,15 @@ app-permit-detail .area-operation-summary > small {
   }
   app-permit-detail .operational-subconditions {
     padding-left: 8px;
+  }
+  app-permit-detail .safety-overview {
+    padding: 14px;
+  }
+  app-permit-detail .safety-overview-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  app-permit-detail .safety-overview-grid {
+    grid-template-columns: 1fr;
   }
 }

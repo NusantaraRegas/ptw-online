@@ -390,6 +390,12 @@ h3 {
   color: var(--nr-blue-dark);
 }
 
+.file-actions button.primary-download {
+  border-color: #157047;
+  color: white;
+  background: #157047;
+}
+
 .remove {
   border: 1px solid #edc6c1;
   color: var(--nr-red-dark);

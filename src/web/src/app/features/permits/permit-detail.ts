@@ -318,6 +318,7 @@ export class PermitDetail {
   });
   protected readonly decisionStatement = this.fb.nonNullable.control('', [
     Validators.required,
+    Validators.pattern(/\S/),
     Validators.maxLength(1000),
   ]);
   protected readonly hseSafetyEquipmentCodes = this.fb.nonNullable.control<string[]>([], {
@@ -652,6 +653,15 @@ export class PermitDetail {
   protected safetyEquipmentOptions(): PermitSafetyEquipmentOption[] {
     const permitClass = this.permit()?.draft.permitClass ?? '';
     return this.safetyEquipmentCatalog()[permitClass] ?? [];
+  }
+
+  protected selectedSafetyEquipmentLabels(): string[] {
+    const selectedCodes = this.permit()?.workflow.hse.safetyEquipmentCodes ?? [];
+    const options = this.safetyEquipmentOptions();
+    return selectedCodes.map(
+      (code) =>
+        options.find((option) => option.code === code)?.label ?? 'Item katalog tidak tersedia',
+    );
   }
 
   protected isSafetyEquipmentSelected(code: string): boolean {
@@ -1084,13 +1094,20 @@ export class PermitDetail {
     const verification = this.closureDecisionForm.getRawValue();
     if (verification.completionOutcome === 'INCOMPLETE') {
       const status = verification.incompleteWorkStatus.trim();
-      if (!task || !permit || this.closureDecisionForm.controls.officerName.invalid || !status) {
+      if (
+        !task ||
+        !permit ||
+        this.decisionStatement.invalid ||
+        this.closureDecisionForm.controls.officerName.invalid ||
+        !status
+      ) {
+        this.decisionStatement.markAsTouched();
         this.closureDecisionForm.controls.officerName.markAsTouched();
         this.closureDecisionForm.controls.incompleteWorkStatus.markAsTouched();
         return;
       }
 
-      const reason = `Pekerjaan belum selesai - Officer ${verification.officerName.trim()}: ${status}`;
+      const reason = `${this.decisionStatement.getRawValue().trim()} Pekerjaan belum selesai - Officer ${verification.officerName.trim()}: ${status}`;
       this.runCommand(
         this.api.requestClosureEvidence(task.id, permit.eTag, reason),
         'Tindak lanjut pekerjaan dikirim kepada Sponsor. PTW belum ditutup dan hak kerja tidak dipulihkan.',
@@ -1143,7 +1160,11 @@ export class PermitDetail {
   protected closureFollowUpReady(): boolean {
     const verification = this.closureDecisionForm.getRawValue();
     if (verification.completionOutcome === 'INCOMPLETE') {
-      return !!verification.officerName.trim() && !!verification.incompleteWorkStatus.trim();
+      return (
+        this.decisionStatement.valid &&
+        !!verification.officerName.trim() &&
+        !!verification.incompleteWorkStatus.trim()
+      );
     }
 
     return this.decisionStatement.valid;

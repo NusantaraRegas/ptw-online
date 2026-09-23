@@ -45,7 +45,8 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
               {{ permit.draft.company }}
             </p>
           </div>
-          <span class="badge">{{ statusLabel(permit.status) }}</span
+          <span class="badge permit-status" [attr.data-status]="permit.status">
+            {{ statusLabel(permit.status) }} </span
           ><time>{{ permit.updatedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</time>
         </a>
       } @empty {
@@ -118,8 +119,6 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
       .badge {
         padding: 6px 9px;
         border-radius: 11px;
-        color: var(--nr-lime-dark);
-        background: var(--nr-lime-soft);
         font-size: 8px;
         font-weight: 800;
       }

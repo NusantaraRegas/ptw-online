@@ -90,14 +90,8 @@
   display: inline-flex;
   padding: 5px 9px;
   border-radius: 999px;
-  color: var(--nr-lime-dark);
-  background: var(--nr-lime-soft);
   font-size: 10px;
   font-weight: 800;
-}
-.status.open {
-  color: #1f7250;
-  background: #e4f5ec;
 }
 .secondary-button {
   min-height: 39px;
@@ -154,14 +148,6 @@ dd {
   color: #294650;
   font-size: 12px;
   font-weight: 700;
-}
-.list-section {
-  margin-top: 22px;
-  font-size: 12px;
-}
-.list-section h3 {
-  margin-bottom: 10px;
-  color: #38535c;
 }
 .chips {
   display: flex;

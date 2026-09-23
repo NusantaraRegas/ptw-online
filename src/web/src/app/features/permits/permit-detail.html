@@ -58,9 +58,9 @@
       <article class="card detail-card">
         <header>
           <div>
-            <span class="status" [class.open]="permit()!.status === 'ISSUED'">{{
-              statusLabel()
-            }}</span>
+            <span class="status permit-status" [attr.data-status]="permit()!.status">
+              {{ statusLabel() }}
+            </span>
             <h2>{{ permit()!.draft.title }}</h2>
             <p>{{ permit()!.draft.description }}</p>
           </div>
@@ -144,14 +144,99 @@
           </div>
         </dl>
 
-        <div class="list-section">
-          <h3>JSA dan dokumen keselamatan</h3>
-          <p>Rincian bahaya dan pengendalian harus berasal dari dokumen JSA terkontrol.</p>
-          <p>
-            <strong>Referensi bahaya tambahan:</strong>
-            {{ permit()!.draft.additionalHazardReference || 'Tidak ada.' }}
-          </p>
-        </div>
+        <section class="safety-overview" aria-labelledby="safety-overview-title">
+          <header class="safety-overview-header">
+            <div>
+              <span>Keselamatan kerja</span>
+              <h3 id="safety-overview-title">Ringkasan JSA dan APD</h3>
+            </div>
+            <span
+              class="safety-validation-status"
+              [class.completed]="permit()!.workflow.hse.completed"
+            >
+              {{ permit()!.workflow.hse.completed ? 'Validasi HSE selesai' : 'Menunggu PIC HSE' }}
+            </span>
+          </header>
+
+          <div class="safety-overview-grid">
+            <article class="safety-panel jsa-summary">
+              <header>
+                <span class="safety-panel-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M7 3h7l4 4v14H7z" />
+                    <path d="M14 3v5h5M9.5 12h5M9.5 16h5" />
+                  </svg>
+                </span>
+                <div>
+                  <span>Dokumen keselamatan</span>
+                  <h4>Job Safety Analysis</h4>
+                </div>
+              </header>
+              <p>Rincian bahaya dan pengendalian mengacu pada dokumen JSA terkontrol.</p>
+              <dl class="hazard-reference">
+                <div>
+                  <dt>Referensi bahaya tambahan</dt>
+                  <dd>{{ permit()!.draft.additionalHazardReference || 'Tidak ada' }}</dd>
+                </div>
+              </dl>
+            </article>
+
+            <article
+              class="safety-panel equipment-summary"
+              aria-labelledby="safety-equipment-summary-title"
+            >
+              <header>
+                <span class="safety-panel-icon equipment-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z" />
+                    <path d="m8.5 12 2.2 2.2 4.8-5" />
+                  </svg>
+                </span>
+                <div>
+                  <span>Bagian 5</span>
+                  <h4 id="safety-equipment-summary-title">APD dan perlengkapan keselamatan</h4>
+                </div>
+              </header>
+              @if (!permit()!.workflow.hse.completed) {
+                <p class="safety-empty-state">
+                  Belum ditetapkan. PIC HSE akan memilih item saat validasi.
+                </p>
+              } @else if (loadingSafetyEquipment()) {
+                <p class="safety-empty-state">Memuat perlengkapan keselamatan...</p>
+              } @else if (safetyEquipmentError()) {
+                <p class="error-text safety-empty-state" role="alert">
+                  {{ safetyEquipmentError() }}
+                </p>
+              } @else if (selectedSafetyEquipmentLabels().length > 0) {
+                <div
+                  class="chips safety-equipment-chips"
+                  role="list"
+                  aria-label="APD dan perlengkapan keselamatan terpilih"
+                >
+                  @for (label of selectedSafetyEquipmentLabels(); track $index) {
+                    <span class="chip control" role="listitem">
+                      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8 3 3 6-6" /></svg>
+                      {{ label }}
+                    </span>
+                  }
+                </div>
+                <div class="safety-validator">
+                  <span aria-hidden="true">
+                    <svg viewBox="0 0 16 16"><path d="m3.5 8 3 3 6-6" /></svg>
+                  </span>
+                  <div>
+                    <small>Ditetapkan oleh PIC HSE</small>
+                    <strong>{{ permit()!.workflow.hse.actorName || 'Nama tidak tersedia' }}</strong>
+                  </div>
+                </div>
+              } @else {
+                <p class="safety-empty-state">
+                  Belum ada APD atau perlengkapan keselamatan yang tercatat.
+                </p>
+              }
+            </article>
+          </div>
+        </section>
         <app-permit-attachments
           [permitId]="permit()!.id"
           [eTag]="permit()!.eTag"
@@ -872,29 +957,28 @@
                 }
               </div>
             }
-            @if (
-              !canClose() || closureDecisionForm.controls.completionOutcome.value === 'COMPLETED'
-            ) {
-              <label class="decision-statement">
-                <span>Pernyataan atau alasan</span>
-                @if (canClose()) {
-                  <small>Wajib diisi sebagai catatan keputusan penutupan.</small>
-                }
-                <textarea
-                  rows="3"
-                  maxlength="1000"
-                  [formControl]="decisionStatement"
-                  [attr.placeholder]="
-                    canClose()
-                      ? 'Contoh: Kondisi lapangan dan hardcopy telah diverifikasi.'
-                      : 'Tuliskan dasar keputusan.'
-                  "
-                ></textarea>
-                @if (decisionStatement.touched && decisionStatement.invalid) {
-                  <span class="field-error" role="alert">Pernyataan atau alasan wajib diisi.</span>
-                }
-              </label>
-            }
+            <label class="decision-statement">
+              <span>Komentar keputusan</span>
+              <small id="decision-comment-help">
+                Wajib diisi sebelum menyetujui, menolak, atau meminta revisi/tindak lanjut.
+              </small>
+              <textarea
+                rows="3"
+                maxlength="1000"
+                [formControl]="decisionStatement"
+                aria-describedby="decision-comment-help decision-comment-error"
+                [attr.placeholder]="
+                  canClose()
+                    ? 'Tuliskan hasil pemeriksaan lapangan dan hardcopy.'
+                    : 'Tuliskan dasar keputusan.'
+                "
+              ></textarea>
+              @if (decisionStatement.touched && decisionStatement.invalid) {
+                <span id="decision-comment-error" class="field-error" role="alert">
+                  Komentar keputusan wajib diisi dan tidak boleh hanya berupa spasi.
+                </span>
+              }
+            </label>
             <div class="action-buttons">
               @if (canValidateHse()) {
                 <button

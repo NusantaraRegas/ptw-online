@@ -209,7 +209,8 @@
         <strong>{{ permit.draft.title }}</strong>
         <p>{{ permit.permitNumber || 'Draft belum bernomor' }} · {{ permit.draft.locationId }}</p>
       </div>
-      <span class="status">{{ statusLabel(permit.status) }}</span
+      <span class="status permit-status" [attr.data-status]="permit.status">
+        {{ statusLabel(permit.status) }} </span
       ><time>{{ permit.updatedAt | date: 'dd MMM, HH:mm' : 'Asia/Jakarta' }} WIB</time></a
     >
   }

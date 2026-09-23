@@ -85,5 +85,9 @@ describe('PermitValidationProgress', () => {
     expect(text).not.toContain('hsse.validator.demo');
     expect(text).not.toContain('area.owner.orf.demo');
     expect(text).toContain('Diterbitkan');
+    expect(text).toContain('Sesuai.');
+    expect(text).toContain('Kondisi operasi telah diperiksa.');
+    expect(text).toContain('Disetujui.');
+    expect(fixture.nativeElement.querySelectorAll('.decision-comment')).toHaveLength(3);
   });
 });

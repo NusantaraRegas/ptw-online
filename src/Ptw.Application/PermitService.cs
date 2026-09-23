@@ -22,8 +22,6 @@ public sealed class PermitService(
     // reviewer pool and may be assigned to an SO or Officer Pemilik Wilayah.
     private const string AreaOperationsReviewerRole = "AreaOwnerSeniorOfficer";
     private const string AreaOwnerManagerRole = "AreaOwnerManager";
-    private static readonly string[] AreaOwnerClosureRoles =
-        [AreaOperationsReviewerRole, AreaOwnerManagerRole];
 
     public async Task<PermitResponse> CreateAsync(
         PermitDraftRequest request,
@@ -855,7 +853,7 @@ public sealed class PermitService(
             idempotencyKey,
             correlationId,
             PermitPolicyOperations.RequestClosureEvidenceReplacement,
-            AreaOwnerClosureRoles,
+            [AreaOperationsReviewerRole, AreaOwnerManagerRole],
             (permit, actor, now, _) => permit.RequestClosureEvidenceReplacement(actor.Id, request.Reason, now),
             cancellationToken);
 
@@ -888,7 +886,7 @@ public sealed class PermitService(
             idempotencyKey,
             correlationId,
             PermitPolicyOperations.Close,
-            AreaOwnerClosureRoles,
+            [AreaOperationsReviewerRole, AreaOwnerManagerRole],
             (permit, actor, now, _) => permit.Close(
                 actor.Id,
                 request.Statement,

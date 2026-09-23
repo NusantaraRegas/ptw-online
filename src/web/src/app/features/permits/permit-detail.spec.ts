@@ -238,6 +238,13 @@ describe('PermitDetail HSE validation', () => {
     const validateButton = Array.from<HTMLButtonElement>(
       fixture.nativeElement.querySelectorAll('button'),
     ).find((button) => button.textContent?.includes('Validasi sebagai PIC HSE'));
+    statement.setValue('   ');
+    fixture.detectChanges();
+    expect(validateButton?.disabled).toBe(true);
+
+    statement.setValue('APD dan perlengkapan safety telah diverifikasi.');
+    fixture.detectChanges();
+    expect(validateButton?.disabled).toBe(false);
     validateButton?.click();
 
     expect(validationRequest).toEqual({
@@ -375,7 +382,16 @@ describe('PermitDetail', () => {
             ],
           },
         ]),
-      listSafetyEquipment: () => of([]),
+      listSafetyEquipment: () =>
+        of([
+          {
+            permitClass: 'ColdWork',
+            options: [
+              { code: 'SAFETY_FIRE_EXTINGUISHER', label: 'APAR' },
+              { code: 'SAFETY_LOTO', label: 'Perlengkapan LOTO' },
+            ],
+          },
+        ]),
       listOperationalConditions: () =>
         of([
           {
@@ -487,6 +503,10 @@ describe('PermitDetail', () => {
     const fixture = TestBed.createComponent(PermitDetail);
     fixture.detectChanges();
 
+    const statusBadge = fixture.nativeElement.querySelector('.permit-status') as HTMLElement;
+    expect(statusBadge.dataset['status']).toBe('ISSUED');
+    expect(statusBadge.textContent).toContain('Diterbitkan');
+
     const locationFact = Array.from<HTMLElement>(
       fixture.nativeElement.querySelectorAll('.facts > div'),
     ).find((item) => item.querySelector('dt')?.textContent?.trim() === 'Lokasi');
@@ -494,6 +514,41 @@ describe('PermitDetail', () => {
       'Onshore Receiving Facility',
     );
     expect(locationFact?.textContent).not.toContain('ORF');
+  });
+
+  it('shows HSE-selected safety equipment on the PTW detail using catalog labels', () => {
+    currentPermit = {
+      ...permit,
+      workflow: {
+        ...permit.workflow,
+        hse: {
+          ...permit.workflow.hse,
+          completed: true,
+          actorId: 'hse.validator.demo',
+          actorName: 'Validator HSE Demo',
+          statement: 'APD telah diverifikasi.',
+          completedAt: '2026-09-04T01:20:00.000Z',
+          safetyEquipmentCodes: ['SAFETY_FIRE_EXTINGUISHER', 'SAFETY_LOTO'],
+        },
+      },
+    };
+    const fixture = TestBed.createComponent(PermitDetail);
+    fixture.detectChanges();
+
+    const summary = fixture.nativeElement.querySelector(
+      '[aria-labelledby="safety-equipment-summary-title"]',
+    ) as HTMLElement | null;
+    expect(summary?.textContent).toContain('APAR');
+    expect(summary?.textContent).toContain('Perlengkapan LOTO');
+    expect(summary?.textContent).toContain('Validator HSE Demo');
+    expect(summary?.textContent).not.toContain('SAFETY_FIRE_EXTINGUISHER');
+    expect(summary?.textContent).not.toContain('SAFETY_LOTO');
+    expect(
+      fixture.nativeElement.querySelectorAll('.safety-overview-grid .safety-panel'),
+    ).toHaveLength(2);
+    expect(summary?.querySelector('.safety-validator')?.textContent).toContain(
+      'Ditetapkan oleh PIC HSE',
+    );
   });
 
   it('uses /me so a logged-in SO can review Bagian 7 even when the demo selector is Sponsor', () => {
@@ -764,6 +819,11 @@ describe('PermitDetail', () => {
     ).not.toBeNull();
     expect(incompletePanel?.textContent).toContain('Minta tindak lanjut Sponsor');
     expect(incompletePanel?.textContent).not.toContain('Verifikasi dan tutup PTW');
+    expect(incompletePanel?.querySelector('.decision-statement')).not.toBeNull();
+    const followUpButton = Array.from<HTMLButtonElement>(
+      incompletePanel?.querySelectorAll('button') ?? [],
+    ).find((button) => button.textContent?.includes('Minta tindak lanjut Sponsor'));
+    expect(followUpButton?.disabled).toBe(true);
   });
 
   it('guides the Sponsor to replace and resubmit closure evidence without reopening work', () => {

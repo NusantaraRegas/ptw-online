@@ -69,6 +69,9 @@ export class PermitHistory {
       permit_cancelled: 'PTW dibatalkan',
       permit_expired: 'Masa berlaku PTW berakhir',
       permit_renewal_requested: 'Sponsor mengajukan renewal PTW',
+      renewal_evidence_replacement_requested: 'Perbaikan evidence perpanjangan diminta',
+      renewal_approved: 'Perpanjangan PTW disetujui',
+      renewal_rejected: 'Perpanjangan PTW ditolak',
       permit_renewal_draft_created: 'Draft renewal PTW dibuat',
     };
     return labels[eventType] ?? eventType.replaceAll('_', ' ');
@@ -81,6 +84,25 @@ export class PermitHistory {
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase())
       .join('');
+  }
+
+  protected decisionComment(item: PermitActivity): string | null {
+    const commentKeys = [
+      'reason',
+      'statement',
+      'note',
+      'resolution',
+      'completionStatement',
+      'continuationStatement',
+    ];
+    for (const key of commentKeys) {
+      const payloadKey = Object.keys(item.payload).find(
+        (candidate) => candidate.toLowerCase() === key.toLowerCase(),
+      );
+      const value = payloadKey ? item.payload[payloadKey] : undefined;
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return null;
   }
 
   protected shortHash(hash: string): string {

@@ -265,9 +265,10 @@ describe('PermitAttachments', () => {
     ) as HTMLElement | null;
     expect(fixture.nativeElement.textContent).toContain('Dokumen utama PTW');
     expect(primary?.textContent).toContain('ptw-signed.pdf');
-    expect(primary?.querySelector('.primary-download')?.textContent).toContain(
-      'Unduh untuk review',
-    );
+    const primaryDownload = primary?.querySelector('.primary-download') as HTMLButtonElement | null;
+    expect(primaryDownload?.textContent).toContain('Unduh untuk review');
+    expect(getComputedStyle(primaryDownload!).color).toBe('rgb(255, 255, 255)');
+    expect(getComputedStyle(primaryDownload!).backgroundColor).toBe('rgb(21, 112, 71)');
     expect(fixture.nativeElement.querySelector('.attachment-list li')).toBe(primary);
   });
 });

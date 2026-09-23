@@ -102,6 +102,17 @@
   color: #89999e;
   font-size: 9px;
 }
+.activity-row blockquote {
+  margin: 7px 0 0;
+  padding: 7px 9px;
+  border-left: 3px solid #bdd9df;
+  border-radius: 0 6px 6px 0;
+  color: #405e67;
+  background: #f5f9fa;
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
 .activity-row time,
 .version-meta time {
   color: #7d9096;

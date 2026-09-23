@@ -72,6 +72,38 @@ public sealed class PermitStateMachineTests
         Assert.Equal(1, permit.Version);
     }
 
+    [Fact]
+    public void ApprovalRevisionAndRejectionCommandsRejectBlankComments()
+    {
+        var validationError = Assert.Throws<DomainRuleViolationException>(() =>
+            SubmittedPermit().ValidateSubmission(
+                "hse.validator",
+                "   ",
+                ["SAFETY_FIRE_EXTINGUISHER"],
+                Now.AddMinutes(2)));
+        Assert.Equal("permit.evidence_required", validationError.Code);
+
+        var revisionError = Assert.Throws<DomainRuleViolationException>(() =>
+            SubmittedPermit().RequestRevision("   ", Now.AddMinutes(2)));
+        Assert.Equal("permit.reason_required", revisionError.Code);
+
+        var rejectionError = Assert.Throws<DomainRuleViolationException>(() =>
+            SubmittedPermit().Reject("   ", Now.AddMinutes(2)));
+        Assert.Equal("permit.reason_required", rejectionError.Code);
+
+        var reviewError = Assert.Throws<DomainRuleViolationException>(() =>
+            ValidatedPermit().ReviewAreaOperations(
+                AreaReview() with { Statement = "   " },
+                Now.AddMinutes(3)));
+        Assert.Equal("permit.evidence_required", reviewError.Code);
+
+        var approvalError = Assert.Throws<DomainRuleViolationException>(() =>
+            ReviewedPermit().ApproveAndIssue(
+                ManagerApproval() with { Statement = "   " },
+                Now.AddMinutes(4)));
+        Assert.Equal("permit.evidence_required", approvalError.Code);
+    }
+
     [Theory]
     [InlineData(null, "permit.safety_equipment_required")]
     [InlineData("SAFETY_NOT_IN_TEMPLATE", "permit.safety_equipment_invalid")]

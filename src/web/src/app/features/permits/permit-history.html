@@ -43,6 +43,9 @@
           <div>
             <strong>{{ eventLabel(item.eventType) }}</strong>
             <p>Oleh {{ item.actorId }}</p>
+            @if (decisionComment(item); as comment) {
+              <blockquote>{{ comment }}</blockquote>
+            }
           </div>
           <time>{{ item.occurredAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</time>
         </article>
