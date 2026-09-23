@@ -568,6 +568,23 @@ export class PermitDetail {
     );
   }
 
+  protected permitClassLabel(value: string): string {
+    const labels: Record<string, string> = {
+      HotWork: 'Pekerjaan Panas',
+      ColdWork: 'Pekerjaan Dingin',
+      ConfinedSpaceEntry: 'Memasuki Ruang Terbatas',
+    };
+    return labels[value] ?? 'Kelas izin tidak dikenal';
+  }
+
+  protected submitterTypeLabel(value: PermitDraft['submitterType']): string {
+    const labels: Record<NonNullable<PermitDraft['submitterType']>, string> = {
+      CONTRACTOR: 'Kontraktor',
+      USER_SPONSOR: 'User Sponsor',
+    };
+    return labels[value ?? 'USER_SPONSOR'];
+  }
+
   protected isWorkTypeSelected(code: string): boolean {
     return this.form.controls.workTypeCodes.value.includes(code);
   }

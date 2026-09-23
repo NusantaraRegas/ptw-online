@@ -89,7 +89,7 @@
           </div>
           <div>
             <dt>Kelas izin</dt>
-            <dd>{{ permit()!.draft.permitClass }}</dd>
+            <dd>{{ permitClassLabel(permit()!.draft.permitClass) }}</dd>
           </div>
           <div>
             <dt>Klasifikasi header izin</dt>
@@ -97,7 +97,7 @@
           </div>
           <div>
             <dt>Tipe pengaju</dt>
-            <dd>{{ permit()!.draft.submitterType || 'USER_SPONSOR' }}</dd>
+            <dd>{{ submitterTypeLabel(permit()!.draft.submitterType) }}</dd>
           </div>
           <div>
             <dt>Jenis pekerjaan</dt>
@@ -128,7 +128,7 @@
           </div>
           <div>
             <dt>Sponsor</dt>
-            <dd>{{ permit()!.draft.sponsorId }}</dd>
+            <dd>{{ permit()!.sponsorName || 'Nama tidak tersedia' }}</dd>
           </div>
           <div>
             <dt>Mulai</dt>
@@ -1210,9 +1210,17 @@
         <label
           >Nama equipment<input formControlName="equipmentName" maxlength="100" autocomplete="off"
         /></label>
-        <label
-          >Work Order No.<input formControlName="workOrderNumber" maxlength="60" autocomplete="off"
-        /></label>
+        <label for="edit-work-order-number">
+          Work Order No.
+          <small id="edit-work-order-help">Opsional, maksimum 60 karakter.</small>
+          <input
+            id="edit-work-order-number"
+            formControlName="workOrderNumber"
+            maxlength="60"
+            autocomplete="off"
+            aria-describedby="edit-work-order-help"
+          />
+        </label>
         <label>Plant/area<input formControlName="plantArea" /></label>
         <label class="wide">
           Referensi bahaya terkait

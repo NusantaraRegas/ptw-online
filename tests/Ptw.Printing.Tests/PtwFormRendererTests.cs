@@ -193,6 +193,20 @@ public sealed class PtwFormRendererTests
         Assert.Empty(TemplateOverlayCatalog.StructuralRepairRules(PermitClass.ConfinedSpaceEntry));
     }
 
+    [Theory]
+    [InlineData(PermitClass.HotWork, 477.8589)]
+    [InlineData(PermitClass.ColdWork, 493.8189)]
+    [InlineData(PermitClass.ConfinedSpaceEntry, 462.9789)]
+    public void EquipmentNameOverlayClearsWritingRuleWithoutCrossingPlantAreaDivider(
+        PermitClass permitClass,
+        double dividerX)
+    {
+        var field = TemplateOverlayCatalog.Resolve(permitClass).EquipmentName;
+        var gap = dividerX - (field.X + field.Width);
+
+        Assert.InRange(gap, 1.0, 1.5);
+    }
+
     [Fact]
     public void WorkTypeCatalogPreservesDistinctCheckboxesForDuplicateTemplateLabels()
     {

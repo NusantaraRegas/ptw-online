@@ -169,7 +169,7 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 - [ ] Scope filter diterapkan pada query, termasuk pengecekan parent permit untuk resource turunan dan attachment. Menyembunyikan tombol di UI tidak dihitung.
 - [ ] Identitas actor dan Sponsor aktif berasal dari `/api/v1/me`, bukan profil demo yang di-hard-code ke payload domain.
 - [ ] Task yang `AssignedActorId`-nya terisi terlihat berdasarkan identitas actor walaupun role aktifnya berubah; task pool tetap difilter role dan scope lokasi.
-- [ ] Nama actor pada ringkasan workflow (HSE, SO/Officer, Manager) berasal dari profil akun server; username/Subject ID tidak pernah dipakai sebagai fallback nama di UI atau evidence. Evidence HSE baru membekukan nama, evidence lama diperkaya saat dibaca.
+- [ ] Nama actor pada ringkasan workflow (HSE, SO/Officer, Manager) berasal dari profil akun server; username/Subject ID tidak pernah dipakai sebagai fallback nama di UI atau evidence. Evidence HSE baru membekukan nama, evidence lama diperkaya saat dibaca. `PermitResponse.SponsorName` diisi dari profil Sponsor dan bernilai null bila profil tidak ada; UI menampilkan `Nama tidak tersedia`, bukan Subject ID.
 - [ ] Bagian 5 hanya dapat ditetapkan PIC HSE saat validasi; payload draft Sponsor yang membawa Bagian 5 ditolak, dan approval tanpa evidence Bagian 5 diarahkan ke revisi.
 - [ ] Bagian 7 hanya dapat ditetapkan SO/Officer pemilik wilayah (pool role `AreaOwnerSeniorOfficer`; kode dipertahankan untuk kompatibilitas data) pada tepat satu task `AREA_OPERATION_REVIEW` setelah validasi HSE, dengan assignment yang terverifikasi server. Reviewer pertama yang menyelesaikan task menang; reviewer berikutnya tidak lagi menemukan task (`404`). Sponsor dan validator HSE tidak boleh menjadi reviewer; Manager yang menerbitkan harus berbeda dari Sponsor, validator HSE, dan reviewer; approve-and-issue tanpa evidence Bagian 7 ditolak. Nama dan jabatan aktor pada evidence berasal dari profil akun aktif di server, bukan dari klien. Field bebas CLSR dan isolation/precaution tidak lagi diterima dari Sponsor.
 - [ ] Bagian 4: JSA wajib, setiap dokumen terpilih memerlukan lampiran bertaut, dan metadata lampiran JSA harus cocok dengan draft sebelum submit. Validasi ini di server, bukan di UI.
@@ -196,6 +196,7 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 
 - [ ] Journey pengguna berbahasa Indonesia dan konsisten dengan istilah SOP; **Diterbitkan** dipakai untuk `ISSUED`.
 - [ ] Status disampaikan lewat teks, bukan hanya warna.
+- [ ] Kode kontrak API (`HotWork`, `USER_SPONSOR`, kode katalog) tidak ditampilkan mentah; UI memetakannya ke label Bahasa Indonesia (`Pekerjaan Panas`, `Pekerjaan Dingin`, `Memasuki Ruang Terbatas`, `User Sponsor`, `Kontraktor`). Field opsional seperti Work Order No. memberi teks bantuan yang terasosiasi lewat `aria-describedby`.
 - [ ] Error command terlihat di dekat aksi pemicunya pada halaman panjang; summary global tetap tersedia untuk aksesibilitas.
 - [ ] Form panjang memakai reactive forms dengan asosiasi error, summary, dan remediation yang jelas.
 - [ ] Memenuhi minimal WCAG 2.2 AA: keyboard, focus terlihat, heading semantik, label, kontras, error terasosiasi.

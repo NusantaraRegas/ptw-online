@@ -357,7 +357,7 @@ describe('PermitCreate', () => {
       workTypeCodes: ['HOT_WELDING'],
       headerClassificationCodes: ['HOT_OPEN_FLAME', 'HOT_SPARK'],
       equipmentName: ' Gas inlet separator ',
-      workOrderNumber: ' WO-2026-001 ',
+      workOrderNumber: '   ',
       additionalHazardReference: ' Akses sisi utara licin ',
       plantArea: 'Area Metering',
       jsaDocumentNumber: 'JSA-001',
@@ -369,7 +369,10 @@ describe('PermitCreate', () => {
 
     const request = httpTesting.expectOne('/api/v1/permits');
     expect(request.request.body.equipmentName).toBe('Gas inlet separator');
-    expect(request.request.body.workOrderNumber).toBe('WO-2026-001');
+    expect(request.request.body.workOrderNumber).toBeNull();
+    expect(fixture.nativeElement.querySelector('#work-order-help')?.textContent).toContain(
+      'Opsional',
+    );
     expect(request.request.body.additionalHazardReference).toBe('Akses sisi utara licin');
     expect(request.request.body.headerClassificationCodes).toEqual(['HOT_OPEN_FLAME', 'HOT_SPARK']);
     expect(request.request.body.clsrApplicable).toBe(false);

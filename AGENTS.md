@@ -79,7 +79,7 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 - Separation of duty flow penerbitan harus mempertahankan actor berbeda untuk Sponsor, PIC HSE, reviewer SO/Officer Pemilik Wilayah Bagian 7, dan Manager penerbit. Acting Manager tetap fail-closed sampai assignment v1.8 lengkap dan disahkan.
 - Akun lokal, login cookie HTTP-only, dan `UserAuthorizationApproval:AllowAdministratorSelfApproval=true` hanya untuk environment `Development`. Role dan scope dihitung ulang dari assignment approved/effective pada setiap request; cookie dan klien bukan authority.
 - Assignment role langsung menurunkan action code dan kompetensi dari `UserAuthorizationRoleProfiles` di server. Jangan menerima action code dari klien, dan jangan memperlakukan profil `appsettings.Development.json` sebagai matriks OPN-002 atau menyalinnya ke production.
-- Nama dan jabatan actor pada evidence workflow dan paket cetak diambil dari profil akun aktif di server, bukan dari payload klien. Username/Subject ID tidak boleh menjadi fallback nama di UI atau evidence; evidence lama tanpa nama diperkaya dari direktori pengguna saat dibaca.
+- Nama dan jabatan actor pada evidence workflow dan paket cetak diambil dari profil akun aktif di server, bukan dari payload klien. Username/Subject ID tidak boleh menjadi fallback nama di UI atau evidence; evidence lama tanpa nama diperkaya dari direktori pengguna saat dibaca. Nama Sponsor pada respons PTW juga berasal dari profil server dan bernilai null bila profil tidak ada.
 - Jangan commit `.env`, password, token, certificate, connection string ber-secret, PII fixture nyata, atau isi attachment.
 - Jangan log token, secret, document content, atau PII yang tidak diperlukan. Pertahankan correlation ID dan identifier aman.
 - High/critical dependency vulnerability harus ditutup atau memblokir delivery; jangan menonaktifkan NuGet/npm audit untuk membuat build hijau.
@@ -91,6 +91,7 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 - Gunakan istilah **Diterbitkan** pada UI dan komunikasi pengguna untuk status domain internal
   `ISSUED`; jangan menampilkan `OPEN` sebagai istilah proses bisnis.
 - Status harus memakai teks dan tidak hanya warna.
+- Jangan menampilkan kode kontrak API (`HotWork`, `USER_SPONSOR`, kode katalog) secara mentah; petakan ke label Bahasa Indonesia di komponen. Field opsional harus memberi teks bantuan yang terasosiasi (`aria-describedby`).
 - Pertahankan peringatan bahwa **Diterbitkan** belum otomatis mengizinkan pekerjaan dimulai.
 - Form panjang memakai reactive forms, error association/summary, dan remediation yang jelas.
 - Error command pada halaman panjang harus terlihat di dekat aksi pemicunya; summary global boleh

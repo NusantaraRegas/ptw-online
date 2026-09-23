@@ -231,7 +231,10 @@ public sealed record PermitResponse(
     Guid? RenewedFromPermitId,
     Guid? RenewalPermitId,
     PermitWorkflowResponse Workflow,
-    string ETag);
+    string ETag)
+{
+    public string? SponsorName { get; init; }
+}
 
 public sealed record PermitRenewalResponse(
     int SourcePermitVersion,

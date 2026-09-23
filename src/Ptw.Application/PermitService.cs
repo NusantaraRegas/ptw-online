@@ -1224,17 +1224,22 @@ public sealed class PermitService(
         accountCache ??= new Dictionary<string, StoredUserAccount?>(StringComparer.OrdinalIgnoreCase);
         var response = stored.ToResponse();
         var workflow = response.Workflow;
-        var hseName = await ResolveWorkflowActorNameAsync(
+        var sponsorName = await ResolveActorNameAsync(
+            response.Draft.SponsorId,
+            null,
+            accountCache,
+            cancellationToken);
+        var hseName = await ResolveActorNameAsync(
             workflow.Hse.ActorId,
             workflow.Hse.ActorName,
             accountCache,
             cancellationToken);
-        var areaOperationsName = await ResolveWorkflowActorNameAsync(
+        var areaOperationsName = await ResolveActorNameAsync(
             workflow.AreaOperations.ActorId,
             workflow.AreaOperations.ActorName,
             accountCache,
             cancellationToken);
-        var approvalName = await ResolveWorkflowActorNameAsync(
+        var approvalName = await ResolveActorNameAsync(
             workflow.Approval.ActorId,
             workflow.Approval.ActorName,
             accountCache,
@@ -1242,6 +1247,7 @@ public sealed class PermitService(
 
         return response with
         {
+            SponsorName = sponsorName,
             Workflow = workflow with
             {
                 Hse = workflow.Hse with { ActorName = hseName },
@@ -1251,7 +1257,7 @@ public sealed class PermitService(
         };
     }
 
-    private async Task<string?> ResolveWorkflowActorNameAsync(
+    private async Task<string?> ResolveActorNameAsync(
         string? actorId,
         string? evidenceName,
         Dictionary<string, StoredUserAccount?> accountCache,

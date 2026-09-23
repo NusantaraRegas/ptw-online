@@ -191,9 +191,17 @@ function localDate(hoursFromNow: number): string {
         <label
           >Nama equipment<input formControlName="equipmentName" maxlength="100" autocomplete="off"
         /></label>
-        <label
-          >Work Order No.<input formControlName="workOrderNumber" maxlength="60" autocomplete="off"
-        /></label>
+        <label for="work-order-number">
+          Work Order No.
+          <small id="work-order-help">Opsional, maksimum 60 karakter.</small>
+          <input
+            id="work-order-number"
+            formControlName="workOrderNumber"
+            maxlength="60"
+            autocomplete="off"
+            aria-describedby="work-order-help"
+          />
+        </label>
         <label>Plant/area<input formControlName="plantArea" /></label>
         <label class="wide">
           Referensi bahaya terkait

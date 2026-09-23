@@ -59,6 +59,38 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     }
 
     [Fact]
+    public async Task PermitResponseUsesSponsorFullNameWithoutFallingBackToLoginIdentifier()
+    {
+        var sponsorId = Unique("sponsor");
+        const string sponsorName = "Raka Pratama";
+        using var admin = Client(Unique("admin"), "Administrator", "*");
+        using var createSponsor = await admin.PostAsJsonAsync(
+            "/api/v1/admin/users",
+            new CreateUserRequest(
+                sponsorId,
+                sponsorId,
+                sponsorName,
+                "Sponsor Pekerjaan",
+                "Operasi",
+                "TestPassword123!"));
+        createSponsor.EnsureSuccessStatusCode();
+
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        var permit = await CreateAsync(sponsor, sponsorId, "ORF");
+
+        Assert.Equal(sponsorName, permit.SponsorName);
+
+        var sponsorWithoutProfileId = Unique("sponsor-without-profile");
+        using var sponsorWithoutProfile = Client(sponsorWithoutProfileId, "Sponsor", "ORF");
+        var permitWithoutProfile = await CreateAsync(
+            sponsorWithoutProfile,
+            sponsorWithoutProfileId,
+            "ORF");
+
+        Assert.Null(permitWithoutProfile.SponsorName);
+    }
+
+    [Fact]
     public async Task DraftSavesAndMandatoryUploadsKeepTheInitialBusinessVersion()
     {
         var sponsorId = Unique("sponsor");

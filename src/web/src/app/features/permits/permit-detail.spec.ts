@@ -253,6 +253,7 @@ describe('PermitDetail HSE validation', () => {
 const permit: Permit = {
   id: 'permit-id',
   permitNumber: 'PTW-TEST',
+  sponsorName: 'Raka Pratama',
   status: 'ISSUED',
   version: 8,
   eTag: '"etag-value"',
@@ -265,6 +266,7 @@ const permit: Permit = {
     sponsorId: 'sponsor.demo',
     performingAuthority: 'Pelaksana',
     company: 'PT Mitra',
+    submitterType: 'USER_SPONSOR',
     permitClass: 'ColdWork',
     riskLevel: 'Low',
     validFrom: '2026-09-04T01:00:00.000Z',
@@ -555,6 +557,55 @@ describe('PermitDetail', () => {
       'DITERBITKAN belum otomatis mengizinkan pekerjaan dimulai',
     );
     expect(safetyNote?.textContent).toContain('tanda tangan lapangan tetap wajib pada hardcopy');
+  });
+
+  it('shows the Sponsor full name without exposing the username', () => {
+    const fixture = TestBed.createComponent(PermitDetail);
+    fixture.detectChanges();
+
+    const sponsorFact = Array.from<HTMLElement>(
+      fixture.nativeElement.querySelectorAll('.facts > div'),
+    ).find((item) => item.querySelector('dt')?.textContent?.trim() === 'Sponsor');
+
+    expect(sponsorFact?.querySelector('dd')?.textContent?.trim()).toBe('Raka Pratama');
+    expect(sponsorFact?.textContent).not.toContain('sponsor.demo');
+  });
+
+  it('shows user-facing labels instead of permit contract codes', () => {
+    const fixture = TestBed.createComponent(PermitDetail);
+    fixture.detectChanges();
+
+    const facts = Array.from<HTMLElement>(fixture.nativeElement.querySelectorAll('.facts > div'));
+    const valueFor = (label: string) =>
+      facts
+        .find((item) => item.querySelector('dt')?.textContent?.trim() === label)
+        ?.querySelector('dd')
+        ?.textContent?.trim();
+
+    expect(valueFor('Kelas izin')).toBe('Pekerjaan Dingin');
+    expect(valueFor('Tipe pengaju')).toBe('User Sponsor');
+    expect(fixture.nativeElement.querySelector('.facts')?.textContent).not.toContain('ColdWork');
+    expect(fixture.nativeElement.querySelector('.facts')?.textContent).not.toContain(
+      'USER_SPONSOR',
+    );
+  });
+
+  it('marks the Work Order number as optional in the edit form', () => {
+    currentPermit = { ...permit, status: 'DRAFT' };
+    const fixture = TestBed.createComponent(PermitDetail);
+    fixture.detectChanges();
+    (fixture.componentInstance as unknown as { startEdit(): void }).startEdit();
+    fixture.detectChanges();
+
+    const workOrderInput = fixture.nativeElement.querySelector(
+      '#edit-work-order-number',
+    ) as HTMLInputElement | null;
+    const workOrderHelp = fixture.nativeElement.querySelector(
+      '#edit-work-order-help',
+    ) as HTMLElement | null;
+
+    expect(workOrderInput?.required).toBe(false);
+    expect(workOrderHelp?.textContent).toContain('Opsional');
   });
 
   it('blocks legacy area approval and directs the manager to request revision', () => {

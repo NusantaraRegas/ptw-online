@@ -97,6 +97,7 @@ export interface PermitMandatoryDocumentOption {
 export interface Permit {
   id: string;
   permitNumber?: string;
+  sponsorName?: string | null;
   status: string;
   version: number;
   draft: PermitDraft;
