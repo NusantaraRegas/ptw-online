@@ -64,7 +64,10 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
                 ["LocationRelease:AreaOwnerDepartments:WATER_BASED"] = "Departemen Transport & Operasi FSRU",
                 ["GeneratedDocuments:Enabled"] = "true",
                 ["GeneratedDocuments:StoragePath"] = _generatedDocumentPath,
-                ["GeneratedDocuments:MaxRenderAttempts"] = "3"
+                ["GeneratedDocuments:MaxRenderAttempts"] = "3",
+                // Every test in the collection logs in from the same TestServer address; the
+                // production login window would trip long before the suite finishes.
+                ["RateLimiting:LoginPermitLimit"] = "10000"
             }));
         builder.ConfigureServices(services =>
         {

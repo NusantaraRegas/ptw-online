@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Ptw.Api.Security;
 using Ptw.Application;
 using Ptw.Contracts;
 
@@ -13,6 +15,7 @@ namespace Ptw.Api.Controllers;
 public sealed class AuthenticationController(
     UserAuthenticationService authenticationService,
     DemoModeService demoModeService,
+    LoginSettings loginSettings,
     IWebHostEnvironment environment) : ControllerBase
 {
     [AllowAnonymous]
@@ -24,14 +27,15 @@ public sealed class AuthenticationController(
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitSettings.LoginPolicy)]
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request, CancellationToken cancellationToken)
     {
-        if (!environment.IsDevelopment())
+        if (!loginSettings.Enabled)
         {
             throw new InvalidRequestException(
                 "authentication.local_login_disabled",
-                "Login lokal tidak tersedia pada lingkungan ini sampai kontrak IdP disahkan.");
+                "Login tidak tersedia pada lingkungan ini (Authentication:LoginEnabled belum diaktifkan).");
         }
 
         var authenticated = await authenticationService.AuthenticateAsync(

@@ -85,10 +85,13 @@ public static class InfrastructureServices
             attachmentSettings.Enabled
                 ? new LocalAttachmentStorage(provider.GetRequiredService<AttachmentSettings>())
                 : new DisabledAttachmentStorage());
+        // Attachments:RequireMalwareScan=false is an explicit accepted-risk switch (see
+        // docs/decisions/PROD-UPLOAD-SCAN.md): uploads are trusted after the signature check without
+        // an external scanner. The base configuration keeps it true, so the default stays fail-closed.
         services.AddSingleton<IMalwareScanner>(provider =>
-            isDevelopment && !attachmentSettings.RequireMalwareScan
-                ? new DevelopmentUploadTrustScanner(provider.GetRequiredService<IClock>())
-                : new UnavailableMalwareScanner());
+            provider.GetRequiredService<AttachmentSettings>().RequireMalwareScan
+                ? new UnavailableMalwareScanner()
+                : new TrustedUploadScanner(provider.GetRequiredService<IClock>()));
 
         var generatedDocumentSettings = new GeneratedDocumentSettings
         {

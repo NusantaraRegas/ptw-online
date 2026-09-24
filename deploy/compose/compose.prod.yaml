@@ -1,0 +1,230 @@
+# Production stack (single host, OPN-009 accepted 24 September 2026).
+#
+#   docker compose --env-file .env -f deploy/compose/compose.prod.yaml up --build -d
+#
+# Differences from compose.dev.yaml, all deliberate:
+#   - ASPNETCORE_ENVIRONMENT=Production: no OpenAPI, no demo identity headers, no administrator
+#     self-approval, https-only Portal URL, Secure cookies, appsettings.Production.json;
+#   - TLS terminates in the web (nginx) container; port 80 only redirects;
+#   - SQL Server Express bound to the internal interface only, `sa` used by one-shot steps only,
+#     api/worker connect as the read/write login created by db-init;
+#   - every long-running container runs read-only, without Linux capabilities, with a pids/memory
+#     ceiling and rotated json-file logs;
+#   - the frontend network has a fixed subnet so the API can trust X-Forwarded-* from nginx alone.
+name: nr-ptw-prod
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-hardened: &hardened
+  restart: unless-stopped
+  logging: *logging
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+
+x-sql-sa-env: &sql-sa-env
+  # sqlcmd reads the sa password from SQLCMDPASSWORD so it never appears on a command line.
+  SQLCMDPASSWORD: ${PTW_SQL_SA_PASSWORD:?set the sa password in .env}
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    restart: unless-stopped
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      ACCEPT_EULA: "Y"
+      # Express: free edition, 10 GB per database, limited CPU/memory, no SQL Agent.
+      MSSQL_PID: Express
+      MSSQL_SA_PASSWORD: ${PTW_SQL_SA_PASSWORD:?set the sa password in .env}
+    ports:
+      # Published only on the internal interface the backup system reaches; never 0.0.0.0.
+      - "${PTW_SQL_BIND_ADDRESS:?set the internal interface address for SQL Server}:${PTW_SQL_PORT:-1433}:1433"
+    volumes:
+      - sql-data:/var/opt/mssql
+    # `sql-export` is the only non-internal network db joins: Docker publishes no ports for a
+    # container that is attached to internal networks alone, and the backup system needs 1433.
+    networks: [backend, sql-export]
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q \"SELECT 1\" -b -o /dev/null"]
+      interval: 10s
+      timeout: 8s
+      retries: 15
+      start_period: 60s
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: src/Ptw.Api/Dockerfile
+    command: ["--migrate"]
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Schema changes are the only thing that runs as sa.
+      ConnectionStrings__PtwDb: Server=db;Database=PtwOnline;User Id=sa;Password=${PTW_SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True
+      # The migrate step does not serve login and must not fail startup on the Portal check.
+      Authentication__LoginEnabled: "false"
+      Attachments__Enabled: "false"
+      GeneratedDocuments__Enabled: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [backend]
+    restart: "no"
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    environment:
+      <<: *sql-sa-env
+      PTW_SQL_APP_PASSWORD: ${PTW_SQL_APP_PASSWORD:?set the application login password in .env}
+      PTW_SQL_BACKUP_PASSWORD: ${PTW_SQL_BACKUP_PASSWORD:-}
+    entrypoint: ["/opt/mssql-tools18/bin/sqlcmd"]
+    command: ["-C", "-S", "db", "-U", "sa", "-d", "PtwOnline", "-b", "-i", "/init/create-app-logins.sql"]
+    volumes:
+      - ../sql/create-app-logins.sql:/init/create-app-logins.sql:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [backend]
+    restart: "no"
+
+  api:
+    <<: *hardened
+    build:
+      context: ../..
+      dockerfile: src/Ptw.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__PtwDb: Server=db;Database=PtwOnline;User Id=ptw_app;Password=${PTW_SQL_APP_PASSWORD};TrustServerCertificate=True;Encrypt=True
+      Attachments__StoragePath: /var/lib/ptw/attachments
+      GeneratedDocuments__StoragePath: /var/lib/ptw/generated-documents
+      Authentication__DataProtectionPath: /var/lib/ptw/data-protection
+      PortalAuth__BaseUrl: ${PTW_PORTAL_API_BASE_URL:?set the https Portal API base URL}
+      # Host filtering: the public name from nginx plus localhost for the container healthcheck.
+      AllowedHosts: "${PTW_PUBLIC_HOST:?set the public host name};localhost"
+      # X-Forwarded-For/Proto are trusted only from the nginx container on this subnet.
+      ForwardedHeaders__KnownNetworks__0: ${PTW_FRONTEND_SUBNET:-172.28.0.0/24}
+    volumes:
+      - attachment-data:/var/lib/ptw/attachments
+      - generated-document-data:/var/lib/ptw/generated-documents
+      - data-protection-keys:/var/lib/ptw/data-protection
+    tmpfs:
+      - /tmp
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    # `frontend` carries the outbound login call to the Portal API and the traffic from nginx;
+    # `backend` alone is internal-only and would silently force every login onto local passwords.
+    networks: [frontend, backend]
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          pids: 512
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    <<: *hardened
+    build:
+      context: ../..
+      dockerfile: src/Ptw.Worker/Dockerfile
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__PtwDb: Server=db;Database=PtwOnline;User Id=ptw_app;Password=${PTW_SQL_APP_PASSWORD};TrustServerCertificate=True;Encrypt=True
+      GeneratedDocuments__StoragePath: /var/lib/ptw/generated-documents
+    volumes:
+      - generated-document-data:/var/lib/ptw/generated-documents
+    tmpfs:
+      - /tmp
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    networks: [backend]
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          pids: 512
+
+  web:
+    <<: *hardened
+    build:
+      context: ../..
+      dockerfile: src/web/Dockerfile
+    ports:
+      - "${PTW_HTTP_PORT:-80}:8080"
+      - "${PTW_HTTPS_PORT:-443}:8443"
+    environment:
+      PTW_PUBLIC_HOST: ${PTW_PUBLIC_HOST:?set the public host name}
+      PTW_UPLOAD_MAX_BODY: ${PTW_UPLOAD_MAX_BODY:-11m}
+      PTW_ADMIN_ALLOW_CIDRS: ${PTW_ADMIN_ALLOW_CIDRS:-}
+    volumes:
+      # The template replaces the image's development server block: conf.d is a tmpfs below so
+      # the envsubst step can write the rendered file although the root filesystem is read-only.
+      - ../nginx/prod.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${PTW_TLS_CERT_DIR:?set the directory holding fullchain.pem and privkey.pem}:/etc/nginx/tls:ro
+      # Explicit 1777: a tmpfs otherwise inherits the image directory's root-owned 775 mode and
+      # the unprivileged nginx user (uid 101) cannot write to it.
+      - type: tmpfs
+        target: /etc/nginx/conf.d
+        tmpfs:
+          mode: 01777
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          mode: 01777
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [frontend]
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          pids: 256
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=/dev/null", "http://127.0.0.1:8080/nginx-health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+networks:
+  frontend:
+    ipam:
+      config:
+        - subnet: ${PTW_FRONTEND_SUBNET:-172.28.0.0/24}
+  backend:
+    internal: true
+  # Carries only the published SQL port for the backup host (see the db service).
+  sql-export: {}
+
+volumes:
+  sql-data: {}
+  attachment-data: {}
+  generated-document-data: {}
+  data-protection-keys: {}

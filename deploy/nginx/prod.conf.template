@@ -1,0 +1,138 @@
+# Production reverse proxy. Rendered by the nginx image's envsubst step from the variables the
+# compose file passes (PTW_PUBLIC_HOST). nginx's own $variables are left untouched because only
+# names present in the container environment are substituted.
+#
+# TLS terminates here (OPN-009): nginx sees the real client address, so every limit below is keyed
+# on it directly. Request limiting lives in this layer by decision; the API keeps a smaller
+# in-process backstop keyed on the forwarded address.
+
+server_tokens off;
+
+# Per-address windows. An office NAT shares one address, so the general zones are generous; the
+# login zone is deliberately tight because each login is forwarded to Active Directory via the
+# Portal API and a burst of failures can lock staff accounts.
+limit_req_zone $binary_remote_addr zone=ptw_api:10m rate=30r/s;
+limit_req_zone $binary_remote_addr zone=ptw_login:10m rate=20r/m;
+limit_req_zone $binary_remote_addr zone=ptw_static:10m rate=100r/s;
+limit_conn_zone $binary_remote_addr zone=ptw_conn:10m;
+limit_req_status 429;
+limit_conn_status 429;
+
+# Plain HTTP only redirects to the canonical host; nothing is served in clear.
+server {
+    listen 8080 default_server;
+    listen [::]:8080 default_server;
+    server_name _;
+
+    location = /nginx-health {
+        access_log off;
+        return 200 "ok\n";
+    }
+
+    location / {
+        return 301 https://${PTW_PUBLIC_HOST}$request_uri;
+    }
+}
+
+# Requests for any other host name (IP scanning, stray DNS) are dropped without a response.
+server {
+    listen 8443 ssl default_server;
+    listen [::]:8443 ssl default_server;
+    http2 on;
+    server_name _;
+    ssl_reject_handshake on;
+}
+
+server {
+    listen 8443 ssl;
+    listen [::]:8443 ssl;
+    http2 on;
+    server_name ${PTW_PUBLIC_HOST};
+    root /usr/share/nginx/html;
+    index index.html;
+    include /tmp/ptw-upload-limit.conf;
+
+    ssl_certificate /etc/nginx/tls/fullchain.pem;
+    ssl_certificate_key /etc/nginx/tls/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:ptw_ssl:10m;
+    ssl_session_tickets off;
+
+    # Slow-client and connection bounds.
+    client_body_timeout 30s;
+    client_header_timeout 15s;
+    send_timeout 30s;
+    keepalive_timeout 30s;
+    limit_conn ptw_conn 50;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "same-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
+    # Angular injects scoped component styles at runtime. Script execution remains
+    # strict; unsafe-inline is intentionally limited to style-src.
+    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+
+    # Shared by every proxied location below (inherited unless a location sets its own).
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Correlation-ID $request_id;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 60s;
+    proxy_send_timeout 60s;
+
+    location = /api/v1/auth/login {
+        limit_req zone=ptw_login burst=10 nodelay;
+        proxy_pass http://api:8080;
+    }
+
+    location /api/v1/admin/ {
+        include /tmp/ptw-admin-allow.conf;
+        limit_req zone=ptw_api burst=60 nodelay;
+        proxy_pass http://api:8080;
+    }
+
+    location /api/ {
+        limit_req zone=ptw_api burst=60 nodelay;
+        proxy_pass http://api:8080;
+    }
+
+    # Health probes reveal database reachability and open a SQL connection per call; only the
+    # host itself and private monitoring networks may reach them.
+    location /health/ {
+        allow 127.0.0.1;
+        allow ::1;
+        allow 10.0.0.0/8;
+        allow 172.16.0.0/12;
+        allow 192.168.0.0/16;
+        deny all;
+        proxy_pass http://api:8080;
+    }
+
+    # The application shell must be revalidated after every deployment so it
+    # never keeps references to lazy chunks from the previous image.
+    location = /index.html {
+        limit_req zone=ptw_static burst=200 nodelay;
+        expires -1;
+        try_files $uri =404;
+    }
+
+    # Hashed Angular assets are immutable. A missing old chunk must remain a
+    # real 404; returning index.html here causes strict module MIME failures.
+    location ~* \.(?:js|css)$ {
+        limit_req zone=ptw_static burst=200 nodelay;
+        expires 1y;
+        try_files $uri =404;
+    }
+
+    location / {
+        limit_req zone=ptw_static burst=200 nodelay;
+        try_files $uri $uri/ /index.html;
+    }
+}

@@ -41,3 +41,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: cp .env.example .env
       - run: docker compose --env-file .env -f deploy/compose/compose.dev.yaml config --quiet
+      - run: docker compose --env-file deploy/compose/prod.env.example -f deploy/compose/compose.prod.yaml config --quiet
+        env:
+          PTW_SQL_SA_PASSWORD: ci-only-placeholder
+          PTW_SQL_APP_PASSWORD: ci-only-placeholder

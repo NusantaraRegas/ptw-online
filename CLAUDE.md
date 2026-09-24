@@ -37,12 +37,12 @@ src/Ptw.Infrastructure  EF Core, storage, audit, outbox, Printing/ (renderer + t
 src/Ptw.Api             mapping HTTP, Security/ (DevelopmentAuthenticationHandler, HttpActorContext), login cookie lokal, ApiExceptionHandler
 src/Ptw.Worker          job idempotent dan bounded
 src/web                 Angular: core/*-api.ts (HTTP) + features/* (komponen)
-deploy/compose, deploy/nginx  compose.dev.yaml (production-like), compose.hotreload.yaml (bind mount + dotnet watch/ng serve), reverse proxy (cache index.html, 404 chunk hilang)
+deploy/compose, deploy/nginx  compose.dev.yaml (production-like), compose.hotreload.yaml (bind mount + dotnet watch/ng serve), compose.prod.yaml + prod.env.example (produksi satu host, OPN-009), default.conf (dev) dan prod.conf.template (TLS + limit_req), deploy/sql/create-app-logins.sql (login SQL least-privilege)
 tests/Ptw.Domain.Tests           unit state machine
 tests/Ptw.Api.IntegrationTests   end-to-end via PtwApiFactory + Testcontainers
 tests/Ptw.Printing.Tests         regresi layout dokumen (akses internal via InternalsVisibleTo)
 docs/                            BRD/PRD/FSD v1.8 (sumber requirement)
-docs/decisions/                  OPN-001..009 (DRAFT), PTW-RENEWAL (baseline Development) — register kebijakan; DRAFT bukan keputusan
+docs/decisions/                  OPN-001..006, 008 (DRAFT); OPN-007 (identitas produksi ACCEPTED, E-SIMI DRAFT); OPN-009 dan PROD-UPLOAD-SCAN (ACCEPTED 24 Sep 2026); PTW-RENEWAL (baseline Development) — DRAFT bukan keputusan
 docs/implementation-status.md    matriks traceability requirement -> komponen -> test
 .github/workflows/ci.yml         CI: build/test backend, build/test frontend, compose config; format/prettier/audit belum di CI
 ```
@@ -83,6 +83,11 @@ Copy-Item .env.example .env
 docker compose --env-file .env -f deploy/compose/compose.dev.yaml up --build -d
 Invoke-WebRequest -UseBasicParsing http://localhost:8080/health/ready
 ```
+
+Stack produksi (`compose.prod.yaml`) memakai `.env` dari `deploy/compose/prod.env.example`; validasi
+konfigurasinya dengan `docker compose --env-file <env> -f deploy/compose/compose.prod.yaml config --quiet`
+(CI melakukannya dengan password placeholder). Jangan menjalankan stack produksi dengan
+`ASPNETCORE_ENVIRONMENT=Development`.
 
 Migration baru: ubah model/mapping lalu
 `dotnet ef migrations add <Nama> --project src/Ptw.Infrastructure --startup-project src/Ptw.Api`.
@@ -138,7 +143,7 @@ disamarkan sebagai selesai.
 - [ ] Renewal tidak mengubah status PTW asal dan tidak membuat permit saat request: Sponsor mengajukan signed field copy `CLEAN` yang cocok dengan exact PrintPackage/PermitVersion, task `AREA_RENEWAL_REVIEW` dibuat, dan draft penerus hanya lahir atomik saat Manager pemilik area menyetujui. Draft penerus tetap melewati submit, validasi HSE, review Bagian 7 oleh SO/Officer pemilik wilayah, dan approve-and-issue normal.
 - [ ] Suspend tetap menghentikan hak kerja seketika; resolve hanya kembali ke `ISSUED`.
 - [ ] Tidak ada endpoint atau helper generik bergaya `setStatus`.
-- [ ] Tidak ada kebijakan OPN-001–012 yang dikarang: location authority, risk/approval matrix, checklist final, ambang/umur gas test, urutan review, contractor acknowledgement, kontrak SSO/E-SIMI produksi, retention, RPO/RTO, topologi HA. Tanpa decision record, jalur tersebut fail-closed. Klasifikasi header HOT/COLD hanya merepresentasikan checklist formulir (dan memetakan `RiskLevel` legacy pada COLD), bukan matriks routing risiko OPN-002.
+- [ ] Tidak ada kebijakan OPN-001–012 yang dikarang: location authority, risk/approval matrix, checklist final, ambang/umur gas test, urutan review, contractor acknowledgement, kontrak E-SIMI, retention, RPO/RTO. Tanpa decision record, jalur tersebut fail-closed. Identitas produksi (OPN-007 bagian 1), topologi produksi (OPN-009), dan unggahan tanpa scanner (PROD-UPLOAD-SCAN) sudah ACCEPTED 24 September 2026; ikuti record tersebut, jangan memperluasnya. Klasifikasi header HOT/COLD hanya merepresentasikan checklist formulir (dan memetakan `RiskLevel` legacy pada COLD), bukan matriks routing risiko OPN-002.
 
 Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputusan eksplisit.
 
@@ -178,14 +183,16 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 - [ ] Bagian 4: JSA dan Prosedur Pekerjaan wajib serta otomatis terpilih, setiap dokumen terpilih memerlukan lampiran bertaut, dan metadata lampiran JSA harus cocok dengan draft sebelum submit. Validasi ini di server, bukan di UI.
 - [ ] Dokumen dasar JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, dan E-SIMI (`PermitMandatoryDocumentCatalog`) masing-masing memiliki lampiran bertaut sebelum submit; JSA harus diunggah dengan kategori `JSA`; JSA dan Prosedur Pekerjaan selalu masuk Bagian 4, sedangkan empat evidence lainnya tidak.
 - [ ] Development identity header hanya aktif pada environment `Development` **dan** saat mode demo aktif. Mode demo tersimpan di `cfg.DemoModeSetting`, hanya dapat diubah Administrator di Development lewat `POST /api/v1/admin/settings/demo-mode/enable|disable` dengan `If-Match`, `Idempotency-Key`, audit konfigurasi, outbox, dan receipt; saat nonaktif `DevelopmentAuthenticationHandler` menolak header `X-Dev-*` (`401`) dan `GET /api/v1/auth/options` menyembunyikan tombol demo. `DemoMode:EnabledByDefault` hanya dibaca pada Development; di luar Development nilainya selalu false.
-- [ ] Akun lokal, login cookie HTTP-only, dan `UserAuthorizationApproval:AllowAdministratorSelfApproval=true` hanya untuk `Development`; default kode dan konfigurasi non-Development tetap mewajibkan maker dan checker berbeda. Role dan scope dihitung ulang dari assignment approved/effective pada setiap request, bukan dari cookie. Login memverifikasi kredensial melalui Portal API (`IDirectoryAuthenticator` → `PortalApiDirectoryAuthenticator`, `POST /api/v1/User/SecureAuth`; Portal yang melakukan bind Active Directory) lebih dulu lalu fallback ke password lokal; `200` ber-token berarti sah, `401` berarti salah, respons lain/timeout berarti tidak tersedia. Kedua jalur mewajibkan `UserAccount` terdaftar dan aktif; Portal API tidak pernah memprovisikan user, role, atau scope, dan token JWT Portal dibuang.
+- [ ] `UserAuthorizationApproval:AllowAdministratorSelfApproval=true` hanya untuk `Development`; default kode dan konfigurasi non-Development tetap mewajibkan maker dan checker berbeda. Role dan scope dihitung ulang dari assignment approved/effective pada setiap request, bukan dari cookie. Login memverifikasi kredensial melalui Portal API (`IDirectoryAuthenticator` → `PortalApiDirectoryAuthenticator`, `POST /api/v1/User/SecureAuth`; Portal yang melakukan bind Active Directory) lebih dulu lalu fallback ke password lokal; `200` ber-token berarti sah, `401` berarti salah, respons lain/timeout berarti tidak tersedia. Kedua jalur mewajibkan `UserAccount` terdaftar dan aktif; Portal API tidak pernah memprovisikan user, role, atau scope, dan token JWT Portal dibuang.
+- [ ] `POST /api/v1/auth/login` di luar `Development` hanya aktif dengan `Authentication:LoginEnabled=true` (`LoginSettings`), dan startup gagal bila nilai itu aktif tanpa `PortalAuth` https (OPN-007). Cookie sesi wajib `Secure` di luar `Development`. `ForwardedHeaders:KnownNetworks`/`KnownProxies` membatasi `X-Forwarded-*` ke subnet nginx; rate limiter in-process dikunci per subject id atau alamat klien (`RateLimitSettings`), dengan policy `login` yang lebih ketat; nginx (`prod.conf.template`) adalah limiter utama. Respons `/api/*` membawa `Cache-Control: no-store`.
 - [ ] Assignment langsung (`POST /api/v1/admin/authorizations/direct`) hanya menerima user, role, area bila role area-scoped, dan periode; action code dan kompetensi diturunkan server dari `UserAuthorizationRoleProfiles`, input action code dari klien diabaikan, dan tanpa profil terkonfigurasi jalur ini fail-closed. Profil di `appsettings.Development.json` adalah konfigurasi UX/UAT, bukan matriks OPN-002; jangan menyalinnya ke production.
-- [ ] `DevelopmentUploadTrustScanner` hanya terdaftar saat environment `Development` **dan** `Attachments:RequireMalwareScan=false`; di luar itu `UnavailableMalwareScanner` tetap fail-closed. Jangan melonggarkan kondisi ini atau membawanya ke konfigurasi production.
+- [ ] `TrustedUploadScanner` terdaftar hanya saat `Attachments:RequireMalwareScan=false` (evidence `trusted-upload:<sha256>`); default dasar tetap `true` sehingga `UnavailableMalwareScanner` fail-closed. Produksi memakai `false` sebagai risiko yang diterima (`docs/decisions/PROD-UPLOAD-SCAN.md`); jangan mengubah default dasar dan jangan menghapus kontrol kompensasi (signature check, ukuran, unduhan attachment `nosniff`/`no-store`).
 - [ ] Tidak ada secret, `.env`, token, connection string ber-secret, PII nyata, isi attachment, atau build output yang masuk Git.
 - [ ] Log tidak memuat token, secret, isi dokumen, atau PII berlebih; correlation ID (`X-Correlation-ID`) tetap dipertahankan.
 - [ ] File attachment berstatus selain `CLEAN` tidak dapat diunduh; hanya paket cetak `READY` yang merupakan dokumen resmi.
 - [ ] OpenAPI, CORS, TLS, CSP, upload limit, dan rate limit tetap fail-safe; OpenAPI tidak terekspos di luar Development.
-- [ ] Konfigurasi `PortalAuth:*` tidak memuat kredensial service account (hanya meneruskan kredensial pengguna ke `SecureAuth`); `PortalAuth:Enabled` tidak ditaruh di `appsettings.json` dasar; `BaseUrl` ber-skema `http://` hanya diterima pada Development dan menggagalkan startup di luar itu. Service `api` di compose tetap berada di network `frontend` dengan `extra_hosts` ke `host-gateway` agar panggilan Portal keluar tidak diam-diam gagal ke password lokal.
+- [ ] Konfigurasi `PortalAuth:*` tidak memuat kredensial service account (hanya meneruskan kredensial pengguna ke `SecureAuth`); `PortalAuth:Enabled` tidak ditaruh di `appsettings.json` dasar; `BaseUrl` ber-skema `http://` hanya diterima pada Development dan menggagalkan startup di luar itu. Service `api` di compose tetap berada di network `frontend` (dev: `extra_hosts` ke `host-gateway`) agar panggilan Portal keluar tidak diam-diam gagal ke password lokal.
+- [ ] `compose.prod.yaml` (OPN-009): `ASPNETCORE_ENVIRONMENT=Production`, TLS di nginx, `MSSQL_PID=Express`, SQL hanya pada `PTW_SQL_BIND_ADDRESS`, `sa` hanya untuk `migrate`/`db-init`, api/worker memakai `ptw_app`, container read-only tanpa capability, `.env` mode 600 sebagai penyimpan secret. Jangan mempublikasikan 1433 ke semua antarmuka, jangan memakai `Developer` edition, dan jangan memindahkan secret ke Git.
 - [ ] Tidak ada dependency vulnerability high/critical yang dibiarkan, dan tidak ada audit yang dinonaktifkan agar build hijau.
 
 ### Gate E — Paket cetak
@@ -224,6 +231,6 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 ## 6. Kapan harus berhenti dan bertanya
 
 Hentikan pekerjaan dan minta keputusan eksplisit bila perubahan menyentuh salah satu dari:
-invariant Gate A; kebijakan OPN yang belum disahkan; layout formulir terkontrol; retensi,
-RPO/RTO, atau topologi HA; kontrak SSO/E-SIMI produksi; penghapusan volume atau database;
-atau pelonggaran default produksi yang saat ini fail-closed.
+invariant Gate A; kebijakan OPN yang belum disahkan; layout formulir terkontrol; retensi atau
+RPO/RTO; kontrak E-SIMI produksi; perubahan topologi di luar OPN-009; penghapusan volume atau
+database; atau pelonggaran default produksi yang saat ini fail-closed.

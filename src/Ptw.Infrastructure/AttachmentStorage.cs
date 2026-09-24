@@ -207,11 +207,14 @@ internal sealed class UnavailableMalwareScanner : IMalwareScanner
 }
 
 /// <summary>
-/// Development-only adapter that makes local uploads immediately usable without invoking an
-/// external malware scanner. Production never registers this adapter and remains fail-closed.
+/// Adapter used when <c>Attachments:RequireMalwareScan=false</c>: an upload that passed the
+/// PDF/JPEG/PNG signature check is recorded as <c>CLEAN</c> without an external scanner. The evidence
+/// reference names the mode explicitly so an auditor can tell these records from a real scan result.
 /// </summary>
-internal sealed class DevelopmentUploadTrustScanner(IClock clock) : IMalwareScanner
+internal sealed class TrustedUploadScanner(IClock clock) : IMalwareScanner
 {
+    public const string EvidencePrefix = "trusted-upload:";
+
     public bool IsAvailable => true;
 
     public Task<MalwareScanResult> ScanAsync(
@@ -221,6 +224,6 @@ internal sealed class DevelopmentUploadTrustScanner(IClock clock) : IMalwareScan
         CancellationToken cancellationToken) =>
         Task.FromResult(new MalwareScanResult(
             "CLEAN",
-            $"development-trusted-upload:{sha256.ToLowerInvariant()}",
+            $"{EvidencePrefix}{sha256.ToLowerInvariant()}",
             clock.UtcNow));
 }

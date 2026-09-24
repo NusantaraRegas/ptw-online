@@ -362,7 +362,7 @@ Pipeline paket cetak:
 
 1. `ApproveAndIssuePermit` membuat `PrintPackageSnapshot` dari versi PTW exact, decision, evidence Bagian 5/7, approval, dan `SponsorPrintEvidence` (nama, jabatan, departemen, waktu submit, spesimen tanda tangan berversi).
 2. `PrintPackageRenderWorker` mengklaim job `PENDING`/`RETRYING` yang jatuh tempo.
-3. `PtwFormRenderer` (PDFsharp, versi `ptw-form-renderer/3.4.1`) menggambar template vektor formulir sesuai kelas izin sebagai dua halaman A3 (halaman 1 landscape sampai Bagian 7; halaman 2 portrait mulai Bagian 8), lalu meng-overlay: klasifikasi header, Bagian 1 (+ detail `Lain-lain`), Bagian 2, Bagian 3 Sponsor, Bagian 4, Bagian 5, masa berlaku dan checklist kondisi operasi Bagian 7, baris SO/Officer dan Manager dengan nama/jabatan/spesimen/waktu WIB. Bagian 6 dan 8–10 kosong. Font dan logo embedded agar deterministik.
+3. `PtwFormRenderer` (PDFsharp, versi `ptw-form-renderer/3.4.3`) menggambar template vektor formulir sesuai kelas izin sebagai dua halaman A3 (halaman 1 landscape sampai Bagian 7; halaman 2 portrait mulai Bagian 8), lalu meng-overlay: klasifikasi header, Bagian 1 (+ detail `Lain-lain`), Bagian 2, Bagian 3 Sponsor, Bagian 4, Bagian 5, masa berlaku dan checklist kondisi operasi Bagian 7, serta baris reviewer SO/Officer dan approver Manager dengan nama, jabatan profil pada snapshot, spesimen, dan waktu WIB. Data pada sel kosong, termasuk Nama Equipment, ditulis tanpa menutup garis tabel template. Bagian 6 dan 8–10 kosong. Font dan logo embedded agar deterministik.
 4. Worker menghitung SHA-256, menyimpan privat, dan menandai `READY`; retry idempotent; `FAILED` setelah `MaxRenderAttempts`.
 5. Perubahan output menaikkan `RendererVersion` dan disertai regresi di `tests/Ptw.Printing.Tests`.
 

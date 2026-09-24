@@ -57,7 +57,7 @@ describe('PermitCreate', () => {
         label: 'Prosedur Pekerjaan',
         templateColumn: 0,
         templateIndex: 3,
-        required: true,
+        required: false,
         requiresMetadata: false,
       },
       {
@@ -87,6 +87,10 @@ describe('PermitCreate', () => {
     );
     expect(additionalFieldset?.querySelectorAll('input').length).toBe(1);
     expect(additionalFieldset?.textContent).toContain('MSDS');
+    const selectableLabels = Array.from<HTMLElement>(
+      additionalFieldset?.querySelectorAll('label') ?? [],
+    ).map((label) => label.textContent);
+    expect(selectableLabels).not.toContainEqual(expect.stringContaining('Prosedur Pekerjaan'));
 
     const form = (fixture.componentInstance as unknown as { form: FormGroup }).form;
     expect(form.controls['requiredDocumentCodes'].value).toEqual(['JSA', 'WORK_PROCEDURE']);

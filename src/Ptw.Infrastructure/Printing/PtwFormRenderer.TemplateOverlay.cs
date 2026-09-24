@@ -46,7 +46,13 @@ internal sealed partial class PtwFormRenderer
         OverlayText(canvas, layout.AppliedDate, FormCanvas.Wib(snapshot.CreatedAt, "dd/MM/yy"), 4.0);
         OverlayText(canvas, layout.PlannedStart, FormCanvas.Wib(draft.ValidFrom, "dd/MM/yy HH:mm"), 4.0);
         OverlayText(canvas, layout.EquipmentTag, draft.EquipmentTag, 4.0);
-        OverlayFittedText(canvas, layout.EquipmentName, draft.EquipmentName, 4.0, 2.8);
+        OverlayFittedText(
+            canvas,
+            layout.EquipmentName,
+            draft.EquipmentName,
+            4.0,
+            2.8,
+            backgroundBottomInset: 1.5);
         OverlayText(canvas, layout.PlantArea, draft.PlantArea, 4.0);
 
         var description = string.IsNullOrWhiteSpace(draft.Description)
@@ -291,6 +297,7 @@ internal sealed partial class PtwFormRenderer
                 canvas,
                 layout.ApprovalRows[0],
                 review.ActorName,
+                review.ActorPosition,
                 review.ReviewedAt,
                 "Diverifikasi elektronik",
                 review.Signature);
@@ -302,6 +309,7 @@ internal sealed partial class PtwFormRenderer
                 canvas,
                 layout.ApprovalRows[1],
                 approval.ActorName ?? approval.ActorId,
+                approval.ActorPosition,
                 approval.ApprovedAt,
                 "Disetujui elektronik",
                 approval.Signature);
@@ -312,11 +320,19 @@ internal sealed partial class PtwFormRenderer
         FormCanvas canvas,
         ApprovalOverlayRow target,
         string actorName,
+        string actorPosition,
         DateTimeOffset decidedAt,
         string signatureLabel,
         VisualSignatureEvidence? signature)
     {
         OverlayText(canvas, target.Name, actorName, 3.6, align: TextAlign.Center);
+        ReplaceTableCellLabel(
+            canvas,
+            target.Position,
+            actorPosition,
+            preferredSize: 3.6,
+            minimumSize: 2.4,
+            align: TextAlign.Center);
         if (!TryOverlaySignature(canvas, target.Signature, signature))
         {
             OverlayText(canvas, target.Signature, signatureLabel, 3.2, align: TextAlign.Center);
@@ -432,7 +448,8 @@ internal sealed partial class PtwFormRenderer
         PdfRect rect,
         string? text,
         double preferredSize,
-        double minimumSize)
+        double minimumSize,
+        double backgroundBottomInset = 0.8)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -445,7 +462,12 @@ internal sealed partial class PtwFormRenderer
             size -= 0.2;
         }
 
-        canvas.Fill(Pt(rect.X), Pt(rect.Y + 0.8), Pt(rect.Width), Pt(rect.Height - 1.6), XColors.White);
+        canvas.Fill(
+            Pt(rect.X),
+            Pt(rect.Y + 0.8),
+            Pt(rect.Width),
+            Pt(rect.Height - 0.8 - backgroundBottomInset),
+            XColors.White);
         canvas.Text(Pt(rect.X), Pt(rect.Y), Pt(rect.Width), Pt(rect.Height), text, size);
     }
 
@@ -467,6 +489,29 @@ internal sealed partial class PtwFormRenderer
         canvas.Text(Pt(rect.X), Pt(rect.Y), Pt(rect.Width), Pt(rect.Height), text, size, align: align);
     }
 
+    private static void ReplaceTableCellLabel(
+        FormCanvas canvas,
+        PdfRect rect,
+        string text,
+        double preferredSize,
+        double minimumSize,
+        TextAlign align = TextAlign.Left)
+    {
+        var size = preferredSize;
+        while (size > minimumSize && canvas.MeasureMm(text, size, bold: false) > Pt(rect.Width))
+        {
+            size -= 0.2;
+        }
+
+        canvas.Fill(
+            Pt(rect.X),
+            Pt(rect.Y + 0.8),
+            Pt(rect.Width),
+            Pt(rect.Height - 1.6),
+            XColors.White);
+        canvas.Text(Pt(rect.X), Pt(rect.Y), Pt(rect.Width), Pt(rect.Height), text, size, align: align);
+    }
+
     private static double Pt(double points) => points * PointToMillimetre;
 }
 
@@ -476,7 +521,11 @@ internal readonly record struct PdfLine(PdfPoint Start, PdfPoint End);
 
 internal readonly record struct PdfRect(double X, double Y, double Width, double Height);
 
-internal sealed record ApprovalOverlayRow(PdfRect Name, PdfRect Signature, PdfRect Date);
+internal sealed record ApprovalOverlayRow(
+    PdfRect Name,
+    PdfRect Position,
+    PdfRect Signature,
+    PdfRect Date);
 
 internal sealed record TemplateOverlayLayout(
     int PageNumber,
@@ -573,8 +622,8 @@ internal static class TemplateOverlayCatalog
         new(480, 582, 55, 7),
         new(571, 582, 76, 7),
         [
-            new(new(373, 628, 78, 14), new(543, 628, 89, 14), new(634, 628, 138, 14)),
-            new(new(373, 643, 78, 14), new(543, 643, 89, 14), new(634, 643, 138, 14))
+            new(new(373, 628, 78, 14), new(453, 628, 81, 14), new(543, 628, 89, 14), new(634, 628, 138, 14)),
+            new(new(373, 643, 78, 14), new(453, 643, 81, 14), new(543, 643, 89, 14), new(634, 643, 138, 14))
         ],
         new(954, 479, 220, 8),
         new(978.5, 541.5, 94, 8),
@@ -625,8 +674,8 @@ internal static class TemplateOverlayCatalog
         new(490, 584, 61, 7),
         new(570, 584, 70, 7),
         [
-            new(new(367, 630, 84, 14), new(544, 630, 88, 14), new(634, 630, 110, 14)),
-            new(new(367, 645, 84, 14), new(544, 645, 88, 14), new(634, 645, 110, 14))
+            new(new(367, 630, 84, 14), new(463, 630, 78, 14), new(544, 630, 88, 14), new(634, 630, 110, 14)),
+            new(new(367, 645, 84, 14), new(463, 645, 78, 14), new(544, 645, 88, 14), new(634, 645, 110, 14))
         ],
         new(944, 478.5, 210, 8),
         new(961, 534.8, 94, 8),
@@ -677,8 +726,8 @@ internal static class TemplateOverlayCatalog
         new(452, 581, 69, 7),
         new(543, 581, 73, 7),
         [
-            new(new(329, 634, 86, 14), new(527, 634, 88, 14), new(618, 634, 141, 14)),
-            new(new(329, 648, 86, 14), new(527, 648, 88, 14), new(618, 648, 141, 14))
+            new(new(329, 634, 86, 14), new(422, 634, 87, 14), new(527, 634, 88, 14), new(618, 634, 141, 14)),
+            new(new(329, 648, 86, 14), new(422, 648, 87, 14), new(527, 648, 88, 14), new(618, 648, 141, 14))
         ],
         new(937, 467.5, 205, 8),
         new(959.2, 527.9, 89, 8),

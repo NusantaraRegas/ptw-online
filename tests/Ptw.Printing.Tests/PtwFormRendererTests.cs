@@ -82,6 +82,34 @@ public sealed class PtwFormRendererTests
     }
 
     [Fact]
+    public void Bagian7AuthorityRowsUseActorPositionsFromTheImmutableSnapshot()
+    {
+        var renderer = new PtwFormRenderer();
+        var baseline = Snapshot(PermitClass.HotWork);
+        var actualPositions = baseline with
+        {
+            AreaOperationsReview = baseline.AreaOperationsReview! with
+            {
+                ActorPosition = "Lead II Operator ORF"
+            },
+            Approval = baseline.Approval! with
+            {
+                ActorPosition = "Manager Gas Distribution&ORF Management"
+            }
+        };
+
+        var baselineDocument = renderer.Render(
+            new(baseline, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var actualPositionDocument = renderer.Render(
+            new(actualPositions, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+
+        Assert.NotEqual(
+            Canonicalise(baselineDocument.Content),
+            Canonicalise(actualPositionDocument.Content));
+        DumpForVisualReview(actualPositionDocument.Content, "BAGIAN7-ACTOR-POSITIONS");
+    }
+
+    [Fact]
     public void VersionedVisualSignatureChangesApprovalRowAndRemainsDeterministic()
     {
         var renderer = new PtwFormRenderer();
@@ -260,6 +288,23 @@ public sealed class PtwFormRendererTests
         var emptyDocument = renderer.Render(new(empty, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
 
         Assert.NotEqual(Canonicalise(populatedDocument.Content), Canonicalise(emptyDocument.Content));
+    }
+
+    [Fact]
+    public void EquipmentNameKeepsTheControlledTableRulesConnected()
+    {
+        var renderer = new PtwFormRenderer();
+        var baseline = Snapshot(PermitClass.HotWork);
+        var populated = baseline with
+        {
+            Permit = baseline.Permit with { EquipmentName = "Tes nama barang" }
+        };
+
+        var document = renderer.Render(
+            new(populated, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+
+        Assert.NotEmpty(document.Content);
+        DumpForVisualReview(document.Content, "EQUIPMENT-LINE-CONTINUITY");
     }
 
     [Theory]

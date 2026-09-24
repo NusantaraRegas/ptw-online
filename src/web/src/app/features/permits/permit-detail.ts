@@ -620,7 +620,9 @@ export class PermitDetail {
   }
 
   protected additionalSupportingDocumentOptions(): PermitSupportingDocumentOption[] {
-    return this.supportingDocumentOptions().filter((option) => !option.required);
+    return this.supportingDocumentOptions().filter(
+      (option) => !option.required && option.code !== 'WORK_PROCEDURE',
+    );
   }
 
   protected toggleSupportingDocument(option: PermitSupportingDocumentOption, event: Event): void {

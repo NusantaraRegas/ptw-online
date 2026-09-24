@@ -867,7 +867,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             var mutation = Required(await response.Content.ReadFromJsonAsync<PermitAttachmentMutationResponse>());
             Assert.Equal("CLEAN", mutation.Attachment.ScanStatus);
             Assert.StartsWith(
-                "development-trusted-upload:",
+                "trusted-upload:",
                 Assert.IsType<string>(mutation.Attachment.ScanEvidenceReference));
             Assert.NotNull(mutation.Attachment.ScannedAt);
             Assert.Equal("SUPPORTING", mutation.Attachment.Category);

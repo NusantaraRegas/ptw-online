@@ -1,15 +1,19 @@
+using System.Net;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Primitives;
 using Ptw.Api;
 using Ptw.Api.Security;
 using Ptw.Application;
 using Ptw.Infrastructure;
 using Ptw.Infrastructure.Persistence;
+using Ptw.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -59,6 +63,40 @@ builder.Services.AddSingleton(
         .Get<UserAuthorizationApprovalSettings>()
     ?? new UserAuthorizationApprovalSettings());
 builder.Services.AddPtwInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
+// Resolved from IConfiguration at first use rather than from builder.Configuration here, so sources
+// appended after the builder phase (the integration-test host does this) still apply. Login settings
+// are validated right after Build() below so a bad configuration fails startup, not the first login.
+builder.Services.AddSingleton(provider => LoginSettings.FromConfiguration(
+    provider.GetRequiredService<IConfiguration>(),
+    provider.GetRequiredService<IHostEnvironment>().IsDevelopment(),
+    provider.GetRequiredService<PortalAuthenticationSettings>()));
+builder.Services.AddSingleton(provider =>
+    provider.GetRequiredService<IConfiguration>().GetSection(RateLimitSettings.SectionName).Get<RateLimitSettings>()
+    ?? new RateLimitSettings());
+// X-Forwarded-* headers are honoured only from the reverse proxy networks listed in configuration.
+// Without that list the API keeps the direct connection address, so nothing outside the proxy can
+// spoof a client address into the rate limiter or the cookie scheme.
+var knownProxyNetworks = builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [];
+var knownProxies = builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+var forwardedHeadersConfigured = knownProxyNetworks.Length > 0 || knownProxies.Length > 0;
+if (forwardedHeadersConfigured)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.ForwardLimit = 1;
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+        foreach (var network in knownProxyNetworks)
+        {
+            options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+        }
+        foreach (var proxy in knownProxies)
+        {
+            options.KnownProxies.Add(IPAddress.Parse(proxy));
+        }
+    });
+}
 var attachmentMaxFileBytes = builder.Configuration.GetValue<long>("Attachments:MaxFileBytes");
 if (attachmentMaxFileBytes > 0)
 {
@@ -87,7 +125,10 @@ builder.Services
         options.Cookie.Name = "ptw.development.session";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Strict;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        // Development serves http://localhost; everywhere else the cookie must never travel in clear.
+        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
         options.SlidingExpiration = true;
         options.Events.OnRedirectToLogin = context =>
         {
@@ -139,16 +180,36 @@ builder.Services
 builder.Services.AddAuthorization();
 builder.Services.AddRateLimiter(options =>
 {
+    // The proxy (nginx limit_req) is the primary limiter; this is an in-process backstop. Signed-in
+    // callers are keyed by subject id so two accounts with the same display name never share a
+    // bucket, and anonymous callers by the client address the forwarded-headers policy resolved.
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            context.User.Identity?.Name ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+    {
+        var settings = context.RequestServices.GetRequiredService<RateLimitSettings>();
+        return RateLimitPartition.GetFixedWindowLimiter(
+            RateLimitSettings.ClientKey(context),
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 120,
-                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = settings.GlobalPermitLimit,
+                Window = TimeSpan.FromSeconds(settings.WindowSeconds),
                 QueueLimit = 0
-            }));
+            });
+    });
+    // Login forwards the credential to the Portal API (Active Directory). A tighter per-address
+    // window slows password spraying and lockout attacks against named staff accounts.
+    options.AddPolicy(RateLimitSettings.LoginPolicy, context =>
+    {
+        var settings = context.RequestServices.GetRequiredService<RateLimitSettings>();
+        return RateLimitPartition.GetFixedWindowLimiter(
+            RateLimitSettings.AddressKey(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = settings.LoginPermitLimit,
+                Window = TimeSpan.FromSeconds(settings.WindowSeconds),
+                QueueLimit = 0
+            });
+    });
 });
 builder.Services.AddHealthChecks().AddCheck<PtwDatabaseHealthCheck>("ptw-database", tags: ["ready"]);
 
@@ -162,12 +223,36 @@ if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))
     return;
 }
 
+// Fail fast on an inconsistent login configuration (OPN-007) instead of on the first login attempt.
+_ = app.Services.GetRequiredService<LoginSettings>();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
+if (forwardedHeadersConfigured)
+{
+    app.UseForwardedHeaders();
+}
 app.UseExceptionHandler();
+app.Use(async (context, next) =>
+{
+    // API responses carry permit and personal data; browsers and intermediaries must not cache
+    // them. Endpoints that already chose a cache policy keep it.
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.OnStarting(() =>
+        {
+            if (StringValues.IsNullOrEmpty(context.Response.Headers.CacheControl))
+            {
+                context.Response.Headers.CacheControl = "no-store";
+            }
+            return Task.CompletedTask;
+        });
+    }
+    await next();
+});
 app.Use(async (context, next) =>
 {
     const string header = "X-Correlation-ID";

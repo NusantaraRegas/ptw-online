@@ -14,9 +14,10 @@ Development" pada record OPN merujuk keputusan tersebut dan tidak mengubah statu
 | [OPN-004](OPN-004.md) | Gas test dan monitoring | HSE | DRAFT | field readiness dan retest |
 | [OPN-005](OPN-005.md) | Urutan review dan SLA | PO/HSE/Operasi | DRAFT | SLA, reminder, eskalasi |
 | [OPN-006](OPN-006.md) | Acknowledgement dan onboarding kontraktor | Legal/HSE/Operasi | DRAFT | contractor journey, scope perusahaan |
-| [OPN-007](OPN-007.md) | SSO dan E-SIMI | TI | DRAFT | production identity/integration |
+| [OPN-007](OPN-007.md) | SSO dan E-SIMI | TI | ACCEPTED (identitas produksi, 24 Sep 2026); E-SIMI DRAFT | kontrak E-SIMI (backlog) |
 | [OPN-008](OPN-008.md) | Retensi, e-sign, klasifikasi, RPO/RTO | Legal/Records/TI | DRAFT | records/security/DR, status hukum bukti persetujuan |
-| [OPN-009](OPN-009.md) | Topologi produksi dan HA | TI | DRAFT | production deployment |
+| [OPN-009](OPN-009.md) | Topologi produksi dan HA | TI | ACCEPTED (24 Sep 2026) | observability/on-call belum diputuskan |
+| [PROD-UPLOAD-SCAN](PROD-UPLOAD-SCAN.md) | Unggahan tanpa malware scanner | TI/HSE | ACCEPTED risiko (24 Sep 2026) | scanner resmi (backlog) |
 | [PTW-RENEWAL](PTW-RENEWAL.md) | Renewal berbasis review pemilik wilayah | PO/Operasi | IMPLEMENTED DEVELOPMENT BASELINE | pengesahan produksi mengikuti OPN-002/010 |
 
 OPN-010 (definisi tujuh hari dan batas renewal), OPN-011 (materi kampanye), dan OPN-012 (QR dan
