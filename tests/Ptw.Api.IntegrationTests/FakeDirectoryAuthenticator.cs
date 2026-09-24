@@ -4,7 +4,7 @@ using Ptw.Application;
 namespace Ptw.Api.IntegrationTests;
 
 /// <summary>
-/// Replaces the LDAP bind in integration tests. Credentials are keyed per username so tests in the
+/// Replaces the Portal API login call in integration tests. Credentials are keyed per username so tests in the
 /// shared collection can register their own users without interfering with each other.
 /// </summary>
 public sealed class FakeDirectoryAuthenticator : IDirectoryAuthenticator

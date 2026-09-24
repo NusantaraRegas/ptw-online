@@ -5,9 +5,9 @@ public sealed class UserAuthenticationService(
     IDirectoryAuthenticator directoryAuthenticator)
 {
     /// <summary>
-    /// Verifies the credential against Active Directory first and falls back to the local
-    /// password store. Either path requires a registered, active local account: the directory
-    /// only proves the password, it never provisions users, roles, or scope.
+    /// Verifies the credential through the Portal API (which binds to Active Directory) first and
+    /// falls back to the local password store. Either path requires a registered, active local
+    /// account: the portal only proves the password, it never provisions users, roles, or scope.
     /// </summary>
     public async Task<AuthenticatedUser> AuthenticateAsync(
         string userName,
@@ -25,11 +25,11 @@ public sealed class UserAuthenticationService(
             var registered = await store.FindByUserNameAsync(userName, cancellationToken);
             if (registered is { Account.IsActive: true })
             {
-                return new AuthenticatedUser(registered, IdentitySources.ActiveDirectory);
+                return new AuthenticatedUser(registered, IdentitySources.PortalApi);
             }
         }
 
-        // Directory rejection, outage, disabled directory, or an unregistered directory user all
+        // Portal rejection, outage, disabled portal, or an unregistered portal user all
         // fall through to the local credential so registered local accounts keep working.
         var local = await store.AuthenticateAsync(userName, password, cancellationToken)
             ?? throw new AuthenticationFailedException();

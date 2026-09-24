@@ -563,7 +563,7 @@ public sealed class OperationalPolicyApiTests(PtwApiFactory factory)
         null,
         ["Energi tersimpan"],
         ["Isolasi energi"],
-        ["JSA"],
+        ["JSA", "WORK_PROCEDURE"],
         WorkTypeCodes: ["COLD_MECHANICAL"],
         HeaderClassificationCodes: ["COLD_HIGH_RISK"]);
 

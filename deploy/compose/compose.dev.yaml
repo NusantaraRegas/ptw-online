@@ -43,14 +43,19 @@ services:
       Attachments__StoragePath: /var/lib/ptw/attachments
       GeneratedDocuments__StoragePath: /var/lib/ptw/generated-documents
       Authentication__DataProtectionPath: /var/lib/ptw/data-protection
+      PortalAuth__BaseUrl: ${PTW_PORTAL_API_BASE_URL:-http://local.api.portal.com/}
     volumes:
       - attachment-data:/var/lib/ptw/attachments
       - generated-document-data:/var/lib/ptw/generated-documents
       - data-protection-keys:/var/lib/ptw/data-protection
+    # The Portal API is an IIS site on the developer host bound to this host name, so the container
+    # must resolve it to the host gateway; the Host header carries the name IIS routes on.
+    extra_hosts:
+      - "${PTW_PORTAL_API_HOST:-local.api.portal.com}:host-gateway"
     depends_on:
       migrate:
         condition: service_completed_successfully
-    # `frontend` is needed for outbound LDAP to the Active Directory domain controller (AD:Server);
+    # `frontend` is needed for the outbound login call to the Portal API (PortalAuth:BaseUrl);
     # `backend` alone is internal-only and would silently force every login onto local passwords.
     networks: [frontend, backend]
     healthcheck:

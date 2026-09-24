@@ -27,7 +27,8 @@ public sealed record ResolvedUserIdentity(
     IReadOnlySet<string> CompetencyCodes);
 
 /// <summary>
-/// Outcome of verifying a credential against an external directory (Active Directory via LDAP).
+/// Outcome of verifying a credential against an external directory (the Portal API, which in turn
+/// binds to Active Directory).
 /// </summary>
 public enum DirectoryAuthenticationResult
 {
@@ -60,7 +61,7 @@ public static class IdentitySources
     // Both values keep the "development" prefix on purpose: the login endpoint is Development-only
     // and HttpActorContext derives the actor's development flag from that prefix.
     public const string Local = "development-local";
-    public const string ActiveDirectory = "development-active-directory";
+    public const string PortalApi = "development-portal-api";
 }
 
 public interface IUserDirectoryStore

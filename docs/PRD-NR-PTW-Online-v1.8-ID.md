@@ -4,7 +4,7 @@
 | Atribut | Nilai |
 | --- | --- |
 | Versi | 1.8 — penyelarasan flow dengan sistem berjalan: review Bagian 7 SO/Officer, pembagian pengisian formulir, renewal dan closure berbasis hardcopy terverifikasi |
-| Tanggal | 22 September 2026 |
+| Tanggal | 24 September 2026 |
 | Status | Draft untuk validasi Product Owner dan SME |
 | Acuan bisnis | [BRD v1.8](BRD-NR-PTW-Online-v1.8-ID.md) |
 | Acuan desain | [FSD v1.8](FSD-NR-PTW-Online-v1.8-ID.md) |
@@ -17,7 +17,7 @@ Lihat BRD v1.8 Bagian 0 untuk ringkasan bisnis. Dampak pada requirement produk:
 
 - Epic F memperkenalkan task review Bagian 7 (`AREA_OPERATION_REVIEW`) untuk pool SO/Officer pemilik wilayah di antara validasi HSE dan approval Manager, serta pemisahan tugas empat aktor.
 - Epic C membatasi input Sponsor pada header klasifikasi dan Bagian 1–4; Bagian 5 milik PIC HSE (Epic F); checklist kondisi operasi Bagian 7 milik SO/Officer. Input CLSR, SIMOPS, dan isolasi/precaution bebas dihapus dari form Sponsor.
-- Epic E mewajibkan lampiran JSA, ID, BPJS TK, FTW, dan E-SIMI sebelum submit, dan menautkan setiap pilihan Bagian 4 ke lampiran.
+- Epic E mewajibkan lampiran JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, dan E-SIMI sebelum submit; JSA dan Prosedur Pekerjaan otomatis dipilih pada Bagian 4, dan setiap pilihan Bagian 4 ditautkan ke lampiran.
 - Epic H mengganti "renewal draft langsung" dengan permintaan renewal yang ditinjau Manager pemilik wilayah, dan menambahkan verifikasi Bagian 10 terstruktur serta jalur tindak lanjut closure.
 - Epic G menetapkan paket cetak dua halaman A3 yang setia pada formulir terkontrol; QR dan halaman kampanye menjadi backlog.
 - Epic A menetapkan akun lokal, cookie HTTP-only, assignment role dengan action code turunan server, dan spesimen tanda tangan berversi untuk rilis Development; SSO produksi tetap OPN-007.
@@ -161,11 +161,11 @@ Tidak ada state digital `APPROVED`, `READY_FOR_ISSUE`, `WORK_PERIOD_ACTIVE`, ata
 | ID | Requirement / acceptance utama |
 | --- | --- |
 | FR-PTW-001 | Sponsor membuat draft dengan judul, uraian, lokasi aktif, kelas izin, tipe pengaju, perusahaan, pelaksana, masa berlaku, dan referensi E-SIMI. Sponsor aktif berasal dari `/api/v1/me`. |
-| FR-PTW-002 | Form Sponsor memuat: klasifikasi header (HOT multi-select `Api Terbuka`/`Percikan Api`; COLD tepat satu `Low Risk`/`High Risk`; CSE tanpa pilihan), Bagian 1 multi-select dari katalog per kelas dengan detail `Lain-lain` maksimum 80 karakter, Bagian 2 (nomor/nama equipment, Work Order No., plant/area, referensi bahaya tambahan opsional), Bagian 3 (Sponsor/pelaksana/perusahaan), dan Bagian 4 (15 pilihan dokumen, JSA wajib dengan nomor/revisi/tanggal). |
+| FR-PTW-002 | Form Sponsor memuat: klasifikasi header (HOT multi-select `Api Terbuka`/`Percikan Api`; COLD tepat satu `Low Risk`/`High Risk`; CSE tanpa pilihan), Bagian 1 multi-select dari katalog per kelas dengan detail `Lain-lain` maksimum 80 karakter, Bagian 2 (nomor/nama equipment, Work Order No., plant/area, referensi bahaya tambahan opsional), Bagian 3 (Sponsor/pelaksana/perusahaan), dan Bagian 4 (15 pilihan dokumen; JSA dan Prosedur Pekerjaan wajib serta otomatis terpilih; JSA membawa nomor/revisi/tanggal). |
 | FR-PTW-003 | Form tidak menyediakan Bagian 5, CLSR, SIMOPS, isolasi/precaution, atau kolom bebas bahaya/pengendalian; payload yang membawa Bagian 5 ditolak dan field legacy dikosongkan server. |
 | FR-PTW-004 | Nomor resmi baru dibuat saat submit; draft memakai ID internal. |
 | FR-PTW-005 | Validity maksimum tujuh hari dan awal < akhir divalidasi server. |
-| FR-PTW-006 | Halaman lampiran menampilkan kesiapan dokumen dasar (JSA, ID, BPJS TK, FTW, E-SIMI) dan pilihan Bagian 4 yang belum berlampiran sebelum submit; server mengulang validasi. |
+| FR-PTW-006 | Halaman lampiran menampilkan kesiapan dokumen dasar (JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, E-SIMI) dan pilihan Bagian 4 yang belum berlampiran sebelum submit; server mengulang validasi. |
 | FR-PTW-007 | Draft penerus renewal memuat data perencanaan Bagian 1–4 dari PTW asal dengan periode yang disetujui; Sponsor dapat mengeditnya dan wajib mengunggah ulang lampiran. |
 | FR-PTW-008 | Submit ulang setelah revisi menaikkan versi PTW dan menginvalidasi evidence Bagian 5/7 versi lama. |
 | FR-PTW-009 | Draft menyimpan submitter type (`CONTRACTOR`/`USER_SPONSOR`), perusahaan, pelaksana, dan Sponsor accountable. |
@@ -193,7 +193,7 @@ Tidak ada state digital `APPROVED`, `READY_FOR_ISSUE`, `WORK_PERIOD_ACTIVE`, ata
 | FR-DOC-003 | Lampiran menyimpan kode dokumen (`supportingDocumentCode` untuk dokumen dasar dan Bagian 4), nomor/revisi/tanggal untuk JSA dan hardcopy, uploader, timestamp, target versi PTW, PrintPackage untuk hardcopy, dan lineage penggantian. |
 | FR-DOC-004 | File tidak diberikan lewat public path; download memakai endpoint terotorisasi; file selain `CLEAN` tidak dapat diunduh. |
 | FR-DOC-005 | Penggantian/penghapusan file bersifat logis; versi yang menjadi dasar keputusan tidak dihapus. Sponsor hanya dapat menambah/menghapus saat `DRAFT`/`REVISION_REQUIRED` dan saat lampiran tidak terkunci oleh review renewal. |
-| FR-DOC-006 | Submit mewajibkan lampiran untuk JSA, ID, BPJS TK, FTW, dan E-SIMI, serta untuk setiap pilihan Bagian 4; metadata lampiran JSA harus sama dengan nomor/revisi/tanggal JSA pada draft. |
+| FR-DOC-006 | Submit mewajibkan lampiran untuk JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, dan E-SIMI, serta untuk setiap pilihan Bagian 4; JSA dan Prosedur Pekerjaan wajib ada pada pilihan Bagian 4, dan metadata lampiran JSA harus sama dengan nomor/revisi/tanggal JSA pada draft. |
 | FR-DOC-007 | Item khusus pekerjaan di luar katalog menjadi backlog OPN-003. |
 | FR-DOC-008 | Draft penerus renewal tidak menyalin file; UI menampilkan daftar dokumen yang harus diunggah ulang. |
 | FR-DOC-009 | `SIGNED_FIELD_COPY` wajib merujuk PrintPackage `READY`, membawa nomor/revisi/tanggal, dan hanya dapat diunggah saat `ISSUED`, `SUSPENDED`, `EXPIRED`, atau saat tindak lanjut closure diminta. |
@@ -434,7 +434,7 @@ Feature flag/release lokasi hanya untuk rollout aman; tidak boleh melewati safet
 1. Hot Work ORF: klasifikasi header multi-select, Bagian 1–4 lengkap, dokumen dasar, validasi PIC HSE + Bagian 5, review Bagian 7 SO/Officer, approval Manager ORF, `ISSUED`, PDF dua halaman A3 benar.
 2. Cold Work Site Office: tepat satu klasifikasi risiko, routing ke SO/Officer dan Manager General Affair.
 3. CSE Water-Based Activity: tanpa klasifikasi header, routing ke Transport & Operasi FSRU, Bagian 6 kosong pada cetak.
-4. Submit ditolak tanpa salah satu dokumen dasar, tanpa lampiran pilihan Bagian 4, atau metadata JSA tidak cocok.
+4. Submit ditolak tanpa salah satu dokumen dasar, bila JSA atau Prosedur Pekerjaan tidak terpilih pada Bagian 4, tanpa lampiran pilihan Bagian 4, atau bila metadata JSA tidak cocok.
 5. Sponsor yang juga PIC HSE tidak dapat memvalidasi; validator lain dapat.
 6. Reviewer SO/Officer pertama menang; reviewer kedua memperoleh `404`; Sponsor/validator ditolak sebagai reviewer.
 7. Manager yang sama dengan Sponsor/validator/reviewer ditolak; Manager wilayah lain ditolak; approval tanpa Bagian 5 atau 7 ditolak.

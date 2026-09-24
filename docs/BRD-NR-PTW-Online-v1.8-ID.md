@@ -5,7 +5,7 @@
 | --- | --- |
 | Produk | NR PTW Online |
 | Versi | 1.8 — penyelarasan flow dengan sistem berjalan: review Bagian 7 SO/Officer, pembagian pengisian formulir, renewal dan closure berbasis hardcopy terverifikasi |
-| Tanggal | 22 September 2026 |
+| Tanggal | 24 September 2026 |
 | Status | Draft terkontrol; memerlukan persetujuan Product Owner, Operasi, HSSE, dan TI |
 | Pemilik bisnis yang diusulkan | Fungsi Operasi/HSSE Nusantara Regas |
 | Dokumen terkait | [PRD v1.8](PRD-NR-PTW-Online-v1.8-ID.md), [FSD v1.8](FSD-NR-PTW-Online-v1.8-ID.md) |
@@ -20,7 +20,7 @@ Versi 1.8 tidak mengubah tujuan bisnis, tetapi menyelaraskan alur yang pada v1.7
 | Gate sebelum penerbitan | Validasi PIC HSE langsung diikuti approval Manager pemilik wilayah | Validasi PIC HSE → **review kondisi operasi Bagian 7 oleh SO/Officer pemilik wilayah** → approval dan penerbitan Manager pemilik wilayah |
 | Pemisahan tugas | Sponsor ≠ validator HSE; Manager berbeda dari Sponsor | **Empat aktor berbeda**: Sponsor, PIC HSE, reviewer SO/Officer, Manager penerbit |
 | Pengisian formulir | Sponsor mengisi Bagian 1–5/7 termasuk CLSR, SIMOPS, safety, isolasi/precaution | Sponsor mengisi **Bagian 1–4**; PIC HSE menetapkan **Bagian 5**; SO/Officer menetapkan **checklist kondisi operasi Bagian 7**; Manager mengisi baris approval Bagian 7. Tidak ada input CLSR/SIMOPS/isolasi bebas oleh Sponsor |
-| Dokumen wajib | Matriks requirement terversi; JSA wajib | **JSA, ID, BPJS TK, FTW, dan E-SIMI** wajib berlampiran sebelum submit; Bagian 4 memakai 15 pilihan formulir dengan JSA wajib dan setiap pilihan berlampiran bertaut |
+| Dokumen wajib | Matriks requirement terversi; JSA wajib | **JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, dan E-SIMI** wajib berlampiran sebelum submit; JSA dan Prosedur Pekerjaan otomatis menjadi checklist wajib Bagian 4, sedangkan empat evidence lainnya tidak dicetak di Bagian 4 |
 | Renewal | Sponsor langsung membuat draft turunan dari PTW `ISSUED`/`EXPIRED` | Sponsor mengajukan **permintaan renewal dengan hardcopy hasil verifikasi lapangan**; Manager pemilik wilayah meninjau; **draft penerus lahir hanya setelah approval** |
 | Closure | Pemilik wilayah memverifikasi bukti lalu menutup | Pemilik wilayah mengisi **verifikasi Bagian 10 terstruktur**; jalur "pekerjaan belum selesai" mengunci close dan meminta hardcopy pengganti untuk paket cetak yang sama |
 | Revisi | Task kembali ke pengaju | Permintaan revisi membuat **notifikasi task kepada Sponsor PTW**; submit ulang menaikkan versi PTW |
@@ -44,7 +44,7 @@ BRD ini menyepakati kebutuhan dan aturan bisnis. Jika sumber bertentangan, uruta
 1. SOP PTW NR yang berlaku dan revisi yang disahkan.
 2. Keputusan tertulis Product Owner, Operasi, HSSE, dan TI.
 3. Formulir PTW terkontrol FM-001/002/003-B-002-NR-B220 beserta maksud kontrol keselamatannya.
-4. Perilaku sistem yang telah diterima pengguna sampai 22 September 2026 (DEC-117 sampai DEC-126).
+4. Perilaku sistem yang telah diterima pengguna sampai 24 September 2026 (DEC-117 sampai DEC-127).
 5. Keputusan yang dikonfirmasi dari rapat progress 7 September 2026 dan rapat tindak lanjut 12 Agustus 2026.
 6. BRD, PRD, dan pola operasional E-SIMI milik NR.
 7. Benchmark PGE/JPO sebagai referensi, bukan kebijakan NR.
@@ -64,6 +64,7 @@ BRD ini menyepakati kebutuhan dan aturan bisnis. Jika sumber bertentangan, uruta
 | Klarifikasi lokasi aktif dan pemilik wilayah, 16 September 2026 | ORF, Site Office, dan Water-Based Activity aktif; pemilik wilayah Site Office adalah General Affair dan Water-Based Activity adalah Transport & Operasi FSRU |
 | Arahan kesetiaan template cetak, 16 September 2026 | Paket cetak wajib mereproduksi formulir terkontrol; layout digital alternatif atau template placeholder ditolak; materi kampanye tidak berlaku pada rilis awal |
 | Verifikasi sistem berjalan, 22 September 2026 | Flow review Bagian 7 SO/Officer, pembagian pengisian Bagian 1–7, dokumen dasar wajib, renewal/closure berbasis hardcopy terverifikasi, notifikasi revisi, identitas lokal Development dikonfirmasi sesuai dan diadopsi sebagai baseline v1.8 |
+| Klarifikasi dokumen wajib, 24 September 2026 | Prosedur Pekerjaan yang wajib diunggah juga wajib otomatis dicentang dan dicetak sebagai item Bagian 4 |
 
 ### 2.2 Keputusan flow sampai versi 1.8
 
@@ -88,13 +89,14 @@ BRD ini menyepakati kebutuhan dan aturan bisnis. Jika sumber bertentangan, uruta
 | DEC-117 | Paket cetak resmi mereproduksi formulir terkontrol FM-001/002/003-B-002-NR-B220 sebagai dua halaman A3: halaman 1 landscape memuat Bagian 1–7 dan halaman 2 portrait dimulai pada Bagian 8. Teks, urutan item, kolom, dan kotak centang mengikuti formulir; tidak ada layout digital alternatif, template placeholder, atau pemecahan A4. | Dikonfirmasi 16 Sep 2026; diadopsi v1.8 |
 | DEC-118 | Setelah validasi PIC HSE, **SO/Officer departemen pemilik wilayah** memverifikasi kondisi operasi Bagian 7 melalui satu task review. Reviewer pertama yang menyelesaikan task menang. Manager pemilik wilayah baru dapat menyetujui dan menerbitkan setelah review tersebut selesai pada versi PTW yang sama. | Dikonfirmasi 22 Sep 2026 |
 | DEC-119 | Pembagian pengisian formulir: Sponsor mengisi Bagian 1–4 (klasifikasi header, jenis pekerjaan, penjelasan pekerjaan, permintaan izin kerja, dokumen pendukung); PIC HSE menetapkan Bagian 5 saat validasi; SO/Officer menetapkan checklist kondisi operasi Bagian 7; Manager mengisi baris approval Bagian 7 melalui keputusan penerbitan. Bagian 6 dan Bagian 8–10 dicetak kosong untuk pengisian lapangan. | Dikonfirmasi 22 Sep 2026 |
-| DEC-120 | Sebelum submit, JSA, ID, BPJS TK, FTW, dan E-SIMI wajib memiliki lampiran bertaut. Hanya JSA yang juga menjadi item checklist Bagian 4; empat dokumen lainnya adalah evidence pengajuan dan tidak dicetak pada Bagian 4. | Dikonfirmasi 22 Sep 2026 |
+| DEC-120 | Sebelum submit, JSA, ID, BPJS TK, FTW, dan E-SIMI wajib memiliki lampiran bertaut. Hanya JSA yang juga menjadi item checklist Bagian 4; empat dokumen lainnya adalah evidence pengajuan dan tidak dicetak pada Bagian 4. | Diperluas DEC-127 |
 | DEC-121 | Renewal tidak mengubah PTW asal. Sponsor mengajukan permintaan renewal dengan hardcopy hasil verifikasi lapangan yang cocok dengan paket cetak resmi, periode baru non-overlap maksimum tujuh hari, dan pernyataan kelanjutan. Manager pemilik wilayah dapat meminta hardcopy ulang, menolak, atau menyetujui; draft PTW penerus dibuat atomik hanya saat approval dan menjalani workflow normal dari awal. | Dikonfirmasi 22 Sep 2026 |
 | DEC-122 | Penutupan diverifikasi Manager atau SO/Officer pemilik wilayah dengan assignment efektif dan scope lokasi yang cocok, melalui satu task pool dan isian Bagian 10 terstruktur: nama Officer pemeriksa, area diinspeksi dan bersih, pekerjaan selesai, Pemilik Wilayah menyetujui penyelesaian, sistem yang di-inhibit dipulihkan, area di-handback dan pengaman dipulihkan, serta hardcopy terbaca. Signed field copy pilihan Sponsor menjadi unduhan utama PTW untuk review dan arsip close. Bila pekerjaan belum selesai, close terkunci; Sponsor mengunggah hardcopy pengganti untuk paket cetak yang sama dan mengajukan ulang tanpa mengubah status. | Dikonfirmasi 22 Sep 2026; kewenangan close diperluas 23 Sep 2026 |
 | DEC-123 | Permintaan revisi membatalkan task yang tertunda dan membuat notifikasi task kepada Sponsor PTW. Submit ulang menaikkan versi PTW meskipun draft tidak berubah, dan seluruh task/evidence versi lama menjadi riwayat. | Dikonfirmasi 22 Sep 2026 |
 | DEC-124 | QR/reference pada lembar cetak serta halaman kampanye (10 CLSR, 8 Arahan Direksi, 9 Perilaku Wajib) tidak termasuk paket cetak rilis awal; keduanya menjadi backlog setelah OPN-011/OPN-012 disahkan. | Dikonfirmasi 16 Sep 2026 |
 | DEC-125 | Rilis Development memakai akun lokal terkelola, login cookie HTTP-only, dan assignment role yang disetujui Administrator; role dan scope dihitung ulang setiap request. Spesimen tanda tangan visual berversi dicetak sebagai bukti persetujuan elektronik, bukan tanda tangan digital tersertifikasi. SSO/IdP produksi menunggu OPN-007. | Dikonfirmasi 22 Sep 2026 |
 | DEC-126 | Deklarasi SIMOPS, elemen CLSR bebas, dan isolasi/precaution bebas tidak ditampilkan pada form Sponsor karena tidak terdapat pada formulir terkontrol; kondisi operasi ditetapkan SO/Officer pada Bagian 7. | Dikonfirmasi 22 Sep 2026 |
+| DEC-127 | Prosedur Pekerjaan wajib memiliki lampiran bertaut sebelum submit dan otomatis menjadi item wajib checklist Bagian 4 serta paket cetak. Sponsor tidak dapat membatalkan pilihannya. ID, BPJS TK, FTW, dan E-SIMI tetap hanya menjadi evidence pengajuan dan tidak ditambahkan ke Bagian 4. | Dikonfirmasi 24 Sep 2026 |
 
 ## 3. Latar belakang dan masalah bisnis
 
@@ -139,7 +141,7 @@ Proses kertas saat ini memiliki kontrol keselamatan yang penting, tetapi menimbu
 - akun terkelola untuk pengguna internal dan Kontraktor, dengan otorisasi berbasis peran, lokasi, dan assignment yang disetujui;
 - pembuatan dan pengajuan PTW oleh Kontraktor atau User Sponsor untuk Pekerjaan Panas, Pekerjaan Dingin, dan Memasuki Ruang Terbatas (CSE);
 - pengisian Bagian 1–4 oleh Sponsor sesuai katalog formulir terkontrol: klasifikasi header, jenis pekerjaan, penjelasan pekerjaan dan equipment, pihak/perusahaan, dan checklist dokumen pendukung;
-- dokumen dasar wajib (JSA, ID, BPJS TK, FTW, E-SIMI) sebagai lampiran terkontrol sebelum submit; JSA sebagai sumber rincian bahaya/pengendalian;
+- dokumen dasar wajib (JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, E-SIMI) sebagai lampiran terkontrol sebelum submit; JSA sebagai sumber rincian bahaya/pengendalian; JSA dan Prosedur Pekerjaan otomatis menjadi checklist Bagian 4;
 - validasi wajib oleh PIC HSE yang sekaligus menetapkan Bagian 5, termasuk revisi/penolakan/eskalasi;
 - review kondisi operasi Bagian 7 oleh SO/Officer pemilik wilayah;
 - approval penerbitan oleh Manager pemilik wilayah; approval yang berhasil menerbitkan PTW dan mengunci snapshot dokumen;
@@ -173,7 +175,7 @@ Proses kertas saat ini memiliki kontrol keselamatan yang penting, tetapi menimbu
 | 1. Jenis Pekerjaan | Sponsor | Multi-select dari katalog per kelas izin sesuai formulir; opsi `Lain-lain` mewajibkan detail maksimum 80 karakter yang ikut tercetak. |
 | 2. Penjelasan Pekerjaan | Sponsor | Uraian, nomor/nama equipment, Work Order No., plant/area, masa berlaku, dan referensi bahaya tambahan opsional. Tidak ada kolom bebas bahaya/pengendalian yang menduplikasi JSA. |
 | 3. Permintaan Izin Kerja | Sponsor (sistem mencetak) | Nama, jabatan, departemen, spesimen tanda tangan berversi, dan waktu submit Sponsor dicetak dari profil akun; tanda tangan Pelaksana Pekerjaan tetap manual pada hardcopy. |
-| 4. Dokumen Pendukung | Sponsor | 15 pilihan sesuai formulir; JSA wajib dengan nomor/revisi/tanggal; setiap pilihan harus memiliki lampiran bertaut sebelum submit. Dokumen dasar ID, BPJS TK, FTW, dan E-SIMI wajib berlampiran tetapi tidak dicetak sebagai item Bagian 4. |
+| 4. Dokumen Pendukung | Sponsor | 15 pilihan sesuai formulir; JSA dan Prosedur Pekerjaan wajib serta otomatis terpilih, dengan metadata nomor/revisi/tanggal wajib untuk JSA; setiap pilihan harus memiliki lampiran bertaut sebelum submit. Dokumen dasar ID, BPJS TK, FTW, dan E-SIMI wajib berlampiran tetapi tidak dicetak sebagai item Bagian 4. |
 | 5. Perlengkapan Safety Tambahan/Khusus | PIC HSE | Ditetapkan saat validasi dari katalog per kelas izin (minimal satu). Sponsor tidak dapat mengisi; approval tanpa Bagian 5 ditolak dan diarahkan ke revisi. |
 | 6. Gas Tes Awal | Lapangan | Dicetak kosong; Gas Tester mengisi dan menandatangani manual bila diwajibkan. |
 | 7. Izin dari Bagian Operasi | SO/Officer dan Manager pemilik wilayah | Checklist kondisi operasi (`Isolasi` dengan rincian Closed/Lock Valves, Blind, Disconnect; `Depressurized`; `Drained`; `Ventilated`; `Bilas` dengan rincian N2 Purge, Water; `Lainnya` dengan penjelasan maksimum 200 karakter) ditetapkan SO/Officer. Baris keputusan SO/Officer dan Manager dicetak dengan nama, jabatan, spesimen tanda tangan, dan waktu. |
@@ -219,7 +221,7 @@ Pemilik wilayah ditentukan dari lokasi utama PTW melalui konfigurasi release ser
 
 ```mermaid
 flowchart TD
-    A["Dokumen dasar tersedia: JSA, ID, BPJS TK, FTW, E-SIMI"] --> B["Kontraktor atau User Sponsor membuat PTW"]
+    A["Dokumen dasar tersedia: JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, E-SIMI"] --> B["Kontraktor atau User Sponsor membuat PTW"]
     B --> C["Isi header klasifikasi dan Bagian 1-4; unggah lampiran bertaut"]
     C --> D{"Validasi submit lengkap?"}
     D -- Tidak --> B
@@ -317,9 +319,9 @@ Prioritas: **M** Must, **S** Should, **C** Could.
 | BR-CLS-003 | Kombinasi pekerjaan yang memerlukan lebih dari satu izin harus dapat saling ditautkan. | C |
 | BR-RSK-001 | Klasifikasi header COLD memetakan tingkat risiko legacy; ia merepresentasikan checklist formulir, bukan matriks routing risiko OPN-002. | M |
 | BR-RSK-002 | PIC HSE memvalidasi bahwa JSA, klasifikasi, jenis pekerjaan, dan dokumen konsisten, lalu menetapkan Bagian 5. | M |
-| BR-DOC-001 | Dokumen dasar JSA, ID, BPJS TK, FTW, dan E-SIMI masing-masing memiliki lampiran bertaut sebelum submit; JSA diunggah dengan kategori JSA dan metadata nomor/revisi/tanggal yang cocok dengan draft. | M |
+| BR-DOC-001 | Dokumen dasar JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, dan E-SIMI masing-masing memiliki lampiran bertaut sebelum submit; JSA diunggah dengan kategori JSA dan metadata nomor/revisi/tanggal yang cocok dengan draft. | M |
 | BR-DOC-002 | Lampiran dapat ditelusuri ke pengunggah, waktu, kategori, kode dokumen, versi/lineage, hash integritas, dan status pemindaian. Hanya PDF/JPEG/PNG yang diterima. | M |
-| BR-DOC-003 | Bagian 4 memakai 15 pilihan formulir; JSA wajib, lainnya opsional, dan setiap pilihan memerlukan lampiran bertaut sebelum submit. | M |
+| BR-DOC-003 | Bagian 4 memakai 15 pilihan formulir; JSA dan Prosedur Pekerjaan wajib serta otomatis terpilih, item lainnya opsional, dan setiap pilihan memerlukan lampiran bertaut sebelum submit. | M |
 | BR-DOC-004 | Pengguna tidak dapat menghapus item standar katalog formulir; penambahan item khusus menunggu OPN-003. | M |
 | BR-DOC-005 | Lampiran renewal tidak disalin otomatis; pengaju menyediakan ulang file yang masih valid pada draft penerus. | M |
 | BR-DOC-006 | Lampiran yang dihapus Sponsor saat draft/revisi dipertahankan sebagai riwayat (logical removal); file yang menjadi dasar keputusan tidak dihapus. | M |

@@ -18,7 +18,7 @@ const supportingDocuments = [
     label: 'Prosedur Pekerjaan',
     templateColumn: 0,
     templateIndex: 3,
-    required: false,
+    required: true,
     requiresMetadata: false,
   },
 ];

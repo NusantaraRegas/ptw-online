@@ -379,7 +379,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
             $"ESM-{Guid.NewGuid():N}",
             [],
             [],
-            ["JSA"],
+            ["JSA", "WORK_PROCEDURE"],
             JsaDocumentNumber: "JSA-TEST-001",
             JsaRevision: "1",
             JsaDate: now,

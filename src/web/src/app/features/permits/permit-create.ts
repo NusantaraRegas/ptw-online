@@ -245,8 +245,8 @@ function localDate(hoursFromNow: number): string {
         <fieldset class="work-types supporting-documents wide" aria-describedby="supporting-help">
           <legend>Dokumen tambahan (Bagian 4)</legend>
           <small id="supporting-help">
-            JSA otomatis dicentang pada PDF melalui dokumen wajib di atas. Pilih dokumen tambahan
-            hanya jika diperlukan untuk pekerjaan ini.
+            JSA dan Prosedur Pekerjaan otomatis dicentang pada PDF melalui dokumen wajib di atas.
+            Pilih dokumen tambahan hanya jika diperlukan untuk pekerjaan ini.
           </small>
           @if (loadingSupportingDocuments()) {
             <p class="work-type-state">Memuat daftar dokumen pendukung...</p>
@@ -450,7 +450,7 @@ export class PermitCreate {
       validators: [Validators.required],
     }),
     otherWorkTypeDescription: ['', Validators.maxLength(80)],
-    requiredDocumentCodes: this.fb.nonNullable.control<string[]>(['JSA']),
+    requiredDocumentCodes: this.fb.nonNullable.control<string[]>(['JSA', 'WORK_PROCEDURE']),
     equipmentTag: [''],
     equipmentName: ['', Validators.maxLength(100)],
     workOrderNumber: ['', Validators.maxLength(60)],

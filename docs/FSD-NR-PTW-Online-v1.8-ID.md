@@ -4,7 +4,7 @@
 | Atribut | Nilai |
 | --- | --- |
 | Versi | 1.8 — penyelarasan flow dengan sistem berjalan: review Bagian 7 SO/Officer, pembagian pengisian formulir, renewal dan closure berbasis hardcopy terverifikasi |
-| Tanggal | 22 September 2026 |
+| Tanggal | 24 September 2026 |
 | Status | Draft untuk review Arsitektur, Security, Operasi, HSSE, dan Delivery |
 | Input | [BRD v1.8](BRD-NR-PTW-Online-v1.8-ID.md), [PRD v1.8](PRD-NR-PTW-Online-v1.8-ID.md) |
 | Menggantikan | FSD v1.7 (16 September 2026) |
@@ -94,7 +94,7 @@ Modul fungsional: (1) Identity & Authorization, (2) Permit & katalog formulir, (
 | `CreateDraft` | — | DRAFT | `Sponsor`/`Administrator` | Field wajib; tipe pengaju `CONTRACTOR`/`USER_SPONSOR`; validity ≤ 7 hari; katalog jenis pekerjaan valid; payload Bagian 5 ditolak |
 | `UpdateDraft` | DRAFT/REVISION_REQUIRED | sama | Sponsor pemilik | `If-Match`; normalisasi katalog; versi naik |
 | `AddAttachment`/`RemoveAttachment` | DRAFT/REVISION_REQUIRED (`SIGNED_FIELD_COPY`: ISSUED/SUSPENDED/EXPIRED/tindak lanjut closure) | sama | Sponsor pemilik | Kategori, kode dokumen, metadata, scan; terkunci saat review renewal `PENDING` |
-| `SubmitPermit` | DRAFT/REVISION_REQUIRED | UNDER_VALIDATION | Sponsor pemilik | Lokasi released; header klasifikasi lengkap; detail `Lain-lain`; JSA dipilih; evidence JSA/ID/BPJS TK/FTW/E-SIMI dan setiap pilihan Bagian 4; metadata JSA cocok; nomor resmi dialokasikan; evidence review dihapus; resubmit menaikkan versi; membuat satu task `HSE_VALIDATION`; menyelesaikan `SPONSOR_REVISION` |
+| `SubmitPermit` | DRAFT/REVISION_REQUIRED | UNDER_VALIDATION | Sponsor pemilik | Lokasi released; header klasifikasi lengkap; detail `Lain-lain`; JSA dan Prosedur Pekerjaan dipilih; evidence JSA/Prosedur Pekerjaan/ID/BPJS TK/FTW/E-SIMI dan setiap pilihan Bagian 4; metadata JSA cocok; nomor resmi dialokasikan; evidence review dihapus; resubmit menaikkan versi; membuat satu task `HSE_VALIDATION`; menyelesaikan `SPONSOR_REVISION` |
 | `ValidateSubmission` | UNDER_VALIDATION | AWAITING_AREA_APPROVAL | `HSEValidator` | Task `HSE_VALIDATION` aktif pada versi sama; aktor ≠ Sponsor; pernyataan; ≥ 1 kode Bagian 5 valid per kelas; membuat satu task `AREA_OPERATION_REVIEW` |
 | `EscalateValidation` | UNDER_VALIDATION | UNDER_VALIDATION | `HSEValidator` | Catatan wajib; audit/event tanpa perubahan status |
 | `RequestRevision` | UNDER_VALIDATION/AWAITING_AREA_APPROVAL | REVISION_REQUIRED | Role sesuai task aktif (`HSEValidator`, `AreaOwnerSeniorOfficer`, `AreaOwnerManager`) | Alasan; evidence Bagian 5/7/approval dihapus; task tertunda dibatalkan; satu task `SPONSOR_REVISION` dengan `AssignedActorId` = Sponsor |
@@ -202,8 +202,8 @@ Task pool dirutekan berdasarkan `RequiredRole` dan scope lokasi aktor; task deng
 | --- | --- | --- |
 | `PermitHeaderClassificationCatalog` | HOT: `HOT_OPEN_FLAME` Api Terbuka, `HOT_SPARK` Percikan Api; COLD: `COLD_LOW_RISK`, `COLD_HIGH_RISK`; CSE: kosong | HOT multiple, COLD exclusive (tepat satu; memetakan `RiskLevel` legacy), CSE none; wajib saat submit |
 | `PermitWorkTypeCatalog` | Item Bagian 1 per kelas sesuai formulir (HOT 18 item, COLD 23 item, CSE 22 item) dengan indeks posisi template | Minimal satu; `*_OTHER` mewajibkan detail ≤ 80 karakter |
-| `PermitSupportingDocumentCatalog` | 15 item Bagian 4 (JSA, Check List Inspeksi Alat Berat, Isolation/De-isolation, Prosedur Pekerjaan, P&ID/Plot Plan, MOC, Clearance Penggalian, Emergency Response Plan, Sertifikat Sea Survival, Ijin Penon-aktifan Sistem Pengaman, Sertifikat Peralatan, Sertifikat Pekerjaan, Lifting Plan, Penutupan jalan, MSDS) | JSA wajib dan bermetadata; setiap pilihan butuh lampiran bertaut |
-| `PermitMandatoryDocumentCatalog` | JSA, ID, BPJS TK, FTW, E-SIMI | Evidence submit; hanya JSA dicetak di Bagian 4 |
+| `PermitSupportingDocumentCatalog` | 15 item Bagian 4 (JSA, Check List Inspeksi Alat Berat, Isolation/De-isolation, Prosedur Pekerjaan, P&ID/Plot Plan, MOC, Clearance Penggalian, Emergency Response Plan, Sertifikat Sea Survival, Ijin Penon-aktifan Sistem Pengaman, Sertifikat Peralatan, Sertifikat Pekerjaan, Lifting Plan, Penutupan jalan, MSDS) | JSA dan Prosedur Pekerjaan wajib serta otomatis terpilih; JSA bermetadata; setiap pilihan butuh lampiran bertaut |
+| `PermitMandatoryDocumentCatalog` | JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, E-SIMI | Evidence submit; JSA dan Prosedur Pekerjaan juga dicetak di Bagian 4, empat evidence lainnya tidak |
 | `PermitSafetyEquipmentCatalog` | Item Bagian 5 per kelas (21 item umum; HOT + Whipcheck; CSE + Watch man, Ventilator) | Minimal satu; hanya PIC HSE |
 | `PermitOperationalConditionCatalog` | `OPS_ISOLATION` (+ `CLOSED_LOCK_VALVES`, `BLIND`, `DISCONNECT`), `OPS_DEPRESSURIZED`, `OPS_DRAINED`, `OPS_VENTILATED`, `OPS_FLUSHING` (+ `N2_PURGE`, `WATER`), `OPS_OTHER` | Parent wajib bila child dipilih; `Isolasi`/`Bilas` mewajibkan ≥ 1 child; `Lainnya` mewajibkan detail ≤ 200 |
 
@@ -362,7 +362,7 @@ Pipeline paket cetak:
 
 1. `ApproveAndIssuePermit` membuat `PrintPackageSnapshot` dari versi PTW exact, decision, evidence Bagian 5/7, approval, dan `SponsorPrintEvidence` (nama, jabatan, departemen, waktu submit, spesimen tanda tangan berversi).
 2. `PrintPackageRenderWorker` mengklaim job `PENDING`/`RETRYING` yang jatuh tempo.
-3. `PtwFormRenderer` (PDFsharp, versi `ptw-form-renderer/3.4.0`) menggambar template vektor formulir sesuai kelas izin sebagai dua halaman A3 (halaman 1 landscape sampai Bagian 7; halaman 2 portrait mulai Bagian 8), lalu meng-overlay: klasifikasi header, Bagian 1 (+ detail `Lain-lain`), Bagian 2, Bagian 3 Sponsor, Bagian 4, Bagian 5, masa berlaku dan checklist kondisi operasi Bagian 7, baris SO/Officer dan Manager dengan nama/jabatan/spesimen/waktu WIB. Bagian 6 dan 8–10 kosong. Font dan logo embedded agar deterministik.
+3. `PtwFormRenderer` (PDFsharp, versi `ptw-form-renderer/3.4.1`) menggambar template vektor formulir sesuai kelas izin sebagai dua halaman A3 (halaman 1 landscape sampai Bagian 7; halaman 2 portrait mulai Bagian 8), lalu meng-overlay: klasifikasi header, Bagian 1 (+ detail `Lain-lain`), Bagian 2, Bagian 3 Sponsor, Bagian 4, Bagian 5, masa berlaku dan checklist kondisi operasi Bagian 7, baris SO/Officer dan Manager dengan nama/jabatan/spesimen/waktu WIB. Bagian 6 dan 8–10 kosong. Font dan logo embedded agar deterministik.
 4. Worker menghitung SHA-256, menyimpan privat, dan menandai `READY`; retry idempotent; `FAILED` setelah `MaxRenderAttempts`.
 5. Perubahan output menaikkan `RendererVersion` dan disertai regresi di `tests/Ptw.Printing.Tests`.
 

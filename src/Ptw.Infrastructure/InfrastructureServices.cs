@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Ptw.Application;
 using Ptw.Infrastructure.Persistence;
 using Ptw.Infrastructure.Security;
@@ -33,15 +32,23 @@ public static class InfrastructureServices
                 || configuredDemoMode);
         services.AddSingleton(new DemoModeDefaults(demoModeEnabledByDefault));
         services.AddSingleton<IPermitNumberGenerator, PermitNumberGenerator>();
-        var activeDirectorySettings = ActiveDirectorySettings.FromConfiguration(configuration);
-        services.AddSingleton(activeDirectorySettings);
-        // Fail-safe: without a configured directory, login relies on local credentials only.
-        services.AddSingleton<IDirectoryAuthenticator>(provider =>
-            activeDirectorySettings.Enabled
-                ? new LdapDirectoryAuthenticator(
-                    activeDirectorySettings,
-                    provider.GetRequiredService<ILogger<LdapDirectoryAuthenticator>>())
-                : new DisabledDirectoryAuthenticator());
+        var portalAuthenticationSettings = PortalAuthenticationSettings.FromConfiguration(configuration, isDevelopment);
+        services.AddSingleton(portalAuthenticationSettings);
+        // Fail-safe: without a configured portal, login relies on local credentials only.
+        if (portalAuthenticationSettings.Enabled)
+        {
+            services.AddHttpClient<PortalApiDirectoryAuthenticator>(client =>
+            {
+                client.BaseAddress = portalAuthenticationSettings.BaseUrl;
+                client.Timeout = TimeSpan.FromSeconds(portalAuthenticationSettings.TimeoutSeconds);
+            });
+            services.AddTransient<IDirectoryAuthenticator>(provider =>
+                provider.GetRequiredService<PortalApiDirectoryAuthenticator>());
+        }
+        else
+        {
+            services.AddSingleton<IDirectoryAuthenticator, DisabledDirectoryAuthenticator>();
+        }
         var attachmentSettings = new AttachmentSettings
         {
             Enabled = bool.TryParse(configuration["Attachments:Enabled"], out var enabled) && enabled,

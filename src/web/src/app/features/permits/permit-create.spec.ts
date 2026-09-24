@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 import { PermitCreate } from './permit-create';
 
 describe('PermitCreate', () => {
-  it('separates six mandatory uploads from the optional Bagian 4 checklist', async () => {
+  it('automatically selects JSA and Prosedur Pekerjaan outside the optional Bagian 4 list', async () => {
     await TestBed.configureTestingModule({
       imports: [PermitCreate],
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
@@ -57,7 +57,7 @@ describe('PermitCreate', () => {
         label: 'Prosedur Pekerjaan',
         templateColumn: 0,
         templateIndex: 3,
-        required: false,
+        required: true,
         requiresMetadata: false,
       },
       {
@@ -82,9 +82,14 @@ describe('PermitCreate', () => {
     const additionalFieldset = Array.from<HTMLElement>(
       fixture.nativeElement.querySelectorAll('fieldset'),
     ).find((fieldset) => fieldset.querySelector('legend')?.textContent?.includes('Bagian 4'));
-    expect(additionalFieldset?.textContent).toContain('Prosedur Pekerjaan');
+    expect(additionalFieldset?.textContent).toContain(
+      'JSA dan Prosedur Pekerjaan otomatis dicentang',
+    );
+    expect(additionalFieldset?.querySelectorAll('input').length).toBe(1);
     expect(additionalFieldset?.textContent).toContain('MSDS');
-    expect(additionalFieldset?.textContent).not.toContain('Job Safety Analisis');
+
+    const form = (fixture.componentInstance as unknown as { form: FormGroup }).form;
+    expect(form.controls['requiredDocumentCodes'].value).toEqual(['JSA', 'WORK_PROCEDURE']);
   });
 
   it('renders approved scoped locations as selectable options', async () => {
@@ -345,6 +350,14 @@ describe('PermitCreate', () => {
         required: true,
         requiresMetadata: true,
       },
+      {
+        code: 'WORK_PROCEDURE',
+        label: 'Prosedur Pekerjaan',
+        templateColumn: 0,
+        templateIndex: 3,
+        required: true,
+        requiresMetadata: false,
+      },
     ]);
 
     const form = (fixture.componentInstance as unknown as { form: FormGroup }).form;
@@ -378,6 +391,7 @@ describe('PermitCreate', () => {
     expect(request.request.body.clsrApplicable).toBe(false);
     expect(request.request.body.isolationPrecautionCodes).toEqual([]);
     expect(request.request.body.hazards).toEqual([]);
+    expect(request.request.body.requiredDocumentCodes).toEqual(['JSA', 'WORK_PROCEDURE']);
   });
 
   it('does not expose CLSR or isolation precaution fields to the Sponsor', async () => {

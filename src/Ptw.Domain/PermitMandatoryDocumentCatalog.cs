@@ -2,8 +2,8 @@ namespace Ptw.Domain;
 
 /// <summary>
 /// One document that must have uploaded evidence before a PTW can be submitted.
-/// JSA and Prosedur Pekerjaan also exist in the controlled Bagian 4 catalog. Making a
-/// document mandatory here gates submission but does not change its Bagian 4 selection.
+/// JSA and Prosedur Pekerjaan also exist as mandatory items in the controlled Bagian 4 catalog.
+/// The remaining mandatory evidence documents gate submission without becoming Bagian 4 items.
 /// </summary>
 public sealed record PermitMandatoryDocumentOption(
     string Code,

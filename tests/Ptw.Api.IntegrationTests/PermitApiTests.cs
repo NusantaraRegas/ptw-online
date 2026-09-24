@@ -140,7 +140,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     }
 
     [Fact]
-    public async Task SupportingDocumentReferenceDataMatchesTemplateAndOnlyRequiresJsa()
+    public async Task SupportingDocumentReferenceDataRequiresJsaAndWorkProcedure()
     {
         using var client = factory.CreateClient();
 
@@ -150,10 +150,25 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             await response.Content.ReadFromJsonAsync<PermitSupportingDocumentOptionResponse[]>());
 
         Assert.Equal(15, options.Length);
-        var required = Assert.Single(options, option => option.Required);
-        Assert.Equal("JSA", required.Code);
-        Assert.True(required.RequiresMetadata);
+        var required = options.Where(option => option.Required).ToArray();
+        Assert.Equal(["JSA", "WORK_PROCEDURE"], required.Select(option => option.Code));
+        Assert.True(Assert.Single(required, option => option.Code == "JSA").RequiresMetadata);
+        Assert.False(Assert.Single(required, option => option.Code == "WORK_PROCEDURE").RequiresMetadata);
         Assert.Contains(options, option => option.Code == "MSDS" && !option.Required);
+    }
+
+    [Fact]
+    public async Task CreateDraftRejectsMissingMandatoryWorkProcedureSelection()
+    {
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+
+        using var response = await sponsor.PostAsJsonAsync(
+            "/api/v1/permits",
+            Draft(sponsorId, "ORF") with { RequiredDocumentCodes = ["JSA"] });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("permit.supporting_document.work_procedure_required", await ProblemCodeAsync(response));
     }
 
     [Fact]
@@ -308,7 +323,10 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
         using var createResponse = await sponsor.PostAsJsonAsync(
             "/api/v1/permits",
-            Draft(sponsorId, "ORF") with { RequiredDocumentCodes = ["JSA", "MSDS"] });
+            Draft(sponsorId, "ORF") with
+            {
+                RequiredDocumentCodes = ["JSA", "WORK_PROCEDURE", "MSDS"]
+            });
         createResponse.EnsureSuccessStatusCode();
         var draft = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
         draft = await UploadMandatoryDocumentsAsync(sponsor, draft);
@@ -1440,7 +1458,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             $"ESM-{Guid.NewGuid():N}",
             [],
             [],
-            ["JSA"],
+            ["JSA", "WORK_PROCEDURE"],
             JsaDocumentNumber: "JSA-TEST-001",
             JsaRevision: "1",
             JsaDate: now,

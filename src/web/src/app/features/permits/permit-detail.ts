@@ -297,7 +297,7 @@ export class PermitDetail {
       validators: [Validators.required],
     }),
     otherWorkTypeDescription: ['', Validators.maxLength(80)],
-    requiredDocumentCodes: this.fb.nonNullable.control<string[]>(['JSA']),
+    requiredDocumentCodes: this.fb.nonNullable.control<string[]>(['JSA', 'WORK_PROCEDURE']),
     equipmentTag: [''],
     equipmentName: ['', Validators.maxLength(100)],
     workOrderNumber: ['', Validators.maxLength(60)],
@@ -428,9 +428,9 @@ export class PermitDetail {
         permit.draft.workTypeCodes ??
         (permit.draft.workTypeCode ? [permit.draft.workTypeCode] : []),
       otherWorkTypeDescription: permit.draft.otherWorkTypeDescription ?? '',
-      requiredDocumentCodes: permit.draft.requiredDocumentCodes.includes('JSA')
-        ? permit.draft.requiredDocumentCodes
-        : ['JSA', ...permit.draft.requiredDocumentCodes],
+      requiredDocumentCodes: [
+        ...new Set(['JSA', 'WORK_PROCEDURE', ...permit.draft.requiredDocumentCodes]),
+      ],
       equipmentTag: permit.draft.equipmentTag ?? '',
       equipmentName: permit.draft.equipmentName ?? '',
       workOrderNumber: permit.draft.workOrderNumber ?? '',

@@ -22,7 +22,7 @@ public static class PermitSupportingDocumentCatalog
         new(JsaCode, "Job Safety Analisis (JSA)", 0, 0, Required: true, RequiresMetadata: true),
         new("HEAVY_EQUIPMENT_INSPECTION", "Check List Inspeksi Alat Berat", 0, 1, Required: false),
         new("ISOLATION_DEISOLATION", "Isolation / De-isolation", 0, 2, Required: false),
-        new(WorkProcedureCode, "Prosedur Pekerjaan", 0, 3, Required: false),
+        new(WorkProcedureCode, "Prosedur Pekerjaan", 0, 3, Required: true),
         new("PID_PLOT_PLAN", "P & ID, Plot Plan / Lay Out", 0, 4, Required: false),
         new("MOC", "Dokumen Perubahan (MOC)", 0, 5, Required: false),
         new("EXCAVATION_CLEARANCE", "Clearance Penggalian dari Electrical & Civil Eng.", 0, 6, Required: false),
@@ -61,12 +61,18 @@ public static class PermitSupportingDocumentCatalog
             selected.Add(Resolve(submitted).Code);
         }
 
-        if (!allowMissingRequired
-            && Options.Any(option => option.Required && !selected.Contains(option.Code)))
+        if (!allowMissingRequired && !selected.Contains(JsaCode))
         {
             throw new DomainRuleViolationException(
                 "permit.supporting_document.jsa_required",
                 "Job Safety Analisis (JSA) wajib dipilih pada Bagian 4.");
+        }
+
+        if (!allowMissingRequired && !selected.Contains(WorkProcedureCode))
+        {
+            throw new DomainRuleViolationException(
+                "permit.supporting_document.work_procedure_required",
+                "Prosedur Pekerjaan wajib dipilih pada Bagian 4.");
         }
 
         return Options.Where(option => selected.Contains(option.Code)).Select(option => option.Code).ToArray();

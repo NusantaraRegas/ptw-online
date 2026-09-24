@@ -55,6 +55,9 @@ services:
       Attachments__StoragePath: /var/lib/ptw/attachments
       GeneratedDocuments__StoragePath: /var/lib/ptw/generated-documents
       Authentication__DataProtectionPath: /var/lib/ptw/data-protection
+      PortalAuth__BaseUrl: ${PTW_PORTAL_API_BASE_URL:-http://local.api.portal.com/}
+    extra_hosts:
+      - "${PTW_PORTAL_API_HOST:-local.api.portal.com}:host-gateway"
     volumes:
       - ../..:/source
       - api-artifacts:/source/artifacts

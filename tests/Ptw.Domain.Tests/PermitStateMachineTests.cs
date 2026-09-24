@@ -711,27 +711,36 @@ public sealed class PermitStateMachineTests
     }
 
     [Fact]
-    public void DraftRequiresJsaAndNormalizesOptionalSupportingDocumentsInTemplateOrder()
+    public void DraftRequiresJsaAndWorkProcedureAndNormalizesOptionalDocumentsInTemplateOrder()
     {
         var missingJsa = Assert.Throws<DomainRuleViolationException>(() =>
-            Permit.CreateDraft(ValidDraft() with { RequiredDocumentCodes = ["MSDS"] }, Now));
+            Permit.CreateDraft(ValidDraft() with
+            {
+                RequiredDocumentCodes = ["WORK_PROCEDURE", "MSDS"]
+            }, Now));
         Assert.Equal("permit.supporting_document.jsa_required", missingJsa.Code);
+
+        var missingWorkProcedure = Assert.Throws<DomainRuleViolationException>(() =>
+            Permit.CreateDraft(ValidDraft() with { RequiredDocumentCodes = ["JSA", "MSDS"] }, Now));
+        Assert.Equal("permit.supporting_document.work_procedure_required", missingWorkProcedure.Code);
 
         var permit = Permit.CreateDraft(ValidDraft() with
         {
-            RequiredDocumentCodes = ["MSDS", "JSA", "Lifting Plan", "MSDS"]
+            RequiredDocumentCodes = ["MSDS", "WORK_PROCEDURE", "JSA", "Lifting Plan", "MSDS"]
         }, Now);
 
-        Assert.Equal(["JSA", "LIFTING_PLAN", "MSDS"], permit.Draft.RequiredDocumentCodes);
+        Assert.Equal(
+            ["JSA", "WORK_PROCEDURE", "LIFTING_PLAN", "MSDS"],
+            permit.Draft.RequiredDocumentCodes);
     }
 
     [Fact]
-    public void MandatoryUploadCatalogIncludesWorkProcedureWithoutChangingBagian4Policy()
+    public void MandatoryUploadCatalogMakesWorkProcedureRequiredInBagian4()
     {
         Assert.Equal(
             ["JSA", "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW", "ESIMI"],
             PermitMandatoryDocumentCatalog.Resolve().Select(option => option.Code));
-        Assert.False(
+        Assert.True(
             PermitSupportingDocumentCatalog.Resolve(PermitSupportingDocumentCatalog.WorkProcedureCode).Required);
         Assert.DoesNotContain(
             PermitSupportingDocumentCatalog.Resolve(),
@@ -902,7 +911,7 @@ public sealed class PermitStateMachineTests
         "ESM-2026-00123",
         [],
         [],
-        ["JSA"],
+        ["JSA", "WORK_PROCEDURE"],
         WorkTypeCodes: ["HOT_WELDING"],
         HeaderClassificationCodes: ["HOT_OPEN_FLAME"]);
 }
