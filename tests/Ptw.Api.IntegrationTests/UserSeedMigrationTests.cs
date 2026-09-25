@@ -12,6 +12,9 @@ namespace Ptw.Api.IntegrationTests;
 public sealed class UserSeedMigrationTests(PtwApiFactory factory)
 {
     private const string PreviousMigration = "20260922075901_PreserveLegacyPermitVersionLineage";
+    // These tests observe the user seed alone: they stop at the last schema migration before the
+    // reference-data seed that adds locations and specimens on top of it.
+    private const string BeforeReferenceSeedMigration = "20260925011304_HardenSessionsAndLoginAudit";
     private const string SeedCorrelationId = "migration:20260925004624";
     private const string SeedActor = "system:migration";
     private const string SourceOrfLocationId = "01a0a755-d839-7764-b2e5-8d0b7b9bece0";
@@ -49,7 +52,7 @@ public sealed class UserSeedMigrationTests(PtwApiFactory factory)
         {
             var migrator = db.Database.GetService<IMigrator>();
 
-            await migrator.MigrateAsync();
+            await migrator.MigrateAsync(BeforeReferenceSeedMigration);
 
             var accounts = await db.UserAccounts.ToListAsync();
             Assert.Equal(SeededSubjects.Order(), accounts.Select(x => x.SubjectId).Order());
@@ -135,7 +138,7 @@ public sealed class UserSeedMigrationTests(PtwApiFactory factory)
             var orfLocationId = Guid.CreateVersion7();
             await InsertLocationAsync(db, orfLocationId, "ORF", "Onshore Receiving Facility");
 
-            await migrator.MigrateAsync();
+            await migrator.MigrateAsync(BeforeReferenceSeedMigration);
 
             var assignments = await db.UserAuthorizations.ToListAsync();
             Assert.Equal(10, assignments.Count);
@@ -188,7 +191,7 @@ public sealed class UserSeedMigrationTests(PtwApiFactory factory)
             var existingAssignmentId = Guid.CreateVersion7();
             await InsertApprovedAssignmentAsync(db, existingAssignmentId, existingValidator, HseValidatorRole, now);
 
-            await migrator.MigrateAsync();
+            await migrator.MigrateAsync(BeforeReferenceSeedMigration);
 
             var admin = await db.UserAccounts.SingleAsync(x => x.SubjectId == SuperAdminSubjectId);
             Assert.Equal(existingAdminName, admin.DisplayName);

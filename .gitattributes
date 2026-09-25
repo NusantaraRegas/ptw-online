@@ -1,0 +1,10 @@
+# Every text file is stored and checked out with LF so that dotnet format and prettier
+# (both configured for LF in .editorconfig) pass regardless of core.autocrlf on the clone.
+* text=auto eol=lf
+
+# Binary assets: never normalized or diffed as text.
+*.png binary
+*.ico binary
+*.ttf binary
+*.pdf binary
+*.pptx binary
