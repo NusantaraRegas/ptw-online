@@ -40,6 +40,8 @@ builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IActorContext, HttpActorContext>();
 builder.Services.AddScoped<PermitService>();
+builder.Services.AddScoped<LocalPasswordPolicy>();
+builder.Services.AddScoped<AdministratorPasswordBootstrap>();
 builder.Services.AddScoped<OperationsBoardService>();
 builder.Services.AddScoped<PermitAttachmentService>();
 builder.Services.AddScoped<PrintPackageService>();
@@ -230,7 +232,19 @@ if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))
     await using var migrationScope = app.Services.CreateAsyncScope();
     var migrationDb = migrationScope.ServiceProvider.GetRequiredService<PtwDbContext>();
     await migrationDb.Database.MigrateAsync();
-    return;
+    return 0;
+}
+
+// One-off break-glass provisioning: `--reset-password <subjectId>` with the new password on stdin,
+// so it never appears in a process list, compose file, or container inspect output.
+var resetIndex = Array.FindIndex(args, arg => string.Equals(arg, "--reset-password", StringComparison.OrdinalIgnoreCase));
+if (resetIndex >= 0)
+{
+    return await BootstrapCommand.ResetAdministratorPasswordAsync(
+        app.Services,
+        app.Logger,
+        resetIndex + 1 < args.Length ? args[resetIndex + 1] : string.Empty,
+        Console.In);
 }
 
 // Fail fast on an inconsistent login configuration (OPN-007) instead of on the first login attempt.
@@ -284,6 +298,7 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => fa
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") }).AllowAnonymous();
 
 await app.RunAsync();
+return 0;
 
 public partial class Program;
 

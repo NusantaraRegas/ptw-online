@@ -8,7 +8,7 @@ namespace Ptw.Application;
 public sealed class UserDirectoryService(
     IUserDirectoryStore store,
     ILoginAuditStore loginAudit,
-    IBreachedPasswordChecker breachedPasswords,
+    LocalPasswordPolicy passwordPolicy,
     IActorContext actorContext,
     IClock clock)
 {
@@ -45,7 +45,7 @@ public sealed class UserDirectoryService(
         CancellationToken cancellationToken)
     {
         var actor = EnsureAdministrator();
-        await ValidatePasswordAsync(request.Password, request.UserName, cancellationToken);
+        await passwordPolicy.ValidateAsync(request.Password, request.UserName, cancellationToken);
         var account = UserAccount.Create(
             request.SubjectId,
             request.UserName,
@@ -108,7 +108,7 @@ public sealed class UserDirectoryService(
     {
         var actor = EnsureAdministrator();
         var stored = await RequiredAsync(subjectId, cancellationToken);
-        await ValidatePasswordAsync(request.Password, stored.Account.UserName, cancellationToken);
+        await passwordPolicy.ValidateAsync(request.Password, stored.Account.UserName, cancellationToken);
         return Map(await store.ResetPasswordAsync(
             subjectId,
             request.Password,
@@ -221,37 +221,6 @@ public sealed class UserDirectoryService(
         }
 
         return actor;
-    }
-
-    private async Task ValidatePasswordAsync(string password, string userName, CancellationToken cancellationToken)
-    {
-        if (password.Length < 12 || password.Length > 128
-            || !password.Any(char.IsUpper)
-            || !password.Any(char.IsLower)
-            || !password.Any(char.IsDigit))
-        {
-            throw new InvalidRequestException(
-                "user.password_weak",
-                "Password harus 12-128 karakter dan memuat huruf besar, huruf kecil, serta angka.");
-        }
-
-        var normalizedUserName = userName.Trim();
-        if (normalizedUserName.Length >= 4
-            && password.Contains(normalizedUserName, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidRequestException(
-                "user.password_contains_username",
-                "Password tidak boleh memuat username.");
-        }
-
-        // Local passwords exist for break-glass Administrator access, so a password that already
-        // circulates in breach corpora is refused even when it satisfies the composition rule.
-        if (await breachedPasswords.IsBreachedAsync(password, cancellationToken))
-        {
-            throw new InvalidRequestException(
-                "user.password_breached",
-                "Password ini ditemukan pada daftar kebocoran data publik. Gunakan password lain.");
-        }
     }
 
     private static UserAccountResponse Map(StoredUserAccount stored) => new(
