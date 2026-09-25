@@ -225,6 +225,7 @@ if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))
 
 // Fail fast on an inconsistent login configuration (OPN-007) instead of on the first login attempt.
 _ = app.Services.GetRequiredService<LoginSettings>();
+StartupLog.WarnOnAcceptedRisks(app.Logger, app.Services.GetRequiredService<PortalAuthenticationSettings>());
 
 if (app.Environment.IsDevelopment())
 {

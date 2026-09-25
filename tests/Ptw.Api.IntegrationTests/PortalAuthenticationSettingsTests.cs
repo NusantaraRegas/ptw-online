@@ -67,8 +67,53 @@ public sealed class PortalAuthenticationSettingsTests
         var development = PortalAuthenticationSettings.FromConfiguration(Build(values), isDevelopment: true);
         Assert.True(development.Enabled);
 
+        Assert.False(development.InsecureHttpAccepted);
+
         Assert.Throws<InvalidOperationException>(() =>
             PortalAuthenticationSettings.FromConfiguration(Build(values), isDevelopment: false));
+    }
+
+    [Fact]
+    public void ClearTextBaseUrlOutsideDevelopmentRequiresExplicitOptIn()
+    {
+        // OPN-007 amendment: production may reach an internal-network portal over http only when the
+        // operator sets the literal opt-in; anything else keeps the fail-closed default.
+        var accepted = PortalAuthenticationSettings.FromConfiguration(
+            Build(new Dictionary<string, string?>
+            {
+                ["PortalAuth:BaseUrl"] = "http://10.10.10.12:7100",
+                ["PortalAuth:AllowInsecureHttp"] = "true"
+            }),
+            isDevelopment: false);
+
+        Assert.True(accepted.Enabled);
+        Assert.True(accepted.InsecureHttpAccepted);
+        Assert.Equal(new Uri("http://10.10.10.12:7100/api/v1/User/SecureAuth"), accepted.AuthenticateEndpoint);
+
+        var httpsWithOptIn = PortalAuthenticationSettings.FromConfiguration(
+            Build(new Dictionary<string, string?>
+            {
+                ["PortalAuth:BaseUrl"] = "https://portal.example.com",
+                ["PortalAuth:AllowInsecureHttp"] = "true"
+            }),
+            isDevelopment: false);
+        Assert.False(httpsWithOptIn.InsecureHttpAccepted);
+    }
+
+    [Theory]
+    [InlineData("false")]
+    [InlineData("")]
+    [InlineData("yes")]
+    [InlineData("1")]
+    public void ClearTextBaseUrlOutsideDevelopmentRejectsNonLiteralOptIn(string allowInsecureHttp)
+    {
+        Assert.Throws<InvalidOperationException>(() => PortalAuthenticationSettings.FromConfiguration(
+            Build(new Dictionary<string, string?>
+            {
+                ["PortalAuth:BaseUrl"] = "http://10.10.10.12:7100",
+                ["PortalAuth:AllowInsecureHttp"] = allowInsecureHttp
+            }),
+            isDevelopment: false));
     }
 
     [Theory]

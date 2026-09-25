@@ -120,7 +120,10 @@ services:
       Attachments__StoragePath: /var/lib/ptw/attachments
       GeneratedDocuments__StoragePath: /var/lib/ptw/generated-documents
       Authentication__DataProtectionPath: /var/lib/ptw/data-protection
-      PortalAuth__BaseUrl: ${PTW_PORTAL_API_BASE_URL:?set the https Portal API base URL}
+      PortalAuth__BaseUrl: ${PTW_PORTAL_API_BASE_URL:?set the Portal API base URL}
+      # Literal `true` only when the OPN-007 amendment applies (internal-network portal without TLS);
+      # any other value keeps the https-only startup check.
+      PortalAuth__AllowInsecureHttp: ${PTW_PORTAL_API_ALLOW_INSECURE_HTTP:-false}
       # Host filtering: the public name from nginx plus localhost for the container healthcheck.
       AllowedHosts: "${PTW_PUBLIC_HOST:?set the public host name};localhost"
       # X-Forwarded-For/Proto are trusted only from the nginx container on this subnet.

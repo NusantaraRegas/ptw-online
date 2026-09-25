@@ -28,7 +28,8 @@ public sealed class LoginSettings
         if (enabled && !isDevelopment && !portal.Enabled)
         {
             throw new InvalidOperationException(
-                "Authentication:LoginEnabled=true di luar Development memerlukan PortalAuth:BaseUrl (https) yang aktif.");
+                "Authentication:LoginEnabled=true di luar Development memerlukan PortalAuth:BaseUrl yang aktif "
+                + "(https, atau http dengan PortalAuth:AllowInsecureHttp=true).");
         }
 
         return new LoginSettings { Enabled = enabled };

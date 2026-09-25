@@ -17,6 +17,12 @@ public sealed class PortalAuthenticationSettings
     public string AuthenticatePath { get; init; } = DefaultAuthenticatePath;
     public int TimeoutSeconds { get; init; } = 10;
 
+    /// <summary>
+    /// True when a clear-text <c>http://</c> portal URL was accepted outside Development through the
+    /// explicit <c>PortalAuth:AllowInsecureHttp</c> opt-in (OPN-007 amendment, accepted risk).
+    /// </summary>
+    public bool InsecureHttpAccepted { get; init; }
+
     /// <summary>Absolute endpoint that receives the credential; null when the portal is disabled.</summary>
     public Uri? AuthenticateEndpoint =>
         BaseUrl is null ? null : new Uri(BaseUrl, AuthenticatePath.TrimStart('/'));
@@ -43,11 +49,22 @@ public sealed class PortalAuthenticationSettings
         }
 
         // The credential travels in the request body, so a clear-text portal URL is only acceptable
-        // on a developer workstation. Production must reach the portal over TLS.
+        // on a developer workstation, or on a production host whose operator has explicitly accepted
+        // the risk for an internal-network portal (OPN-007 amendment). The opt-in must be a literal
+        // `true`: an absent or malformed value keeps the fail-closed default.
+        var insecureHttpAccepted = false;
         if (baseUrl.Scheme == Uri.UriSchemeHttp && !isDevelopment)
         {
-            throw new InvalidOperationException(
-                "PortalAuth:BaseUrl harus memakai https di luar environment Development.");
+            var allowInsecureHttp = bool.TryParse(section["AllowInsecureHttp"], out var configuredAllow)
+                && configuredAllow;
+            if (!allowInsecureHttp)
+            {
+                throw new InvalidOperationException(
+                    "PortalAuth:BaseUrl harus memakai https di luar environment Development, "
+                    + "kecuali PortalAuth:AllowInsecureHttp=true ditetapkan secara eksplisit sebagai risiko yang diterima.");
+            }
+
+            insecureHttpAccepted = true;
         }
 
         var path = section["AuthenticatePath"]?.Trim();
@@ -70,7 +87,8 @@ public sealed class PortalAuthenticationSettings
             // A trailing slash keeps Uri composition from dropping a base path such as /portal/.
             BaseUrl = baseUrl.AbsolutePath.EndsWith('/') ? baseUrl : new Uri(baseUrl.AbsoluteUri + "/"),
             AuthenticatePath = path,
-            TimeoutSeconds = int.TryParse(section["TimeoutSeconds"], out var timeout) && timeout > 0 ? timeout : 10
+            TimeoutSeconds = int.TryParse(section["TimeoutSeconds"], out var timeout) && timeout > 0 ? timeout : 10,
+            InsecureHttpAccepted = insecureHttpAccepted
         };
     }
 }
