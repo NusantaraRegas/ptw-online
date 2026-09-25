@@ -193,6 +193,8 @@ services:
       PTW_PUBLIC_HOST: ${PTW_PUBLIC_HOST:?set the public host name}
       PTW_UPLOAD_MAX_BODY: ${PTW_UPLOAD_MAX_BODY:-11m}
       PTW_ADMIN_ALLOW_CIDRS: ${PTW_ADMIN_ALLOW_CIDRS:-}
+      # Corporate reverse proxy that terminates TLS for PTW_PUBLIC_HOST (OPN-009 Amendemen 1).
+      PTW_TRUSTED_PROXY_CIDRS: ${PTW_TRUSTED_PROXY_CIDRS:-}
     volumes:
       # The template replaces the image's development server block: conf.d is a tmpfs below so
       # the envsubst step can write the rendered file although the root filesystem is read-only.
