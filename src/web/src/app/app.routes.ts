@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authenticatedGuard } from './core/authentication.guard';
+import { operationsBoardGuard } from './core/operations-board.guard';
 
 export const routes: Routes = [
   {
@@ -33,8 +34,9 @@ export const routes: Routes = [
   },
   {
     path: 'operations',
-    canActivate: [authenticatedGuard],
-    loadComponent: () => import('./features/placeholder/placeholder').then((m) => m.OperationsPage),
+    canActivate: [authenticatedGuard, operationsBoardGuard],
+    loadComponent: () =>
+      import('./features/operations/operations-board').then((m) => m.OperationsBoard),
   },
   {
     path: 'reports',

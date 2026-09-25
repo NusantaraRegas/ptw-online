@@ -66,13 +66,17 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
       }
       @for (permit of permits(); track permit.id) {
         <a class="permit-item" [routerLink]="['/permits', permit.id]">
-          <span class="class-code">{{
-            permit.draft.permitClass === 'HotWork'
-              ? 'HW'
-              : permit.draft.permitClass === 'ColdWork'
-                ? 'CW'
-                : 'CSE'
-          }}</span>
+          <span
+            class="class-code permit-class"
+            [attr.data-permit-class]="permit.draft.permitClass"
+            >{{
+              permit.draft.permitClass === 'HotWork'
+                ? 'HW'
+                : permit.draft.permitClass === 'ColdWork'
+                  ? 'CW'
+                  : 'CSE'
+            }}</span
+          >
           <div>
             <strong>{{ permit.draft.title }}</strong>
             <p>
@@ -196,8 +200,6 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
         display: grid;
         place-items: center;
         border-radius: 9px;
-        color: var(--nr-blue-dark);
-        background: var(--nr-blue-soft);
         font-size: 10px;
         font-weight: 800;
       }

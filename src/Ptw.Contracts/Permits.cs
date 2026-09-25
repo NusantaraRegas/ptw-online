@@ -243,6 +243,39 @@ public sealed record PermitRenewalResponse(
 
 public sealed record PagedResponse<T>(IReadOnlyList<T> Items, int Count);
 
+public sealed record OperationsBoardMetricsResponse(
+    int Total,
+    int UnderValidation,
+    int RevisionRequired,
+    int AwaitingAreaApproval,
+    int Issued,
+    int Suspended,
+    int ExpiringSoon,
+    int ClosureRequested,
+    int Closed,
+    int Rejected,
+    int Cancelled,
+    int Expired);
+
+public sealed record OperationsBoardItemResponse(
+    Guid Id,
+    string? PermitNumber,
+    string Title,
+    string Company,
+    string LocationId,
+    string PermitClass,
+    string Status,
+    DateTimeOffset ValidFrom,
+    DateTimeOffset ValidUntil,
+    DateTimeOffset UpdatedAt,
+    string? SuspensionReason);
+
+public sealed record OperationsBoardResponse(
+    OperationsBoardMetricsResponse Metrics,
+    IReadOnlyList<OperationsBoardItemResponse> Items,
+    int Count,
+    DateTimeOffset GeneratedAt);
+
 public sealed record PermitActivityResponse(
     long Sequence,
     string EventType,

@@ -146,6 +146,25 @@ h3 {
   font-size: 10px;
 }
 
+.permit-class {
+  border: 1px solid transparent;
+}
+.permit-class[data-permit-class='HotWork'] {
+  border-color: #f1bea8;
+  color: #963b16;
+  background: #fff0e8;
+}
+.permit-class[data-permit-class='ColdWork'] {
+  border-color: #b8dceb;
+  color: #0b5f83;
+  background: #e6f4fb;
+}
+.permit-class[data-permit-class='ConfinedSpaceEntry'] {
+  border-color: #d6c7eb;
+  color: #5d3e88;
+  background: #f2ebfa;
+}
+
 .permit-status {
   display: inline-flex;
   align-items: center;

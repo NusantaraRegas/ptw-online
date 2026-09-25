@@ -1,0 +1,214 @@
+<div class="page-title operations-title">
+  <div>
+    <p class="eyebrow">Monitoring wilayah</p>
+    <h1>Papan Operasi</h1>
+    <p class="subtitle">
+      {{ isAdministrator() ? 'Seluruh PTW non-draft' : 'Kondisi PTW operasional' }} dalam cakupan
+      <strong>{{ scopeLabel() }}</strong
+      >.
+    </p>
+  </div>
+  <div class="board-state" aria-live="polite">
+    <span><i aria-hidden="true"></i>{{ refreshing() ? 'Memperbarui' : 'Terhubung' }}</span>
+    @if (response()) {
+      <small>
+        Diperbarui
+        {{ response()!.generatedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB
+      </small>
+    }
+    <button type="button" (click)="refresh()" [disabled]="refreshing()">Perbarui sekarang</button>
+  </div>
+</div>
+
+<section class="safety-notice" aria-label="Batas penggunaan Papan Operasi">
+  <span class="safety-icon" aria-hidden="true">!</span>
+  <div>
+    <strong>Diterbitkan belum otomatis mengizinkan pekerjaan dimulai</strong>
+    <p>
+      Gas test, readiness, revalidasi, penyelesaian, inspeksi, restorasi, handback, dan tanda tangan
+      lapangan tetap dikendalikan pada hardcopy resmi.
+    </p>
+  </div>
+</section>
+
+<section class="metric-grid" aria-label="Ringkasan kondisi operasi">
+  <article class="metric issued">
+    <span class="metric-symbol" aria-hidden="true">●</span>
+    <div>
+      <strong>{{ metrics().issued }}</strong
+      ><span>Diterbitkan</span>
+    </div>
+    <small>PTW berstatus aktif</small>
+  </article>
+  <article class="metric suspended">
+    <span class="metric-symbol" aria-hidden="true">!</span>
+    <div>
+      <strong>{{ metrics().suspended }}</strong
+      ><span>Ditangguhkan</span>
+    </div>
+    <small>Hak kerja dihentikan</small>
+  </article>
+  <article class="metric expiring">
+    <span class="metric-symbol" aria-hidden="true">◷</span>
+    <div>
+      <strong>{{ metrics().expiringSoon }}</strong
+      ><span>Segera berakhir</span>
+    </div>
+    <small>Dalam 24 jam</small>
+  </article>
+  <article class="metric closure">
+    <span class="metric-symbol" aria-hidden="true">✓</span>
+    <div>
+      <strong>{{ metrics().closureRequested }}</strong
+      ><span>Penutupan</span>
+    </div>
+    <small>Menunggu verifikasi</small>
+  </article>
+</section>
+
+<section class="card board-card">
+  <header class="board-header">
+    <div>
+      <h2>PTW dalam pengawasan</h2>
+      <p>Aksi keputusan tetap dilakukan melalui detail PTW atau Tugas Saya.</p>
+    </div>
+    <span>{{ count() }} PTW</span>
+  </header>
+
+  <form class="filters" [formGroup]="form" aria-label="Filter Papan Operasi">
+    <label class="search-filter">
+      <span>Cari PTW</span>
+      <input
+        type="search"
+        formControlName="search"
+        maxlength="100"
+        autocomplete="off"
+        placeholder="Nomor, judul, atau perusahaan"
+      />
+    </label>
+    <label>
+      <span>Lokasi</span>
+      <select
+        formControlName="locationId"
+        [attr.aria-describedby]="locationError() ? 'location-load-error' : null"
+      >
+        <option value="">Semua lokasi dalam cakupan</option>
+        @for (location of availableLocations(); track location.id) {
+          <option [value]="location.code">{{ location.name }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>Status</span>
+      <select formControlName="status">
+        <option value="">
+          {{ isAdministrator() ? 'Semua status kecuali draft' : 'Semua status operasi' }}
+        </option>
+        @if (isAdministrator()) {
+          <option value="UNDER_VALIDATION">Validasi HSE berjalan</option>
+          <option value="REVISION_REQUIRED">Perlu revisi</option>
+          <option value="AWAITING_AREA_APPROVAL">Menunggu persetujuan</option>
+        }
+        <option value="ISSUED">Diterbitkan</option>
+        <option value="SUSPENDED">Ditangguhkan</option>
+        <option value="CLOSURE_REQUESTED">Menunggu verifikasi penutupan</option>
+        @if (isAdministrator()) {
+          <option value="CLOSED">Ditutup</option>
+          <option value="REJECTED">Ditolak</option>
+          <option value="CANCELLED">Dibatalkan</option>
+          <option value="EXPIRED">Kedaluwarsa</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>Kelas izin</span>
+      <select formControlName="permitClass">
+        <option value="">Semua kelas izin</option>
+        <option value="HotWork">Pekerjaan Panas</option>
+        <option value="ColdWork">Pekerjaan Dingin</option>
+        <option value="ConfinedSpaceEntry">Memasuki Ruang Terbatas</option>
+      </select>
+    </label>
+    <label>
+      <span>Item per halaman</span>
+      <select formControlName="pageSize">
+        @for (option of pageSizeOptions; track option) {
+          <option [ngValue]="option">{{ option }} item</option>
+        }
+      </select>
+    </label>
+  </form>
+  @if (locationError()) {
+    <p id="location-load-error" class="filter-warning" role="status">{{ locationError() }}</p>
+  }
+
+  <div class="board-results" aria-live="polite" [attr.aria-busy]="loading() || refreshing()">
+    @if (loading()) {
+      <div class="board-message">
+        <span class="spinner" aria-hidden="true"></span>Memuat kondisi operasi…
+      </div>
+    } @else if (error() && !response()) {
+      <div class="board-message error" role="alert">
+        <strong>Papan Operasi tidak dapat dimuat</strong>
+        <p>{{ error() }}</p>
+        <button type="button" (click)="refresh()">Coba lagi</button>
+      </div>
+    } @else {
+      @if (error()) {
+        <div class="stale-warning" role="alert">Data terakhir tetap ditampilkan. {{ error() }}</div>
+      }
+      @for (permit of items(); track permit.id) {
+        <a
+          class="permit-row"
+          [class.urgent]="permit.status === 'SUSPENDED'"
+          [class.expiring]="isExpiringSoon(permit)"
+          [routerLink]="['/permits', permit.id]"
+        >
+          <span class="class-mark permit-class" [attr.data-permit-class]="permit.permitClass">{{
+            permitClassLabel(permit.permitClass)
+          }}</span>
+          <span class="permit-main">
+            <strong>{{ permit.title }}</strong>
+            <small
+              >{{ permit.permitNumber || 'Nomor PTW belum tersedia' }} · {{ permit.company }}</small
+            >
+          </span>
+          <span class="location-cell">
+            <small>Lokasi</small>
+            <strong>{{ locationName(permit.locationId) }}</strong>
+          </span>
+          <span class="validity-cell">
+            <small>{{ attentionLabel(permit) }}</small>
+            <strong>{{ remainingLabel(permit) }}</strong>
+            <time>{{ permit.validUntil | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</time>
+          </span>
+          <span class="permit-status" [attr.data-status]="permit.status">
+            {{ statusLabel(permit.status) }}
+          </span>
+          <span class="open-detail">Lihat detail <span aria-hidden="true">→</span></span>
+          @if (permit.status === 'SUSPENDED' && permit.suspensionReason) {
+            <span class="suspension-reason">
+              <strong>Alasan penangguhan:</strong> {{ permit.suspensionReason }}
+            </span>
+          }
+        </a>
+      } @empty {
+        <div class="board-message empty">
+          <span aria-hidden="true">✓</span>
+          <strong>Tidak ada PTW yang cocok</strong>
+          <p>Ubah filter atau pencarian untuk melihat kondisi operasi lainnya.</p>
+        </div>
+      }
+    }
+  </div>
+
+  @if (!loading() && count() > 0) {
+    <footer class="pagination" aria-label="Navigasi halaman Papan Operasi">
+      <span>Menampilkan {{ rangeStart() }}–{{ rangeEnd() }} dari {{ count() }} PTW</span>
+      <div>
+        <button type="button" (click)="previousPage()" [disabled]="!canGoBack()">Sebelumnya</button>
+        <button type="button" (click)="nextPage()" [disabled]="!canGoForward()">Berikutnya</button>
+      </div>
+    </footer>
+  }
+</section>

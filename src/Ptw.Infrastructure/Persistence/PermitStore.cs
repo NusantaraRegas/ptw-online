@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Ptw.Application;
@@ -61,6 +62,95 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         return records.Select(record => ToStored(
             record,
             renewals.GetValueOrDefault(record.Id))).ToArray();
+    }
+
+    public async Task<OperationsBoardPage> ListOperationsBoardAsync(
+        IReadOnlySet<string> locationScopes,
+        OperationsBoardQuery query,
+        CancellationToken cancellationToken)
+    {
+        var operationalStatuses = new[] { "Issued", "Suspended", "ClosureRequested" };
+        var scopedQuery = dbContext.Permits.AsNoTracking();
+        scopedQuery = query.IncludeAllNonDraft
+            ? scopedQuery.Where(x => x.Status != "Draft")
+            : scopedQuery.Where(x => operationalStatuses.Contains(x.Status));
+
+        if (!locationScopes.Contains("*"))
+        {
+            var scopedLocations = locationScopes.ToArray();
+            scopedQuery = scopedQuery.Where(x => scopedLocations.Contains(x.LocationId));
+        }
+
+        var metrics = await scopedQuery
+            .GroupBy(_ => 1)
+            .Select(group => new OperationsBoardMetricsEntry(
+                group.Count(),
+                group.Count(x => x.Status == "UnderValidation"),
+                group.Count(x => x.Status == "RevisionRequired"),
+                group.Count(x => x.Status == "AwaitingAreaApproval"),
+                group.Count(x => x.Status == "Issued"),
+                group.Count(x => x.Status == "Suspended"),
+                group.Count(x => operationalStatuses.Contains(x.Status)
+                    && x.ValidUntil >= query.Now
+                    && x.ValidUntil <= query.ExpiringBefore),
+                group.Count(x => x.Status == "ClosureRequested"),
+                group.Count(x => x.Status == "Closed"),
+                group.Count(x => x.Status == "Rejected"),
+                group.Count(x => x.Status == "Cancelled"),
+                group.Count(x => x.Status == "Expired")))
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? new OperationsBoardMetricsEntry(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+        var filteredQuery = scopedQuery;
+        if (!string.IsNullOrWhiteSpace(query.Status))
+        {
+            filteredQuery = filteredQuery.Where(x => x.Status == query.Status);
+        }
+        if (!string.IsNullOrWhiteSpace(query.LocationId))
+        {
+            filteredQuery = filteredQuery.Where(x => x.LocationId == query.LocationId);
+        }
+        if (query.PermitClass is not null)
+        {
+            var permitClassValue = ((int)query.PermitClass.Value).ToString(CultureInfo.InvariantCulture);
+            filteredQuery = filteredQuery.Where(x =>
+                PtwDbContext.JsonValue(x.DraftJson, "$.permitClass") == permitClassValue);
+        }
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var pattern = $"%{EscapeLikePattern(query.Search)}%";
+            filteredQuery = filteredQuery.Where(x =>
+                (x.PermitNumber != null && EF.Functions.Like(x.PermitNumber, pattern, @"\"))
+                || EF.Functions.Like(x.DraftJson, pattern, @"\"));
+        }
+
+        var count = await filteredQuery.CountAsync(cancellationToken);
+        var records = await filteredQuery
+            .OrderBy(x => x.Status == "Suspended" ? 0
+                : x.Status == "ClosureRequested" ? 1
+                : x.Status == "Issued" ? 2
+                : x.Status == "UnderValidation" ? 3
+                : x.Status == "RevisionRequired" ? 4
+                : x.Status == "AwaitingAreaApproval" ? 5
+                : x.Status == "Expired" ? 6
+                : x.Status == "Closed" ? 7
+                : x.Status == "Rejected" ? 8
+                : 9)
+            .ThenBy(x => x.ValidUntil)
+            .ThenByDescending(x => x.UpdatedAt)
+            .Skip(query.Offset)
+            .Take(query.Limit)
+            .ToListAsync(cancellationToken);
+
+        var items = records.Select(record => new OperationsBoardItemEntry(
+            record.Id,
+            record.PermitNumber,
+            record.Status,
+            JsonSerializer.Deserialize<PermitDraft>(record.DraftJson, JsonOptions)
+                ?? throw new InvalidOperationException("Snapshot draft PTW tidak valid."),
+            record.UpdatedAt,
+            record.SuspensionReason)).ToArray();
+        return new OperationsBoardPage(metrics, items, count);
     }
 
     private static string EscapeLikePattern(string value) => value

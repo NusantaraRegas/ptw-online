@@ -115,6 +115,111 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     }
 
     [Fact]
+    public async Task OperationsBoardIsRoleAndLocationScoped()
+    {
+        var marker = $"operations-{Guid.NewGuid():N}";
+        var orfSponsorId = Unique("sponsor-orf");
+        var siteSponsorId = Unique("sponsor-site");
+        using var orfSponsor = Client(orfSponsorId, "Sponsor", "ORF");
+        using var siteSponsor = Client(siteSponsorId, "Sponsor", "SITE_OFFICE");
+        using var createOrf = await orfSponsor.PostAsJsonAsync(
+            "/api/v1/permits",
+            Draft(orfSponsorId, "ORF") with { Title = $"ORF {marker}" });
+        createOrf.EnsureSuccessStatusCode();
+        var orfPermit = Required(await createOrf.Content.ReadFromJsonAsync<PermitResponse>());
+        using var createSite = await siteSponsor.PostAsJsonAsync(
+            "/api/v1/permits",
+            Draft(siteSponsorId, "SITE_OFFICE") with { Title = $"Site {marker}" });
+        createSite.EnsureSuccessStatusCode();
+        var sitePermit = Required(await createSite.Content.ReadFromJsonAsync<PermitResponse>());
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+            var records = await db.Permits
+                .Where(item => item.Id == orfPermit.Id || item.Id == sitePermit.Id)
+                .ToListAsync();
+            foreach (var record in records)
+            {
+                record.Status = record.Id == orfPermit.Id ? "Suspended" : "Issued";
+                record.ValidUntil = DateTimeOffset.UtcNow.AddHours(12);
+                if (record.Id == orfPermit.Id)
+                {
+                    record.SuspensionReason = "Kondisi lapangan tidak aman.";
+                }
+            }
+            await db.SaveChangesAsync();
+        }
+
+        using var areaOwner = Client(Unique("area-owner"), "AreaOwnerManager", "ORF");
+        var board = Required(await areaOwner.GetFromJsonAsync<OperationsBoardResponse>(
+            $"/api/v1/operations?permitClass=HotWork&search={Uri.EscapeDataString(marker)}"));
+
+        var item = Assert.Single(board.Items);
+        Assert.Equal(orfPermit.Id, item.Id);
+        Assert.Equal("SUSPENDED", item.Status);
+        Assert.Equal("Kondisi lapangan tidak aman.", item.SuspensionReason);
+        Assert.True(board.Metrics.Suspended >= 1);
+        Assert.True(board.Metrics.ExpiringSoon >= 1);
+        Assert.DoesNotContain(board.Items, candidate => candidate.Id == sitePermit.Id);
+    }
+
+    [Fact]
+    public async Task AdministratorOperationsBoardIncludesClosedPermitsAndExcludesDrafts()
+    {
+        var marker = $"admin-operations-{Guid.NewGuid():N}";
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "*");
+        using var createClosed = await sponsor.PostAsJsonAsync(
+            "/api/v1/permits",
+            Draft(sponsorId, "ORF") with { Title = $"Ditutup {marker}" });
+        createClosed.EnsureSuccessStatusCode();
+        var closedPermit = Required(await createClosed.Content.ReadFromJsonAsync<PermitResponse>());
+        using var createDraft = await sponsor.PostAsJsonAsync(
+            "/api/v1/permits",
+            Draft(sponsorId, "SITE_OFFICE") with { Title = $"Draft {marker}" });
+        createDraft.EnsureSuccessStatusCode();
+        var draftPermit = Required(await createDraft.Content.ReadFromJsonAsync<PermitResponse>());
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+            var record = await db.Permits.SingleAsync(item => item.Id == closedPermit.Id);
+            record.Status = "Closed";
+            await db.SaveChangesAsync();
+        }
+
+        using var administrator = Client(Unique("administrator"), "Administrator", "*");
+        var board = Required(await administrator.GetFromJsonAsync<OperationsBoardResponse>(
+            $"/api/v1/operations?search={Uri.EscapeDataString(marker)}"));
+
+        var item = Assert.Single(board.Items);
+        Assert.Equal(closedPermit.Id, item.Id);
+        Assert.Equal("CLOSED", item.Status);
+        Assert.True(board.Metrics.Total >= 1);
+        Assert.True(board.Metrics.Closed >= 1);
+        Assert.DoesNotContain(board.Items, candidate => candidate.Id == draftPermit.Id);
+
+        var closedBoard = Required(await administrator.GetFromJsonAsync<OperationsBoardResponse>(
+            $"/api/v1/operations?status=CLOSED&search={Uri.EscapeDataString(marker)}"));
+        Assert.Equal(closedPermit.Id, Assert.Single(closedBoard.Items).Id);
+
+        using var areaOwner = Client(Unique("area-owner"), "AreaOwnerManager", "ORF");
+        using var forbiddenFilter = await areaOwner.GetAsync("/api/v1/operations?status=CLOSED");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, forbiddenFilter.StatusCode);
+    }
+
+    [Fact]
+    public async Task OperationsBoardRejectsSponsorOnlyIdentity()
+    {
+        using var sponsor = Client(Unique("sponsor"), "Sponsor", "ORF");
+
+        using var response = await sponsor.GetAsync("/api/v1/operations");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task DraftSavesAndMandatoryUploadsKeepTheInitialBusinessVersion()
     {
         var sponsorId = Unique("sponsor");

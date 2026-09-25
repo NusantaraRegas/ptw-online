@@ -385,7 +385,7 @@ Preview draft (`GET .../print-packages/preview`) memakai renderer yang sama deng
 
 ### 12.2 Halaman
 
-Login (akun lokal / mode demo eksplisit Development), dashboard peran, daftar PTW, buat PTW (Bagian 1–4 + header), detail PTW (ringkasan, progres workflow dengan nama profil, aksi per role: validasi + Bagian 5, review Bagian 7, approve-and-issue, revisi/tolak, suspend/resolve, renewal, closure/resubmit, cancel), lampiran (kesiapan dokumen dasar dan Bagian 4, upload, unduh), paket cetak (status, unduh, preview, retry), riwayat, daftar tugas, administrasi pengguna/spesimen, otorisasi, master lokasi, kesiapan policy, UAT policy. `operations` dan `reports` masih placeholder.
+Login (akun lokal / mode demo eksplisit Development), dashboard peran, daftar PTW, buat PTW (Bagian 1–4 + header), detail PTW (ringkasan, progres workflow dengan nama profil, aksi per role: validasi + Bagian 5, review Bagian 7, approve-and-issue, revisi/tolak, suspend/resolve, renewal, closure/resubmit, cancel), lampiran (kesiapan dokumen dasar dan Bagian 4, upload, unduh), paket cetak (status, unduh, preview, retry), riwayat, daftar tugas, Papan Operasi read-only berscope dengan metrik/filter/pagination/drill-down, administrasi pengguna/spesimen, otorisasi, master lokasi, kesiapan policy, UAT policy. `reports` masih placeholder.
 
 ## 13. Backend ASP.NET Core 10
 

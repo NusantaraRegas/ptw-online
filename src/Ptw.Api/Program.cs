@@ -40,6 +40,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IActorContext, HttpActorContext>();
 builder.Services.AddScoped<PermitService>();
+builder.Services.AddScoped<OperationsBoardService>();
 builder.Services.AddScoped<PermitAttachmentService>();
 builder.Services.AddScoped<PrintPackageService>();
 builder.Services.AddScoped<LocationMasterService>();

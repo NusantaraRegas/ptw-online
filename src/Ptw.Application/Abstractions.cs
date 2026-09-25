@@ -31,6 +31,40 @@ public sealed record PermitTaskEntry(
     string LocationId,
     DateTimeOffset CreatedAt,
     DateTimeOffset? CompletedAt);
+public sealed record OperationsBoardQuery(
+    string? Status,
+    string? LocationId,
+    PermitClass? PermitClass,
+    string? Search,
+    bool IncludeAllNonDraft,
+    int Offset,
+    int Limit,
+    DateTimeOffset Now,
+    DateTimeOffset ExpiringBefore);
+public sealed record OperationsBoardMetricsEntry(
+    int Total,
+    int UnderValidation,
+    int RevisionRequired,
+    int AwaitingAreaApproval,
+    int Issued,
+    int Suspended,
+    int ExpiringSoon,
+    int ClosureRequested,
+    int Closed,
+    int Rejected,
+    int Cancelled,
+    int Expired);
+public sealed record OperationsBoardItemEntry(
+    Guid Id,
+    string? PermitNumber,
+    string Status,
+    PermitDraft Draft,
+    DateTimeOffset UpdatedAt,
+    string? SuspensionReason);
+public sealed record OperationsBoardPage(
+    OperationsBoardMetricsEntry Metrics,
+    IReadOnlyList<OperationsBoardItemEntry> Items,
+    int Count);
 public sealed record PermitAttachmentEntry(
     Guid Id,
     Guid PermitId,
@@ -81,6 +115,10 @@ public interface IPermitStore
         string? sponsorId,
         IReadOnlySet<string> locationScopes,
         string? search,
+        CancellationToken cancellationToken);
+    Task<OperationsBoardPage> ListOperationsBoardAsync(
+        IReadOnlySet<string> locationScopes,
+        OperationsBoardQuery query,
         CancellationToken cancellationToken);
     Task<StoredPermit> AddAsync(
         Permit permit,

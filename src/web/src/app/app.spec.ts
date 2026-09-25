@@ -146,6 +146,32 @@ describe('App', () => {
       'Manager Pemilik Wilayah Site-Office (General Affair) Demo',
     );
     expect(fixture.nativeElement.textContent).not.toContain('AreaOwnerManager');
+    expect(fixture.nativeElement.querySelector('a[href="/operations"]')).not.toBeNull();
+    sessionStorage.clear();
+  });
+
+  it('hides Papan Operasi from a Sponsor-only identity', async () => {
+    sessionStorage.setItem('ptw.demo-session', '1');
+    sessionStorage.setItem('ptw.development-identity', 'sponsor-only');
+    await TestBed.configureTestingModule({
+      imports: [App],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/me').flush({
+      userId: 'sponsor.only.demo',
+      displayName: 'Sponsor Only Demo',
+      roles: ['Sponsor'],
+      locationScopes: ['*'],
+      competencyCodes: [],
+      isDevelopmentIdentity: true,
+    });
+    http.expectOne('/api/v1/tasks').flush({ items: [], count: 0 });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('a[href="/operations"]')).toBeNull();
     sessionStorage.clear();
   });
 });

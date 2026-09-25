@@ -75,6 +75,7 @@ describe('PermitList', () => {
       isDevelopmentIdentity: true,
     });
     const statuses = ['ISSUED', 'CLOSED', 'REJECTED', 'SUSPENDED'];
+    const permitClasses = ['HotWork', 'ColdWork', 'ConfinedSpaceEntry', 'HotWork'];
     http.expectOne('/api/v1/permits').flush({
       items: statuses.map((status, index) => ({
         id: `permit-${index}`,
@@ -82,7 +83,7 @@ describe('PermitList', () => {
         status,
         updatedAt: '2026-09-23T08:00:00Z',
         draft: {
-          permitClass: 'HotWork',
+          permitClass: permitClasses[index],
           title: `Permit ${status}`,
           locationId: 'ORF',
           company: 'PT Kontraktor',
@@ -101,6 +102,16 @@ describe('PermitList', () => {
       'Ditutup',
       'Ditolak',
       'Ditangguhkan',
+    ]);
+    const classBadges = Array.from<HTMLElement>(
+      fixture.nativeElement.querySelectorAll('.permit-class'),
+    );
+    expect(classBadges.map((badge) => badge.dataset['permitClass'])).toEqual(permitClasses);
+    expect(classBadges.map((badge) => badge.textContent?.trim())).toEqual([
+      'HW',
+      'CW',
+      'CSE',
+      'HW',
     ]);
   });
 

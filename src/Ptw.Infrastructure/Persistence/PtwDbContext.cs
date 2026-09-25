@@ -4,6 +4,10 @@ namespace Ptw.Infrastructure.Persistence;
 
 public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbContext(options)
 {
+    [DbFunction("JSON_VALUE", IsBuiltIn = true)]
+    public static string? JsonValue(string json, string path) =>
+        throw new NotSupportedException("Only available in translated database queries.");
+
     public DbSet<PermitRecord> Permits => Set<PermitRecord>();
     public DbSet<PermitVersionRecord> PermitVersions => Set<PermitVersionRecord>();
     public DbSet<PermitRevisionRecord> PermitRevisions => Set<PermitRevisionRecord>();

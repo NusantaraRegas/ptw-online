@@ -159,7 +159,9 @@
         </div>
       </div>
     }
-    <a class="board-link" routerLink="/operations">Buka Papan Operasi <span>→</span></a>
+    @if (canOpenOperationsBoard()) {
+      <a class="board-link" routerLink="/operations">Buka Papan Operasi <span>→</span></a>
+    }
   </section>
 </div>
 
@@ -167,16 +169,24 @@
   <header>
     <div>
       <h2>PTW terbaru</h2>
-      <p>Draft dan aktivitas terakhir Anda</p>
+      <p>
+        {{
+          isAdministrator()
+            ? 'Aktivitas seluruh PTW kecuali draft'
+            : 'Draft dan aktivitas terakhir Anda'
+        }}
+      </p>
     </div>
-    <a routerLink="/permits">Lihat PTW Saya</a>
+    <a [routerLink]="isAdministrator() ? '/operations' : '/permits'">
+      {{ isAdministrator() ? 'Buka Papan Operasi' : 'Lihat PTW Saya' }}
+    </a>
   </header>
   @if (!online()) {
     <div class="offline">
       API belum terhubung. Jalankan SQL Server dan Ptw.Api untuk memuat data aktual.
     </div>
   }
-  @if (permits().length === 0) {
+  @if (monitoredPermits().length === 0) {
     <div class="empty">
       <span class="empty-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24">
@@ -188,15 +198,17 @@
       <p>
         {{
           canCreatePermit()
-            ? 'Buat PTW pertama untuk memulai alur perencanaan.'
+            ? isAdministrator()
+              ? 'Belum ada PTW non-draft yang dapat dipantau.'
+              : 'Buat PTW pertama untuk memulai alur perencanaan.'
             : 'Belum ada PTW yang tersedia untuk akun dan cakupan lokasi Anda.'
         }}
       </p>
     </div>
   }
-  @for (permit of permits().slice(0, 4); track permit.id) {
+  @for (permit of monitoredPermits().slice(0, 4); track permit.id) {
     <a class="permit-row" [routerLink]="['/permits', permit.id]"
-      ><div class="permit-type">
+      ><div class="permit-type permit-class" [attr.data-permit-class]="permit.draft.permitClass">
         {{
           permit.draft.permitClass === 'HotWork'
             ? 'HW'

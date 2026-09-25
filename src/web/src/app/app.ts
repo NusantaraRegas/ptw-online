@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { catchError, EMPTY, filter, interval, switchMap } from 'rxjs';
 import {
+  canAccessOperationsBoard,
   clearClientAuthMode,
   CurrentIdentity,
   DEVELOPMENT_IDENTITIES,
@@ -50,6 +51,9 @@ export class App {
   protected readonly roleLabel = computed(() => roleDisplayLabel(this.identity().roles));
   protected readonly isAdministrator = computed(() =>
     this.identity().roles.includes('Administrator'),
+  );
+  protected readonly canOpenOperationsBoard = computed(() =>
+    canAccessOperationsBoard(this.identity().roles),
   );
   protected readonly taskBadgeText = computed(() =>
     this.pendingTaskCount() > 99 ? '99+' : this.pendingTaskCount().toString(),

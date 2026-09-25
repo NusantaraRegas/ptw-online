@@ -28,6 +28,17 @@ const ROLE_LABELS: Readonly<Record<string, string>> = {
   AreaOwnerManager: 'Manager Pemilik Wilayah',
 };
 
+export const OPERATION_BOARD_ROLES = [
+  'Administrator',
+  'HSEValidator',
+  'AreaOwnerSeniorOfficer',
+  'AreaOwnerManager',
+] as const;
+
+export function canAccessOperationsBoard(roles: readonly string[]): boolean {
+  return roles.some((role) => (OPERATION_BOARD_ROLES as readonly string[]).includes(role));
+}
+
 export function roleDisplayLabel(roles: readonly string[]): string {
   return roles.map((role) => ROLE_LABELS[role] ?? role).join(' · ');
 }
