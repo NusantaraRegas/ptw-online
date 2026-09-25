@@ -25,7 +25,7 @@ Versi 1.8 tidak mengubah tujuan bisnis, tetapi menyelaraskan alur yang pada v1.7
 | Closure | Pemilik wilayah memverifikasi bukti lalu menutup | Pemilik wilayah mengisi **verifikasi Bagian 10 terstruktur**; jalur "pekerjaan belum selesai" mengunci close dan meminta hardcopy pengganti untuk paket cetak yang sama |
 | Revisi | Task kembali ke pengaju | Permintaan revisi membuat **notifikasi task kepada Sponsor PTW**; submit ulang menaikkan versi PTW |
 | Paket cetak | A3 boleh dipecah menjadi A4 multipage; menyertakan QR dan halaman kampanye | **Dua halaman A3 setia pada FM-001/002/003-B-002-NR-B220** (halaman 1 landscape Bagian 1–7, halaman 2 portrait Bagian 8–10); QR dan halaman kampanye keluar dari rilis awal |
-| Identitas | OIDC/IdP korporat | Rilis Development memakai **akun lokal terkelola dan cookie HTTP-only**; role/scope dihitung dari assignment yang disetujui; SSO produksi tetap OPN-007 |
+| Identitas | OIDC/IdP korporat | Login memverifikasi kredensial melalui **Portal API (bind Active Directory)** lalu fallback ke akun lokal terkelola, dengan cookie HTTP-only; role/scope dihitung dari assignment yang disetujui (OPN-007 bagian 1 ACCEPTED 24 Sep 2026). Tidak ada OIDC/SSO baru sebagai prasyarat |
 
 ## 1. Ringkasan eksekutif
 
@@ -95,7 +95,7 @@ BRD ini menyepakati kebutuhan dan aturan bisnis. Jika sumber bertentangan, uruta
 | DEC-122 | Penutupan diverifikasi Manager atau SO/Officer pemilik wilayah dengan assignment efektif dan scope lokasi yang cocok, melalui satu task pool dan isian Bagian 10 terstruktur: nama Officer pemeriksa, area diinspeksi dan bersih, pekerjaan selesai, Pemilik Wilayah menyetujui penyelesaian, sistem yang di-inhibit dipulihkan, area di-handback dan pengaman dipulihkan, serta hardcopy terbaca. Signed field copy pilihan Sponsor menjadi unduhan utama PTW untuk review dan arsip close. Bila pekerjaan belum selesai, close terkunci; Sponsor mengunggah hardcopy pengganti untuk paket cetak yang sama dan mengajukan ulang tanpa mengubah status. | Dikonfirmasi 22 Sep 2026; kewenangan close diperluas 23 Sep 2026 |
 | DEC-123 | Permintaan revisi membatalkan task yang tertunda dan membuat notifikasi task kepada Sponsor PTW. Submit ulang menaikkan versi PTW meskipun draft tidak berubah, dan seluruh task/evidence versi lama menjadi riwayat. | Dikonfirmasi 22 Sep 2026 |
 | DEC-124 | QR/reference pada lembar cetak serta halaman kampanye (10 CLSR, 8 Arahan Direksi, 9 Perilaku Wajib) tidak termasuk paket cetak rilis awal; keduanya menjadi backlog setelah OPN-011/OPN-012 disahkan. | Dikonfirmasi 16 Sep 2026 |
-| DEC-125 | Rilis Development memakai akun lokal terkelola, login cookie HTTP-only, dan assignment role yang disetujui Administrator; role dan scope dihitung ulang setiap request. Spesimen tanda tangan visual berversi dicetak sebagai bukti persetujuan elektronik, bukan tanda tangan digital tersertifikasi. SSO/IdP produksi menunggu OPN-007. | Dikonfirmasi 22 Sep 2026 |
+| DEC-125 | Rilis Development memakai akun lokal terkelola, login cookie HTTP-only, dan assignment role yang disetujui Administrator; role dan scope dihitung ulang setiap request. Spesimen tanda tangan visual berversi dicetak sebagai bukti persetujuan elektronik, bukan tanda tangan digital tersertifikasi. SSO/IdP produksi menunggu OPN-007. | Dikonfirmasi 22 Sep 2026; identitas produksi diperbarui OPN-007 bagian 1 (Portal API + akun lokal, 24 Sep 2026) |
 | DEC-126 | Deklarasi SIMOPS, elemen CLSR bebas, dan isolasi/precaution bebas tidak ditampilkan pada form Sponsor karena tidak terdapat pada formulir terkontrol; kondisi operasi ditetapkan SO/Officer pada Bagian 7. | Dikonfirmasi 22 Sep 2026 |
 | DEC-127 | Prosedur Pekerjaan wajib memiliki lampiran bertaut sebelum submit dan otomatis menjadi item wajib checklist Bagian 4 serta paket cetak. Sponsor tidak dapat membatalkan pilihannya. ID, BPJS TK, FTW, dan E-SIMI tetap hanya menjadi evidence pengajuan dan tidak ditambahkan ke Bagian 4. | Dikonfirmasi 24 Sep 2026 |
 | DEC-128 | Sistem yang berjalan saat ini beserta alurnya (lifecycle, validator HSE tunggal, review Bagian 7 SO/Officer, approve-and-issue Manager, closure pool Bagian 10, renewal berbasis review, dokumen wajib, katalog terkontrol, paket cetak dua halaman, tiga lokasi aktif, login Portal) disahkan sebagai baseline operasional. Perubahan berikutnya memerlukan superseding record. | Disahkan 25 Sep 2026 |
@@ -287,7 +287,7 @@ Prioritas: **M** Must, **S** Should, **C** Could.
 
 | ID | Kebutuhan | P |
 | --- | --- | --- |
-| BR-AUT-001 | Sistem hanya dapat digunakan oleh identitas yang terverifikasi. Rilis Development memakai akun lokal terkelola dan login cookie HTTP-only; produksi memakai IdP/SSO sesuai OPN-007. | M |
+| BR-AUT-001 | Sistem hanya dapat digunakan oleh identitas yang terverifikasi: kredensial diverifikasi melalui Portal API (Active Directory) dengan fallback akun lokal terkelola, sesi cookie HTTP-only, dan akun harus terdaftar serta aktif (OPN-007 bagian 1). | M |
 | BR-AUT-002 | Setiap aksi terkontrol memvalidasi peran, cakupan lokasi, kepemilikan Sponsor, masa otorisasi, dan status PTW. Role dan scope dihitung ulang dari assignment yang disetujui dan efektif pada setiap request. | M |
 | BR-AUT-003 | Pemisahan tugas pada jalur penerbitan: Sponsor, validator HSE, reviewer SO/Officer Bagian 7, dan Manager penerbit harus empat identitas berbeda. Sponsor tidak boleh memvalidasi PTW miliknya. | M |
 | BR-AUT-004 | Assignment role menyimpan pengguna, role, area kewenangan bila role area-scoped, tanggal mulai, dan tanggal akhir opsional; action code dan kompetensi diturunkan sistem dari profil role, bukan input pengguna. | M |
@@ -453,9 +453,9 @@ Retensi PTW, lampiran, audit, dan bukti elektronik harus ditetapkan Records Mana
 
 | Jenis | Pernyataan / mitigasi |
 | --- | --- |
-| Ketergantungan | IdP/SSO NR untuk produksi, malware scanner produksi, adapter E-SIMI, master lokasi dan personel, infrastruktur container, backup, dan monitoring. |
+| Ketergantungan | Portal API NR untuk verifikasi kredensial, adapter E-SIMI, master lokasi dan personel, host Docker produksi dan sertifikat TLS, sistem backup internal, dan monitoring. Malware scanner produksi adalah backlog dengan risiko diterima (PROD-UPLOAD-SCAN). |
 | Asumsi | Kontraktor/User Sponsor memiliki konektivitas dan akun; SO/Officer dan Manager setiap wilayah dapat dimasterkan; SOP menerima bukti elektronik. |
-| Risiko | Matriks OPN-002 belum disahkan → profil role Development bukan matriks produksi; production tetap fail-closed. |
+| Risiko | Matriks OPN-002 belum disahkan → produksi memakai profil role yang sama dengan Development dan `EnforceMasterAuthorization=false` sebagai baseline yang disahkan pengguna (PTW-WORKFLOW-BASELINE); assignment acting tetap fail-closed. |
 | Risiko | Pengguna menganggap `ISSUED` = boleh langsung mulai → banner, instruksi cetak, training. |
 | Risiko | Hardcopy final tidak terbaca/tidak lengkap → jalur tindak lanjut Bagian 10 dan hak Manager meminta hardcopy pengganti. |
 | Risiko | Bukti persetujuan visual disalahartikan sebagai tanda tangan digital tersertifikasi → label yang tepat, audit trail, keputusan Legal (OPN-008). |
@@ -472,9 +472,9 @@ Retensi PTW, lampiran, audit, dan bukti elektronik harus ditetapkan Records Mana
 | OPN-004 | Aturan gas test per kelas, parameter, unit, frekuensi, retest, dan kompetensi penanda tangan | HSSE |
 | OPN-005 | SLA PIC HSE/SO/Manager, eskalasi, dan reminder | PO/HSSE/Operasi |
 | OPN-006 | Onboarding, scope perusahaan, expiry, dan acknowledgement akun Kontraktor | Legal/HSSE/Operasi/TI |
-| OPN-007 | IdP/SSO produksi, kontrak API E-SIMI, dan fallback nomor E-SIMI | TI |
+| OPN-007 | Identitas produksi (ACCEPTED 24 Sep 2026: Portal API + akun lokal); kontrak API E-SIMI dan fallback nomor E-SIMI (DRAFT) | TI |
 | OPN-008 | Retensi, status hukum bukti persetujuan/tanda tangan visual, PSrE, klasifikasi data, RPO/RTO | Legal/Records/TI |
-| OPN-009 | Topologi produksi single host Compose atau platform HA; akses VPN | TI |
+| OPN-009 | Topologi produksi (ACCEPTED 24 Sep 2026: single host Compose, TLS dan rate limit di nginx, SQL Express, tanpa HA); observability/on-call masih terbuka | TI |
 | OPN-010 | Definisi tujuh hari, awal masa berlaku, dan batas jumlah renewal berantai | HSSE/Operasi |
 | OPN-011 | File resmi materi 10 CLSR, 8 Arahan Direksi, dan 9 Perilaku Wajib untuk backlog halaman kampanye | HSSE/Corporate Communication |
 | OPN-012 | Resolusi QR/reference dan kualitas scan minimum hardcopy | HSSE/Operasi/TI |
@@ -485,16 +485,16 @@ Increment pengajuan, validasi, review Bagian 7, penerbitan, paket cetak, renewal
 
 | Tahap | Durasi |
 | --- | --- |
-| Pengesahan OPN-002/003 dan konfigurasi assignment produksi tiga wilayah | 2–3 minggu |
-| Identitas produksi (SSO), malware scanner produksi, dan scope Kontraktor | 3–4 minggu |
-| Expiry otomatis, notifikasi eksternal, laporan/ekspor | 2–3 minggu |
-| UAT operasional tiga lokasi, hardening, dan pilot terkontrol | 3–4 minggu |
+| Alur sistem, katalog, paket cetak, identitas, topologi produksi, dan hardening | Selesai; disahkan 24–25 September 2026 (OPN-007 bagian 1, OPN-009, PROD-UPLOAD-SCAN, PTW-WORKFLOW-BASELINE) |
+| Pengesahan OPN-002/003 sebagai master effective-dated dan assignment acting | Backlog, 2–3 minggu |
+| Malware scanner produksi dan scope Kontraktor | Backlog, 3–4 minggu |
+| Expiry otomatis, notifikasi eksternal, laporan/ekspor | Backlog, 2–3 minggu |
 
 Integrasi E-SIMI penuh, halaman kampanye/QR, dan rollout HO/FSRU dijadwalkan setelah pilot.
 
 ## 15. Kriteria penerimaan dan sign-off BRD
 
-BRD dapat disahkan bila:
+BRD v1.8 disahkan pengguna pada 25 September 2026 (DEC-128, `docs/decisions/PTW-WORKFLOW-BASELINE.md`) dengan kriteria berikut; butir 5 (KPI, retensi, RPO/RTO) tetap backlog OPN-008 dan tidak menahan pengesahan:
 
 1. tiga lokasi aktif dan routing pemilik wilayahnya beserta peran SO/Officer dan Manager per wilayah disepakati;
 2. alur hibrida dari draft sampai close, termasuk review Bagian 7, hardcopy lapangan, renewal berbasis review, dan verifikasi Bagian 10 diterima Operasi/HSSE;

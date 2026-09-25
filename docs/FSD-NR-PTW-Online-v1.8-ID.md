@@ -43,7 +43,7 @@ FSD ini menjelaskan bagaimana requirement PTW diwujudkan secara fungsional dan t
 | ADR-010 | Immutable print snapshot + asynchronous rendering | Approval mengunci snapshot; Worker merender; retry tidak mengubah keputusan; paket `READY` immutable. |
 | ADR-011 | Location release server-side | Konfigurasi `LocationRelease:AreaOwnerDepartments` menentukan lokasi aktif dan departemen pemilik; lokasi lain fail-closed. |
 | ADR-012 | Empat gate berurutan dengan SoD | `HSE_VALIDATION` → `AREA_OPERATION_REVIEW` → `AREA_APPROVE_AND_ISSUE`, masing-masing pada versi PTW exact dan oleh identitas berbeda dari Sponsor. |
-| ADR-013 | Identitas lokal Development, SSO produksi tertunda | Akun lokal dan cookie HTTP-only hanya Development; role/scope dihitung ulang per request dari assignment approved/effective. |
+| ADR-013 | Identitas melalui Portal API dengan fallback lokal (OPN-007 bagian 1) | `PortalApiDirectoryAuthenticator` memverifikasi kredensial ke Portal API (bind Active Directory), fallback ke password akun lokal; cookie HTTP-only dengan security stamp; role/scope dihitung ulang per request dari assignment approved/effective; di luar Development login dibuka lewat `Authentication:LoginEnabled` dengan Portal https (atau opt-in http internal eksplisit). |
 
 ## 3. System context dan container
 
@@ -218,7 +218,7 @@ allow = authenticated
      AND (Sponsor commands ⇒ actor == Draft.SponsorId, kecuali Administrator)
      AND task command ⇒ task pending, type sesuai, versi == permit.Version,
          (AssignedActorId == actor OR RequiredRole ∈ roles)
-     AND OperationalPolicy gate (Development: profil role; produksi: EnforceMasterAuthorization)
+     AND OperationalPolicy gate (Development dan Production saat ini: profil role, EnforceMasterAuthorization=false; master authorization effective-dated adalah backlog OPN-001/002)
      AND separation-of-duty (Sponsor ≠ HSE ≠ SO/Officer ≠ Manager)
      AND expected ETag matches
 ```
@@ -234,7 +234,7 @@ Profil role (`UserAuthorizationRoleProfiles`) di server menurunkan action code:
 | `AreaOwnerManager` | ya | `permit.approve-and-issue`, `permit.suspend`, `permit.suspension.resolve`, `permit.renewal.review`, `permit.closure.review` |
 | `Auditor` | tidak | `permit.read`, `audit.read` |
 
-Profil ini konfigurasi Development untuk UX/UAT, bukan matriks OPN-002; tanpa profil terkonfigurasi, assignment langsung fail-closed. Frontend hanya menyembunyikan aksi; API selalu mengevaluasi ulang. Query memakai filter scope; attachment dan print package memeriksa parent permit.
+Profil ini dipakai Development dan Production sebagai baseline yang disahkan (PTW-WORKFLOW-BASELINE), bukan matriks OPN-002 effective-dated; tanpa profil terkonfigurasi, assignment langsung fail-closed. Frontend hanya menyembunyikan aksi; API selalu mengevaluasi ulang. Query memakai filter scope; attachment dan print package memeriksa parent permit. Scope baca dipisahkan dari scope command oleh `PermitMonitoringAccess`: SO/Officer dan Manager berscope `ORF` membaca PTW lintas lokasi (daftar, detail, lampiran, paket cetak, history, Papan Operasi) sesuai Amendemen 1 PTW-WORKFLOW-BASELINE, sedangkan task pool dan command tetap memakai scope lokasi asli.
 
 `ApproveAndIssuePermit` saat ini hanya menerima kapasitas `Manager`; `ActingAssignmentId` menghasilkan `authorization.acting_assignment_not_ready`. Model `ActingAssignment` lengkap adalah backlog OPN-002.
 
@@ -247,14 +247,14 @@ Profil ini konfigurasi Development untuk UX/UAT, bukan matriks OPN-002; tanpa pr
 | `WATER_BASED` | Water-Based Activity | Departemen Transport & Operasi FSRU | aktif |
 | `HO`, `FSRU`, lainnya | — | — | `permit.location.not_released` |
 
-Konfigurasi produksi (`appsettings.json`) tidak merilis lokasi apa pun. Master lokasi effective-dated (`cfg.LocationMaster*`) tersedia dengan maker-checker, tetapi routing task memakai scope lokasi assignment; `LocationRelease`/`ConfigurationBundle` sebagai tabel adalah backlog.
+Konfigurasi dasar (`appsettings.json`) tidak merilis lokasi apa pun; `appsettings.Development.json` dan `appsettings.Production.json` merilis `ORF`, `SITE_OFFICE`, dan `WATER_BASED` dengan departemen pemiliknya. Master lokasi effective-dated (`cfg.LocationMaster*`) tersedia dengan maker-checker, tetapi routing task memakai scope lokasi assignment; `LocationRelease`/`ConfigurationBundle` sebagai tabel adalah backlog.
 
 ## 8. Desain API
 
 ### 8.1 Konvensi
 
 - Base path `/api/v1`; JSON camelCase; UTC ISO-8601.
-- Authentication: cookie HTTP-only dari `POST /api/v1/auth/login` (Development) atau header identitas Development; produksi menunggu OPN-007.
+- Authentication: cookie HTTP-only dari `POST /api/v1/auth/login` (Portal API lalu fallback lokal; di luar Development dibuka oleh `Authentication:LoginEnabled`) atau header identitas Development saat mode demo aktif.
 - `X-Correlation-ID`, `Idempotency-Key` (wajib pada command, ≤ 200 karakter), `ETag`/`If-Match`.
 - Error `application/problem+json` dengan `code` bertitik (`permit.*`, `attachment.*`, `authorization.*`, `task.*`) dari `ApiExceptionHandler`.
 - List terpaginasi `offset`/`limit` (1–100).
@@ -268,7 +268,7 @@ Konfigurasi produksi (`appsettings.json`) tidak merilis lokasi apa pun. Master l
 | `GET /me` | Identitas, role efektif, scope lokasi |
 | `GET /locations` | Lokasi yang dapat dipilih |
 | `GET /reference-data/*` | Katalog formulir (Bagian 7.1) |
-| `GET /permits`, `GET /permits/{id}` | Daftar/detail scoped |
+| `GET /permits?search=&offset=&limit=`, `GET /permits/{id}` | Daftar terpaginasi (limit 1–100, count total, filter scope baca sebelum pencarian dan `Skip`/`Take`) dan detail scoped |
 | `GET /permits/{id}/activity`, `GET /permits/{id}/versions` | Riwayat audit dan versi |
 | `POST /permits` | Buat draft |
 | `PATCH /permits/{id}/draft` | Simpan draft dengan `If-Match` |
@@ -297,7 +297,7 @@ Konfigurasi produksi (`appsettings.json`) tidak merilis lokasi apa pun. Master l
 | `/admin/policy-readiness`, `/admin/policy-simulations`, `/admin/policy-uat-suites` | Kesiapan policy, simulasi, dan suite UAT |
 | `/health/live`, `/health/ready` | Health |
 
-Backlog: `/esimi/*`, `/permits/{id}/evaluate`, `/permits/{id}/copy`, `/operations/board`, `/reports/permits`.
+Tersedia: `GET /operations` (Papan Operasi berscope, filter status/lokasi, pagination server-side). Backlog: `/esimi/*`, `/permits/{id}/evaluate`, `/permits/{id}/copy`, `/reports/permits`.
 
 ### 8.3 Idempotency
 
@@ -356,7 +356,7 @@ Rilis awal: draft menyimpan `ESimiExternalId`/`ESimiNumber`; submit mewajibkan l
 
 ## 11. Attachments, print package, dan field-copy evidence
 
-Alur upload: validasi ukuran/ekstensi/signature (PDF/JPEG/PNG) → SHA-256 → simpan privat → malware scan → commit metadata. Development dengan `RequireMalwareScan=false` mendaftarkan `DevelopmentUploadTrustScanner` yang memberi evidence internal `CLEAN`; selain itu `UnavailableMalwareScanner` fail-closed (`attachment.scanner_required`). File selain `CLEAN` tidak dapat diunduh. Penghapusan logis mempertahankan file dasar keputusan.
+Alur upload: validasi ukuran/ekstensi/signature (PDF/JPEG/PNG) → SHA-256 → simpan privat → malware scan → commit metadata. Dengan `RequireMalwareScan=false` (Development dan Production, risiko diterima PROD-UPLOAD-SCAN) sistem mendaftarkan `TrustedUploadScanner` yang memberi evidence `CLEAN` berprefix `trusted-upload:<sha256>`; default dasar `true` memakai `UnavailableMalwareScanner` yang fail-closed (`attachment.scanner_required`). File selain `CLEAN` tidak dapat diunduh. Penghapusan logis mempertahankan file dasar keputusan.
 
 Pipeline paket cetak:
 
@@ -374,7 +374,7 @@ Preview draft (`GET .../print-packages/preview`) memakai renderer yang sama deng
 
 ### 12.1 Struktur
 
-- standalone components, lazy feature routes: `login`, `''` (dashboard), `permits`, `permits/new`, `permits/:id`, `tasks`, `operations`, `reports`, `admin/users`, `admin/authorizations`, `admin/policy`, `admin/policy-uat`, `admin`;
+- standalone components, lazy feature routes: `login`, `''` (dashboard), `permits`, `permits/new`, `permits/:id`, `tasks`, `operations`, `admin/users`, `admin/authorizations`, `admin/policy`, `admin/policy-uat`, `admin`;
 - HTTP terisolasi di `core/*-api.ts` dengan spec `HttpTestingController`;
 - Signals untuk state UI lokal; RxJS untuk stream HTTP; `takeUntilDestroyed`;
 - reactive forms dengan asosiasi error dan ringkasan; selector katalog responsif;
@@ -385,7 +385,7 @@ Preview draft (`GET .../print-packages/preview`) memakai renderer yang sama deng
 
 ### 12.2 Halaman
 
-Login (akun lokal / mode demo eksplisit Development), dashboard peran, daftar PTW, buat PTW (Bagian 1–4 + header), detail PTW (ringkasan, progres workflow dengan nama profil, aksi per role: validasi + Bagian 5, review Bagian 7, approve-and-issue, revisi/tolak, suspend/resolve, renewal, closure/resubmit, cancel), lampiran (kesiapan dokumen dasar dan Bagian 4, upload, unduh), paket cetak (status, unduh, preview, retry), riwayat, daftar tugas, Papan Operasi read-only berscope dengan metrik/filter/pagination/drill-down, administrasi pengguna/spesimen, otorisasi, master lokasi, kesiapan policy, UAT policy. `reports` masih placeholder.
+Login (Portal API dengan fallback akun lokal; mode demo eksplisit hanya Development), dashboard peran, daftar PTW, buat PTW (Bagian 1–4 + header), detail PTW (ringkasan, progres workflow dengan nama profil, aksi per role: validasi + Bagian 5, review Bagian 7, approve-and-issue, revisi/tolak, suspend/resolve, renewal, closure/resubmit, cancel), lampiran (kesiapan dokumen dasar dan Bagian 4, upload, unduh), paket cetak (status, unduh, preview, retry), riwayat, daftar tugas, Papan Operasi read-only berscope dengan metrik/filter/pagination/drill-down, administrasi pengguna/spesimen, otorisasi, master lokasi, kesiapan policy, UAT policy. `reports` masih placeholder.
 
 ## 13. Backend ASP.NET Core 10
 
@@ -400,7 +400,7 @@ Login (akun lokal / mode demo eksplisit Development), dashboard peran, daftar PT
 
 ### 14.1 Identity/session
 
-Development: `POST /auth/login` memverifikasi akun lokal dan menerbitkan cookie HTTP-only; `DevelopmentAuthenticationHandler` (header identitas) hanya aktif pada `Development`. Role dan scope dihitung ulang dari assignment approved/effective pada setiap request; cookie bukan authority. Login lokal ditolak di luar Development. Produksi: OIDC/BFF sesuai OPN-007. Kontraktor tidak memperoleh role internal secara implisit.
+`POST /auth/login` memverifikasi kredensial ke Portal API (`SecureAuth`, bind Active Directory) lalu fallback ke password akun lokal; keduanya mewajibkan `UserAccount` terdaftar dan aktif, setiap percobaan dijurnal ke `sec.LoginAuditEvent`, dan cookie HTTP-only membawa `security_stamp` yang diputar saat reset password, penonaktifan, atau revoke sesi. `DevelopmentAuthenticationHandler` (header identitas) hanya aktif pada `Development` saat mode demo aktif. Role dan scope dihitung ulang dari assignment approved/effective pada setiap request; cookie bukan authority. Di luar Development login hanya aktif dengan `Authentication:LoginEnabled=true` dan Portal terkonfigurasi (OPN-007 bagian 1). Kontraktor tidak memperoleh role internal secara implisit.
 
 ### 14.2 Controls
 
@@ -419,7 +419,7 @@ Threat model mencakup IDOR (scope filter + parent check), forged approval (assig
 
 ### 15.1 Topologi
 
-`deploy/compose/compose.dev.yaml` (production-like): `db`, `migrate`, `api`, `worker`, `web`; network `frontend`/`backend` (internal); volume `sql-data`, `attachment-data`, `generated-document-data`. `compose.hotreload.yaml`: bind mount + `dotnet watch` + `ng serve`, project/volume yang sama, tidak dijalankan bersamaan.
+`deploy/compose/compose.dev.yaml` (production-like): `db`, `migrate`, `api`, `worker`, `web`; network `frontend`/`backend` (internal); volume `sql-data`, `attachment-data`, `generated-document-data`, `data-protection-keys`. `compose.hotreload.yaml`: bind mount + `dotnet watch` + `ng serve`, project/volume yang sama, tidak dijalankan bersamaan. `compose.prod.yaml` (OPN-009): `db` SQL Server Express hanya pada antarmuka internal, `migrate` dan `db-init` (satu-satunya pemakai `sa`; membuat login `ptw_app`/`ptw_backup`), `api`/`worker` dengan `ptw_app`, `web` nginx dengan TLS dan `limit_req`; container read-only tanpa capability; `.env` mode 600 sebagai penyimpan secret.
 
 ```mermaid
 flowchart TB
@@ -447,7 +447,7 @@ flowchart TB
 - jangan `docker compose down --volumes` kecuali sengaja menghapus data; jangan mengganti password saat volume SQL lama masih dipakai;
 - image produksi dipin ke digest; `2025-latest` hanya development;
 - Worker memuat font/template embedded; tidak mengambil asset dari internet;
-- Compose produksi memakai override untuk resource limit, TLS, secret, monitoring.
+- Compose produksi (`compose.prod.yaml`) menetapkan resource limit, TLS di nginx, secret dari `.env`, dan log json-file dirotasi; monitoring/on-call masih terbuka (OPN-009).
 
 ### 15.3 Pipeline dan release
 
@@ -483,7 +483,7 @@ Test wajib flow v1.8: submit membuat tepat satu `HSE_VALIDATION`; validasi membu
 
 ## 19. Migration dan data awal
 
-Migration additive sampai `20260921190541_BackfillSponsorRevisionTasks`. Data awal Development: akun lokal dan assignment dibuat Administrator melalui UI; release lokasi dari konfigurasi. Produksi: master lokasi, assignment SO/Officer dan Manager per wilayah, dan policy penerbitan diimpor dengan maker-checker setelah OPN-001/002 disahkan; PTW kertas aktif dapat dimasukkan sebagai opening balance terkontrol.
+Migration additive sampai `20260925040421_SeedLocationMasterAndUserSignatures`. Data awal: migration seed membawa akun dan assignment Development serta master lokasi; Administrator dapat menambah akun dan assignment melalui UI; release lokasi dari konfigurasi. Produksi: minimal dua Administrator dibuat lewat `POST /api/v1/admin/users`, setiap pengguna Portal didaftarkan sebagai `UserAccount`, dan assignment SO/Officer dan Manager per wilayah dibuat dengan maker-checker; PTW kertas aktif dapat dimasukkan sebagai opening balance terkontrol.
 
 ## 20. Matriks traceability implementasi
 
@@ -498,16 +498,16 @@ Migration additive sampai `20260921190541_BackfillSponsorRevisionTasks`. Data aw
 
 ## 21. Keputusan sebelum aktivasi produksi
 
-OPN-001–012 harus memiliki decision record sebelum aktivasi produksi. Paling kritis: posisi SO/Officer dan Manager per wilayah dan assignment effective-dated (OPN-002), pengesahan katalog formulir (OPN-003), SSO dan E-SIMI (OPN-007), malware scanner produksi, status hukum bukti persetujuan visual (OPN-008), definisi tujuh hari dan renewal berantai (OPN-010).
+Identitas produksi (OPN-007 bagian 1), topologi produksi (OPN-009), unggahan tanpa scanner (PROD-UPLOAD-SCAN), dan alur sistem saat ini (PTW-WORKFLOW-BASELINE, termasuk Amendemen 1 scope baca ORF) telah disahkan pada 24–25 September 2026 dan menjadi dasar aktivasi. Item berikut tetap backlog dengan jalur fail-closed. Paling kritis: posisi SO/Officer dan Manager per wilayah dan assignment effective-dated (OPN-002), pengesahan katalog formulir (OPN-003), SSO dan E-SIMI (OPN-007), malware scanner produksi, status hukum bukti persetujuan visual (OPN-008), definisi tujuh hari dan renewal berantai (OPN-010).
 
 ## 22. Checklist kesiapan produksi
 
 - SOP/STK tiga lokasi aktif, mapping Bagian 1–10, dan katalog formulir disahkan;
 - threat model, security test, privacy/retention, dan access recertification disetujui;
-- IdP/SSO produksi, malware scanner produksi, dan scope Kontraktor tersedia;
+- Portal API dapat dijangkau dari host produksi (https, atau opt-in http internal eksplisit); malware scanner produksi dan scope Kontraktor adalah backlog dengan risiko diterima;
 - image/tag/digest, lisensi SQL Server, kapasitas, TLS/DNS, backup/restore siap;
 - monitoring, alert, runbook, on-call, dan contingency paper process siap;
-- UAT tiga kelas izin, hardcopy lapangan, review Bagian 7, renewal, closure Bagian 10, dan negative paths disetujui HSSE/Operasi;
+- alur tiga kelas izin, hardcopy lapangan, review Bagian 7, renewal, closure Bagian 10, dan negative paths disahkan pengguna (PTW-WORKFLOW-BASELINE, 25 Sep 2026) dan dijaga oleh test regresi;
 - training menegaskan `ISSUED` tidak menghapus gas test/revalidasi/tanda tangan hardcopy;
 - hanya ORF, Site Office, dan Water-Based Activity aktif; HO dan FSRU tetap nonaktif.
 

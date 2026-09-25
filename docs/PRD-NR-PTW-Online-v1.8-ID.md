@@ -20,7 +20,7 @@ Lihat BRD v1.8 Bagian 0 untuk ringkasan bisnis. Dampak pada requirement produk:
 - Epic E mewajibkan lampiran JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, dan E-SIMI sebelum submit; JSA dan Prosedur Pekerjaan otomatis dipilih pada Bagian 4, dan setiap pilihan Bagian 4 ditautkan ke lampiran.
 - Epic H mengganti "renewal draft langsung" dengan permintaan renewal yang ditinjau Manager pemilik wilayah, dan menambahkan verifikasi Bagian 10 terstruktur serta jalur tindak lanjut closure.
 - Epic G menetapkan paket cetak dua halaman A3 yang setia pada formulir terkontrol; QR dan halaman kampanye menjadi backlog.
-- Epic A menetapkan akun lokal, cookie HTTP-only, assignment role dengan action code turunan server, dan spesimen tanda tangan berversi untuk rilis Development; SSO produksi tetap OPN-007.
+- Epic A menetapkan login melalui Portal API (Active Directory) dengan fallback akun lokal, cookie HTTP-only, assignment role dengan action code turunan server, dan spesimen tanda tangan berversi; identitas produksi disahkan OPN-007 bagian 1.
 - Epic D (rules engine) diturunkan menjadi backlog; rilis awal memakai katalog formulir terkontrol statis.
 
 ## 1. Definisi produk
@@ -49,7 +49,7 @@ Rilis awal mencakup ORF, Site Office, dan Water-Based Activity serta menggunakan
 - approval penerbitan hanya dapat dilakukan setelah validasi PIC HSE dan review Bagian 7 lengkap pada versi yang sama;
 - paket cetak identik dengan formulir terkontrol dan mengisi Bagian 1–5 serta evidence Bagian 7 dari snapshot;
 - dashboard menampilkan state digital dan mengingatkan bahwa kontrol harian berada pada hardcopy;
-- deployment konsisten untuk dev, UAT, dan produksi melalui Docker Compose.
+- deployment konsisten untuk dev, UAT, dan produksi melalui Docker Compose (`compose.dev.yaml`, `compose.hotreload.yaml`, `compose.prod.yaml` sesuai OPN-009).
 
 ### 2.2 Non-sasaran MVP
 
@@ -133,7 +133,7 @@ Tidak ada state digital `APPROVED`, `READY_FOR_ISSUE`, `WORK_PERIOD_ACTIVE`, ata
 
 | ID | Requirement / acceptance utama |
 | --- | --- |
-| FR-AUT-001 | Rilis Development: login akun lokal terkelola dengan cookie HTTP-only; login ditolak di luar Development sampai IdP/SSO OPN-007 disahkan. Halaman awal adalah layar login; route aplikasi memerlukan sesi. |
+| FR-AUT-001 | Login memverifikasi kredensial melalui Portal API (`POST /api/v1/User/SecureAuth`, bind Active Directory) lalu fallback ke password akun lokal; kedua jalur mewajibkan akun terdaftar dan aktif. Sesi memakai cookie HTTP-only (`Secure` di luar Development) dengan security stamp; di luar Development login hanya aktif dengan `Authentication:LoginEnabled=true` dan Portal terkonfigurasi. Halaman awal adalah layar login; route aplikasi memerlukan sesi. |
 | FR-AUT-002 | UI menampilkan identitas, role efektif, dan scope lokasi dari `/api/v1/me`; klien tidak menyimpan token di `localStorage`. |
 | FR-AUT-003 | API mengevaluasi role, scope lokasi, kepemilikan Sponsor, dan status PTW pada setiap query dan command; role/scope dihitung ulang dari assignment yang disetujui dan efektif. |
 | FR-AUT-004 | Session kedaluwarsa aman; reauthentication tidak mengulang command sebelumnya. |
@@ -197,7 +197,7 @@ Tidak ada state digital `APPROVED`, `READY_FOR_ISSUE`, `WORK_PERIOD_ACTIVE`, ata
 | FR-DOC-007 | Item khusus pekerjaan di luar katalog menjadi backlog OPN-003. |
 | FR-DOC-008 | Draft penerus renewal tidak menyalin file; UI menampilkan daftar dokumen yang harus diunggah ulang. |
 | FR-DOC-009 | `SIGNED_FIELD_COPY` wajib merujuk PrintPackage `READY`, membawa nomor/revisi/tanggal, dan hanya dapat diunggah saat `ISSUED`, `SUSPENDED`, `EXPIRED`, atau saat tindak lanjut closure diminta. |
-| FR-DOC-010 | Development dengan `RequireMalwareScan=false` memakai pemindai upload lokal tepercaya; produksi memerlukan adapter scanner resmi dan fail-closed tanpa itu. |
+| FR-DOC-010 | Dengan `Attachments:RequireMalwareScan=false` (Development dan, sebagai risiko yang diterima pada PROD-UPLOAD-SCAN, Production) upload yang lolos pemeriksaan signature PDF/JPEG/PNG diberi evidence `CLEAN` berprefix `trusted-upload:`; default dasar tetap `true` sehingga tanpa scanner sistem fail-closed. Adapter scanner resmi adalah backlog. |
 
 ### 5.6 Epic F — Validasi, review Bagian 7, dan persetujuan
 
@@ -318,7 +318,7 @@ sequenceDiagram
 | FR-TSK-002 | Shell aplikasi memuat ulang daftar task setiap 30 detik untuk ikon lonceng; error ditelan. |
 | FR-DSH-001 | Dashboard peran menampilkan hitungan dan daftar per status: Draft, Menunggu Validasi, Perlu Revisi, Menunggu Persetujuan Wilayah, Diterbitkan, Ditangguhkan, Penutupan Diminta, Ditutup, Ditolak, Dibatalkan, Kedaluwarsa. |
 | FR-DSH-002 | Angka dashboard dapat ditelusuri ke daftar PTW. |
-| FR-REP-001 | Daftar PTW terpaginasi dengan scope; pencarian/filter lanjutan dan ekspor menjadi backlog. |
+| FR-REP-001 | Daftar PTW terpaginasi server-side (`offset`/`limit` 1–100, pilihan 10/25/50/100) dengan pencarian nomor/judul/perusahaan/lokasi yang diterapkan setelah filter Sponsor/role dan scope baca; Papan Operasi read-only tersedia untuk Administrator, PIC HSE, SO/Officer, dan Manager Pemilik Wilayah. SO/Officer dan Manager berscope ORF memperoleh scope baca lintas lokasi (Amendemen 1 PTW-WORKFLOW-BASELINE). Filter lanjutan dan ekspor menjadi backlog. |
 | FR-NOT-001 | Notifikasi in-app melalui task; kanal email/webhook melalui outbox menjadi backlog. |
 | FR-AUD-001 | Riwayat PTW menggabungkan perubahan status, keputusan, evidence, lampiran, unduhan dokumen resmi, dan versi. |
 
@@ -330,7 +330,7 @@ sequenceDiagram
 | FR-ADM-002 | Perubahan kritis membutuhkan maker-checker; produksi tidak mengizinkan self-approval. |
 | FR-ADM-003 | Halaman kesiapan policy menampilkan status referensi keputusan OPN dan versi policy; simulasi policy dan suite UAT policy tersedia untuk Administrator. |
 | FR-ADM-004 | Administrator melihat status render paket dan dapat menjadwalkan render ulang. |
-| FR-ADM-005 | Konfigurasi release lokasi ada di server: Development membuka ORF, Site Office, dan Water-Based Activity; produksi fail-closed sampai release, assignment effective-dated, dan bundle disahkan. |
+| FR-ADM-005 | Konfigurasi release lokasi ada di server: konfigurasi dasar tidak merilis lokasi, sedangkan Development dan Production membuka ORF, Site Office, dan Water-Based Activity (PTW-WORKFLOW-BASELINE). Master lokasi effective-dated dan ConfigurationBundle adalah backlog OPN-001/002. |
 | FR-ADM-006 | Profil role (`Administrator`, `Sponsor`, `HSEValidator`, `AreaOwnerSeniorOfficer`, `AreaOwnerManager`, `Auditor`) dikonfigurasi server dengan action code dan flag `LocationRequired`; profil Development bukan matriks OPN-002. |
 
 ## 6. Validasi dan pengalaman pengguna
@@ -395,7 +395,7 @@ Data rinci, tipe, constraint, index, dan schema terdapat pada FSD.
 | NFR-CAP-001 | Baseline diuji minimal 200 pengguna konkuren, 50.000 PTW/tahun, 20 lampiran/PTW; angka final melalui sizing. |
 | NFR-AVL-001 | Availability target 99,5%; health endpoint live/ready tersedia. |
 | NFR-SEC-001 | OWASP ASVS level 2 baseline, TLS, least privilege, secure headers/CSP, secrets eksternal, dependency/image scanning. |
-| NFR-SEC-002 | Lampiran private, malware scan (produksi wajib), encryption at rest sesuai infrastruktur, dan audit akses. |
+| NFR-SEC-002 | Lampiran private dengan pemeriksaan signature, batas ukuran, dan unduhan `nosniff`/`no-store`; malware scanner produksi adalah backlog dengan risiko diterima (PROD-UPLOAD-SCAN); encryption at rest sesuai infrastruktur; audit akses. |
 | NFR-PRV-001 | PII hanya ditampilkan sesuai tujuan dan scope; log tidak menyimpan token, secret, atau dokumen. |
 | NFR-REL-001 | State transition, task, audit, outbox, dan idempotency commit atomik dalam satu transaksi. |
 | NFR-BCP-001 | Target awal RPO 15 menit/RTO 4 jam; backup dan restore drill wajib sebelum go-live. |
@@ -416,7 +416,8 @@ Event domain tanpa isi sensitif: `permit_submitted`, `hse_validation_completed`,
 | I2 Pengajuan | Form Bagian 1–4 sesuai formulir, dokumen dasar, submit, validasi PIC HSE + Bagian 5, notifikasi revisi | Tersedia |
 | I3 Review & Terbit | Review Bagian 7 SO/Officer, approve-and-issue Manager, paket cetak A3 dua halaman | Tersedia |
 | I4 Renewal & Penutupan | Renewal berbasis review, closure dengan verifikasi Bagian 10 dan tindak lanjut | Tersedia |
-| I5 Produksi | SSO, scanner produksi, scope Kontraktor, expiry otomatis, notifikasi eksternal, laporan/ekspor, UAT tiga lokasi | Backlog |
+| I5 Produksi | Identitas Portal API, topologi satu host, hardening sesi/kredensial, Papan Operasi, dan pengesahan alur (24–25 Sep 2026) | Selesai |
+| I6 Backlog | Scanner produksi, scope Kontraktor, expiry otomatis, notifikasi eksternal, laporan/ekspor lanjutan, observability/on-call | Backlog |
 
 Feature flag/release lokasi hanya untuk rollout aman; tidak boleh melewati safety guard.
 
@@ -427,7 +428,7 @@ Feature flag/release lokasi hanya untuk rollout aman; tidak boleh melewati safet
 - Angular component/API test dengan `HttpTestingController`;
 - regresi visual paket cetak untuk tiga kelas izin, Bagian 3/5/7 terisi, dua halaman A3;
 - security test authorization matrix, upload, replay/idempotency, dan session;
-- UAT HSSE/Operasi/General Affair/Transport & Operasi FSRU pada ketiga lokasi aktif dengan hardcopy nyata.
+- UAT HSSE/Operasi/General Affair/Transport & Operasi FSRU pada ketiga lokasi aktif dengan hardcopy nyata; alur sistem saat ini telah disahkan pengguna (PTW-WORKFLOW-BASELINE, 25 Sep 2026) dan skenario di bawah menjadi regresi penerimaan.
 
 ### 12.1 Skenario UAT minimum
 
@@ -469,7 +470,7 @@ Sebuah requirement selesai apabila acceptance telah diuji positif dan negatif; a
 
 ## 15. Isu produk terbuka
 
-PRD mengikuti OPN-001 sampai OPN-012 pada BRD. Item tersebut harus dikonversi menjadi decision record sebelum aktivasi produksi; terutama posisi SO/Officer dan Manager per wilayah (OPN-002), pengesahan katalog formulir sebagai master effective-dated (OPN-003), SLA (OPN-005), onboarding/scope Kontraktor (OPN-006), SSO dan E-SIMI (OPN-007), status hukum bukti persetujuan visual (OPN-008), definisi tujuh hari dan renewal berantai (OPN-010), serta halaman kampanye dan QR (OPN-011/012).
+PRD mengikuti OPN-001 sampai OPN-012 pada BRD. Identitas produksi (OPN-007 bagian 1), topologi produksi (OPN-009), unggahan tanpa scanner (PROD-UPLOAD-SCAN), dan alur sistem saat ini (PTW-WORKFLOW-BASELINE) telah disahkan pada 24–25 September 2026. Item yang masih terbuka adalah backlog dan tidak menahan alur yang disahkan: posisi SO/Officer dan Manager per wilayah sebagai master effective-dated dan assignment acting (OPN-002), katalog formulir sebagai master effective-dated (OPN-003), SLA (OPN-005), onboarding/scope Kontraktor (OPN-006), kontrak E-SIMI (OPN-007 bagian 2), status hukum bukti persetujuan visual dan retensi/RPO/RTO (OPN-008), definisi tujuh hari dan renewal berantai (OPN-010), serta halaman kampanye dan QR (OPN-011/012).
 
 ## 16. Referensi versi platform resmi
 
