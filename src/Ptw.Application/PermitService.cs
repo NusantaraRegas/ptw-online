@@ -52,33 +52,38 @@ public sealed class PermitService(
     public async Task<PermitResponse> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var stored = await GetStoredAsync(id, cancellationToken);
-        EnsureLocationScope(actorContext.Current, stored.Permit.Draft.LocationId);
+        EnsurePermitReadScope(actorContext.Current, stored.Permit.Draft.LocationId);
         return await ToResponseAsync(stored, cancellationToken);
     }
 
     public async Task<PagedResponse<PermitResponse>> ListAsync(
         string? search,
+        int offset,
+        int limit,
         CancellationToken cancellationToken)
     {
+        EnsureValidPage(offset, limit);
         var actor = actorContext.Current;
         search = NormalizeSearch(search);
         var sponsorFilter = actor.Roles.Overlaps(
             ["Auditor", "Administrator", HseValidatorRole, AreaOperationsReviewerRole, AreaOwnerManagerRole])
             ? null
             : actor.Id;
-        var storedItems = await store.ListAsync(
+        var storedPage = await store.ListAsync(
             sponsorFilter,
-            actor.LocationScopes,
+            PermitMonitoringAccess.ReadLocationScopes(actor),
             search,
+            offset,
+            limit,
             cancellationToken);
-        var items = new List<PermitResponse>(storedItems.Count);
+        var items = new List<PermitResponse>(storedPage.Items.Count);
         var accountCache = new Dictionary<string, StoredUserAccount?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var stored in storedItems)
+        foreach (var stored in storedPage.Items)
         {
             items.Add(await ToResponseAsync(stored, cancellationToken, accountCache));
         }
 
-        return new PagedResponse<PermitResponse>(items, items.Count);
+        return new PagedResponse<PermitResponse>(items, storedPage.Count);
     }
 
     private static string? NormalizeSearch(string? search)
@@ -131,7 +136,7 @@ public sealed class PermitService(
     {
         EnsureValidPage(offset, limit);
         var stored = await GetStoredAsync(id, cancellationToken);
-        EnsureLocationScope(actorContext.Current, stored.Permit.Draft.LocationId);
+        EnsurePermitReadScope(actorContext.Current, stored.Permit.Draft.LocationId);
         var page = await store.ListActivityAsync(id, offset, limit, cancellationToken);
         return new PagedResponse<PermitActivityResponse>(page.Items.Select(entry => new PermitActivityResponse(
             entry.Sequence,
@@ -150,7 +155,7 @@ public sealed class PermitService(
     {
         EnsureValidPage(offset, limit);
         var stored = await GetStoredAsync(id, cancellationToken);
-        EnsureLocationScope(actorContext.Current, stored.Permit.Draft.LocationId);
+        EnsurePermitReadScope(actorContext.Current, stored.Permit.Draft.LocationId);
         var page = await store.ListVersionsAsync(id, offset, limit, cancellationToken);
         return new PagedResponse<PermitVersionResponse>(page.Items.Select(entry => new PermitVersionResponse(
             entry.Version,
@@ -1385,6 +1390,14 @@ public sealed class PermitService(
         if (!HasLocationScope(actor, locationId))
         {
             throw new UnauthorizedAccessException("Lokasi PTW berada di luar cakupan otorisasi pengguna.");
+        }
+    }
+
+    private static void EnsurePermitReadScope(Actor actor, string locationId)
+    {
+        if (!PermitMonitoringAccess.CanReadLocation(actor, locationId))
+        {
+            throw new UnauthorizedAccessException("Lokasi PTW berada di luar cakupan pemantauan pengguna.");
         }
     }
 

@@ -5,6 +5,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Permit, PermitApi, PermitTask } from '../../core/permit-api';
 import {
   canAccessOperationsBoard,
+  canMonitorAllPermits,
   CurrentIdentity,
   IdentityApi,
 } from '../../core/development-identity';
@@ -31,8 +32,15 @@ export class Dashboard {
   protected readonly isAdministrator = computed(() =>
     (this.identity()?.roles ?? []).includes('Administrator'),
   );
+  protected readonly isGlobalMonitor = computed(() => {
+    const identity = this.identity();
+    return (
+      this.isAdministrator() ||
+      canMonitorAllPermits(identity?.roles ?? [], identity?.locationScopes ?? [])
+    );
+  });
   protected readonly monitoredPermits = computed(() =>
-    this.isAdministrator()
+    this.isGlobalMonitor()
       ? this.permits().filter((permit) => permit.status !== 'DRAFT')
       : this.permits(),
   );
@@ -52,7 +60,7 @@ export class Dashboard {
   }).format(new Date());
   protected readonly stats = computed(() => {
     const permits = this.monitoredPermits();
-    if (this.isAdministrator()) {
+    if (this.isGlobalMonitor()) {
       const metrics = this.administratorBoard()?.metrics;
       return [
         {
@@ -130,7 +138,7 @@ export class Dashboard {
     ];
   });
   protected readonly operations = computed(() => {
-    const administratorMetrics = this.isAdministrator() ? this.administratorBoard()?.metrics : null;
+    const administratorMetrics = this.isGlobalMonitor() ? this.administratorBoard()?.metrics : null;
     if (administratorMetrics) {
       return {
         issued: administratorMetrics.issued,
@@ -162,7 +170,10 @@ export class Dashboard {
       .subscribe({
         next: (identity) => {
           this.identity.set(identity);
-          if (identity.roles.includes('Administrator')) {
+          if (
+            identity.roles.includes('Administrator') ||
+            canMonitorAllPermits(identity.roles, identity.locationScopes)
+          ) {
             this.operationsApi
               .list({ offset: 0, limit: 4 })
               .pipe(takeUntilDestroyed(this.destroyRef))
@@ -175,7 +186,7 @@ export class Dashboard {
       });
 
     this.api
-      .list()
+      .list({ offset: 0, limit: 25 })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => this.permits.set(response.items),

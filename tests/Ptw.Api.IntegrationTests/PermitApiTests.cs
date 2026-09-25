@@ -90,8 +90,10 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.Null(permitWithoutProfile.SponsorName);
     }
 
-    [Fact]
-    public async Task PermitListSearchesAcrossAllScopedPermits()
+    [Theory]
+    [InlineData("AreaOwnerSeniorOfficer")]
+    [InlineData("AreaOwnerManager")]
+    public async Task OrfAreaOwnerPermitListMonitorsAllLocations(string role)
     {
         var sponsorId = Unique("sponsor");
         var marker = $"cari-{Guid.NewGuid():N}";
@@ -105,13 +107,43 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             Draft(sponsorId, "WATER_BASED") with { Title = $"Inspeksi {marker}" });
         createWaterBased.EnsureSuccessStatusCode();
 
-        using var areaOwner = Client(Unique("area-owner"), "AreaOwnerManager", "ORF");
+        using var areaOwner = Client(Unique("area-owner"), role, "ORF");
         var result = Required(await areaOwner.GetFromJsonAsync<PagedResponse<PermitResponse>>(
             $"/api/v1/permits?search={Uri.EscapeDataString(marker)}"));
 
-        var permit = Assert.Single(result.Items);
-        Assert.Equal("ORF", permit.Draft.LocationId);
-        Assert.Contains(marker, permit.Draft.Title, StringComparison.Ordinal);
+        Assert.Equal(2, result.Count);
+        Assert.Equal(["ORF", "WATER_BASED"], result.Items.Select(item => item.Draft.LocationId).Order());
+        Assert.All(result.Items, permit =>
+            Assert.Contains(marker, permit.Draft.Title, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PermitListUsesServerSidePaginationAndReturnsFilteredCount()
+    {
+        var sponsorId = Unique("sponsor");
+        var marker = $"page-{Guid.NewGuid():N}";
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        for (var index = 0; index < 3; index++)
+        {
+            using var response = await sponsor.PostAsJsonAsync(
+                "/api/v1/permits",
+                Draft(sponsorId, "ORF") with { Title = $"{marker}-{index}" });
+            response.EnsureSuccessStatusCode();
+        }
+
+        var firstPage = Required(await sponsor.GetFromJsonAsync<PagedResponse<PermitResponse>>(
+            $"/api/v1/permits?search={Uri.EscapeDataString(marker)}&offset=0&limit=1"));
+        var secondPage = Required(await sponsor.GetFromJsonAsync<PagedResponse<PermitResponse>>(
+            $"/api/v1/permits?search={Uri.EscapeDataString(marker)}&offset=1&limit=1"));
+
+        Assert.Equal(3, firstPage.Count);
+        Assert.Single(firstPage.Items);
+        Assert.Equal(3, secondPage.Count);
+        Assert.Single(secondPage.Items);
+        Assert.NotEqual(firstPage.Items[0].Id, secondPage.Items[0].Id);
+
+        using var invalidPage = await sponsor.GetAsync("/api/v1/permits?offset=0&limit=101");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, invalidPage.StatusCode);
     }
 
     [Fact]
@@ -151,8 +183,8 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             await db.SaveChangesAsync();
         }
 
-        using var areaOwner = Client(Unique("area-owner"), "AreaOwnerManager", "ORF");
-        var board = Required(await areaOwner.GetFromJsonAsync<OperationsBoardResponse>(
+        using var scopedViewer = Client(Unique("hse"), "HSEValidator", "ORF");
+        var board = Required(await scopedViewer.GetFromJsonAsync<OperationsBoardResponse>(
             $"/api/v1/operations?permitClass=HotWork&search={Uri.EscapeDataString(marker)}"));
 
         var item = Assert.Single(board.Items);
@@ -162,6 +194,46 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         Assert.True(board.Metrics.Suspended >= 1);
         Assert.True(board.Metrics.ExpiringSoon >= 1);
         Assert.DoesNotContain(board.Items, candidate => candidate.Id == sitePermit.Id);
+    }
+
+    [Fact]
+    public async Task OperationsBoardUsesServerSidePaginationAndReturnsFilteredCount()
+    {
+        var marker = $"operations-page-{Guid.NewGuid():N}";
+        var sponsorId = Unique("sponsor");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+        var permitIds = new List<Guid>();
+        for (var index = 0; index < 3; index++)
+        {
+            using var create = await sponsor.PostAsJsonAsync(
+                "/api/v1/permits",
+                Draft(sponsorId, "ORF") with { Title = $"{marker}-{index}" });
+            create.EnsureSuccessStatusCode();
+            permitIds.Add(Required(await create.Content.ReadFromJsonAsync<PermitResponse>()).Id);
+        }
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+            var records = await db.Permits.Where(item => permitIds.Contains(item.Id)).ToListAsync();
+            foreach (var record in records)
+            {
+                record.Status = "Issued";
+            }
+            await db.SaveChangesAsync();
+        }
+
+        using var administrator = Client(Unique("administrator"), "Administrator", "*");
+        var firstPage = Required(await administrator.GetFromJsonAsync<OperationsBoardResponse>(
+            $"/api/v1/operations?search={Uri.EscapeDataString(marker)}&offset=0&limit=1"));
+        var secondPage = Required(await administrator.GetFromJsonAsync<OperationsBoardResponse>(
+            $"/api/v1/operations?search={Uri.EscapeDataString(marker)}&offset=1&limit=1"));
+
+        Assert.Equal(3, firstPage.Count);
+        Assert.Single(firstPage.Items);
+        Assert.Equal(3, secondPage.Count);
+        Assert.Single(secondPage.Items);
+        Assert.NotEqual(firstPage.Items[0].Id, secondPage.Items[0].Id);
     }
 
     [Fact]
@@ -204,9 +276,66 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             $"/api/v1/operations?status=CLOSED&search={Uri.EscapeDataString(marker)}"));
         Assert.Equal(closedPermit.Id, Assert.Single(closedBoard.Items).Id);
 
-        using var areaOwner = Client(Unique("area-owner"), "AreaOwnerManager", "ORF");
+        using var areaOwner = Client(Unique("area-owner"), "AreaOwnerManager", "SITE_OFFICE");
         using var forbiddenFilter = await areaOwner.GetAsync("/api/v1/operations?status=CLOSED");
         Assert.Equal(HttpStatusCode.UnprocessableEntity, forbiddenFilter.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("AreaOwnerSeniorOfficer")]
+    [InlineData("AreaOwnerManager")]
+    public async Task OrfAreaOwnerMonitorsAllNonDraftLocationsButCannotCommandOutsideScope(string role)
+    {
+        var marker = $"orf-global-{Guid.NewGuid():N}";
+        var sponsorId = Unique("sponsor-site");
+        using var sponsor = Client(sponsorId, "Sponsor", "SITE_OFFICE");
+        using var create = await sponsor.PostAsJsonAsync(
+            "/api/v1/permits",
+            Draft(sponsorId, "SITE_OFFICE") with { Title = marker });
+        create.EnsureSuccessStatusCode();
+        var permit = Required(await create.Content.ReadFromJsonAsync<PermitResponse>());
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+            var record = await db.Permits.SingleAsync(item => item.Id == permit.Id);
+            record.Status = "Issued";
+            await db.SaveChangesAsync();
+        }
+
+        using var areaOwner = Client(Unique("area-owner-orf"), role, "ORF");
+        var monitored = Required(await areaOwner.GetFromJsonAsync<PermitResponse>(
+            $"/api/v1/permits/{permit.Id}"));
+        Assert.Equal("SITE_OFFICE", monitored.Draft.LocationId);
+
+        foreach (var readPath in new[]
+        {
+            $"/api/v1/permits/{permit.Id}/activity",
+            $"/api/v1/permits/{permit.Id}/versions",
+            $"/api/v1/permits/{permit.Id}/attachments",
+            $"/api/v1/permits/{permit.Id}/print-packages"
+        })
+        {
+            using var readResponse = await areaOwner.GetAsync(readPath);
+            readResponse.EnsureSuccessStatusCode();
+        }
+
+        var locations = Required(await areaOwner.GetFromJsonAsync<PagedResponse<LocationOptionResponse>>(
+            "/api/v1/locations"));
+        Assert.Contains(locations.Items, location => location.Code != "ORF");
+
+        var board = Required(await areaOwner.GetFromJsonAsync<OperationsBoardResponse>(
+            $"/api/v1/operations?search={Uri.EscapeDataString(marker)}"));
+        var boardItem = Assert.Single(board.Items);
+        Assert.Equal(permit.Id, boardItem.Id);
+        Assert.Equal("SITE_OFFICE", boardItem.LocationId);
+
+        using var suspend = await areaOwner.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{permit.Id}/suspensions",
+            monitored.ETag,
+            new PermitReasonRequest("Pemantauan lintas lokasi tidak memberi hak command.")));
+        Assert.Equal(HttpStatusCode.Forbidden, suspend.StatusCode);
     }
 
     [Fact]

@@ -39,6 +39,16 @@ export function canAccessOperationsBoard(roles: readonly string[]): boolean {
   return roles.some((role) => (OPERATION_BOARD_ROLES as readonly string[]).includes(role));
 }
 
+export function canMonitorAllPermits(
+  roles: readonly string[],
+  locationScopes: readonly string[],
+): boolean {
+  return (
+    locationScopes.includes('ORF') &&
+    roles.some((role) => ['AreaOwnerSeniorOfficer', 'AreaOwnerManager'].includes(role))
+  );
+}
+
 export function roleDisplayLabel(roles: readonly string[]): string {
   return roles.map((role) => ROLE_LABELS[role] ?? role).join(' · ');
 }

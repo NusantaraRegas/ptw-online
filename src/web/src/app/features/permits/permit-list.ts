@@ -4,6 +4,7 @@ import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
+  BehaviorSubject,
   catchError,
   debounce,
   distinctUntilChanged,
@@ -15,7 +16,11 @@ import {
   timer,
 } from 'rxjs';
 import { Permit, PermitApi } from '../../core/permit-api';
-import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
+import {
+  canMonitorAllPermits,
+  CurrentIdentity,
+  IdentityApi,
+} from '../../core/development-identity';
 
 @Component({
   selector: 'app-permit-list',
@@ -23,8 +28,14 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
   template: ` <div class="page-title">
       <div>
         <p class="eyebrow">Manajemen PTW</p>
-        <h1>PTW Saya</h1>
-        <p class="subtitle">Draft, izin aktif, dan riwayat pekerjaan Anda.</p>
+        <h1>{{ isGlobalMonitor() ? 'Daftar PTW' : 'PTW Saya' }}</h1>
+        <p class="subtitle">
+          {{
+            isGlobalMonitor()
+              ? 'Pemantauan seluruh draft, izin aktif, dan riwayat PTW.'
+              : 'Draft, izin aktif, dan riwayat pekerjaan Anda.'
+          }}
+        </p>
       </div>
       @if (canCreatePermit()) {
         <a class="primary-button" routerLink="/permits/new">＋ Buat PTW baru</a>
@@ -33,30 +44,40 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
     <section class="card list-card">
       <div class="toolbar">
         <div class="list-summary" aria-live="polite">
-          <strong>{{ permits().length }} PTW</strong>
+          <strong>{{ count() }} PTW</strong>
           <span>
             {{ searchTerm() ? 'hasil pencarian' : 'Diurutkan berdasarkan aktivitas terbaru' }}
           </span>
         </div>
-        <label class="search-field" for="permit-search">
-          <span class="visually-hidden">Cari PTW</span>
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="7"></circle>
-            <path d="m16 16 5 5"></path>
-          </svg>
-          <input
-            id="permit-search"
-            type="search"
-            maxlength="100"
-            autocomplete="off"
-            placeholder="Cari nomor PTW, judul, perusahaan, atau lokasi"
-            aria-describedby="permit-search-help"
-            [formControl]="searchControl"
-          />
-          <span id="permit-search-help" class="visually-hidden">
-            Hasil diperbarui otomatis setelah Anda berhenti mengetik.
-          </span>
-        </label>
+        <div class="toolbar-filters">
+          <label class="search-field" for="permit-search">
+            <span class="visually-hidden">Cari PTW</span>
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="m16 16 5 5"></path>
+            </svg>
+            <input
+              id="permit-search"
+              type="search"
+              maxlength="100"
+              autocomplete="off"
+              placeholder="Cari nomor PTW, judul, perusahaan, atau lokasi"
+              aria-describedby="permit-search-help"
+              [formControl]="searchControl"
+            />
+            <span id="permit-search-help" class="visually-hidden">
+              Hasil diperbarui otomatis setelah Anda berhenti mengetik.
+            </span>
+          </label>
+          <label class="page-size-field" for="permit-page-size">
+            <span>Item per halaman</span>
+            <select id="permit-page-size" [formControl]="pageSizeControl">
+              @for (option of pageSizeOptions; track option) {
+                <option [ngValue]="option">{{ option }}</option>
+              }
+            </select>
+          </label>
+        </div>
       </div>
       @if (loading()) {
         <div class="state">Memuat data PTW…</div>
@@ -101,6 +122,19 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
           </div>
         }
       }
+      @if (!loading() && count() > 0) {
+        <footer class="pagination" aria-label="Navigasi halaman daftar PTW">
+          <span>Menampilkan {{ rangeStart() }}â€“{{ rangeEnd() }} dari {{ count() }} PTW</span>
+          <div>
+            <button type="button" (click)="previousPage()" [disabled]="!canGoBack()">
+              Sebelumnya
+            </button>
+            <button type="button" (click)="nextPage()" [disabled]="!canGoForward()">
+              Berikutnya
+            </button>
+          </div>
+        </footer>
+      }
     </section>`,
   styles: [
     `
@@ -142,6 +176,30 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
         transition:
           border-color 160ms ease,
           box-shadow 160ms ease;
+      }
+      .toolbar-filters {
+        display: flex;
+        align-items: end;
+        justify-content: flex-end;
+        gap: 10px;
+        width: min(100%, 530px);
+      }
+      .page-size-field {
+        display: grid;
+        gap: 4px;
+        color: #667a82;
+        font-size: 8px;
+        white-space: nowrap;
+      }
+      .page-size-field select {
+        height: 38px;
+        min-width: 92px;
+        padding: 0 9px;
+        border: 1px solid #cedade;
+        border-radius: 10px;
+        color: var(--nr-ink);
+        background: #fff;
+        font-size: 10px;
       }
       .search-field:focus-within {
         border-color: var(--nr-blue);
@@ -233,14 +291,48 @@ import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
         color: #a44839;
         background: #fff7f5;
       }
+      .pagination {
+        min-height: 58px;
+        padding: 10px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 15px;
+        color: var(--nr-muted);
+        background: #f9fbfc;
+        font-size: 9px;
+      }
+      .pagination div {
+        display: flex;
+        gap: 8px;
+      }
+      .pagination button {
+        padding: 6px 10px;
+        border: 1px solid #cbdade;
+        border-radius: 7px;
+        color: #315766;
+        background: white;
+        font-size: 10px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .pagination button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
       @media (max-width: 650px) {
         .toolbar {
           align-items: stretch;
           flex-direction: column;
           gap: 8px;
         }
+        .toolbar-filters,
         .search-field {
           width: 100%;
+        }
+        .toolbar-filters {
+          align-items: stretch;
+          flex-direction: column;
         }
         .permit-item {
           grid-template-columns: auto 1fr auto;
@@ -262,7 +354,26 @@ export class PermitList {
   protected readonly loading = signal(true);
   protected readonly error = signal('');
   protected readonly searchControl = new FormControl('', { nonNullable: true });
+  protected readonly pageSizeControl = new FormControl(25, { nonNullable: true });
+  protected readonly pageSizeOptions = [10, 25, 50, 100];
   protected readonly searchTerm = signal('');
+  protected readonly offset = signal(0);
+  protected readonly pageSize = signal(25);
+  protected readonly count = signal(0);
+  protected readonly rangeStart = computed(() => (this.count() === 0 ? 0 : this.offset() + 1));
+  protected readonly rangeEnd = computed(() =>
+    Math.min(this.offset() + this.pageSize(), this.count()),
+  );
+  protected readonly canGoBack = computed(() => this.offset() > 0);
+  protected readonly canGoForward = computed(() => this.offset() + this.pageSize() < this.count());
+  private readonly query = new BehaviorSubject({ search: '', offset: 0, limit: 25 });
+  protected readonly isGlobalMonitor = computed(() => {
+    const identity = this.identity();
+    return (
+      identity?.roles.includes('Administrator') === true ||
+      canMonitorAllPermits(identity?.roles ?? [], identity?.locationScopes ?? [])
+    );
+  });
   protected readonly canCreatePermit = computed(() =>
     (this.identity()?.roles ?? []).some((role) => ['Sponsor', 'Administrator'].includes(role)),
   );
@@ -297,20 +408,47 @@ export class PermitList {
         map((value) => value.trim()),
         debounce((value) => (value ? timer(300) : of(0))),
         distinctUntilChanged(),
-        tap((search) => {
-          this.searchTerm.set(search);
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((search) => {
+        this.searchTerm.set(search);
+        this.query.next({ ...this.query.value, search, offset: 0 });
+      });
+
+    this.pageSizeControl.valueChanges
+      .pipe(
+        startWith(this.pageSizeControl.value),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((limit) => this.query.next({ ...this.query.value, offset: 0, limit }));
+
+    this.query
+      .pipe(
+        distinctUntilChanged(
+          (previous, current) => JSON.stringify(previous) === JSON.stringify(current),
+        ),
+        tap((query) => {
+          this.offset.set(query.offset);
+          this.pageSize.set(query.limit);
           this.loading.set(true);
           this.error.set('');
         }),
-        switchMap((search) =>
-          this.api.list(search || undefined).pipe(
-            catchError(() => {
-              this.error.set(
-                'API belum tersedia. Pastikan SQL Server dan Ptw.Api sedang berjalan.',
-              );
-              return of(null);
-            }),
-          ),
+        switchMap((query) =>
+          this.api
+            .list({
+              search: query.search || undefined,
+              offset: query.offset,
+              limit: query.limit,
+            })
+            .pipe(
+              catchError(() => {
+                this.error.set(
+                  'API belum tersedia. Pastikan SQL Server dan Ptw.Api sedang berjalan.',
+                );
+                return of(null);
+              }),
+            ),
         ),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -318,9 +456,23 @@ export class PermitList {
         next: (result) => {
           if (result) {
             this.permits.set(result.items);
+            this.count.set(result.count);
           }
           this.loading.set(false);
         },
       });
+  }
+
+  protected previousPage(): void {
+    if (!this.canGoBack()) return;
+    this.query.next({
+      ...this.query.value,
+      offset: Math.max(0, this.offset() - this.pageSize()),
+    });
+  }
+
+  protected nextPage(): void {
+    if (!this.canGoForward()) return;
+    this.query.next({ ...this.query.value, offset: this.offset() + this.pageSize() });
   }
 }

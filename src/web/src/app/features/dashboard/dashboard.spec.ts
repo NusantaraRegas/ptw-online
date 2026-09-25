@@ -24,7 +24,7 @@ describe('Dashboard', () => {
       competencyCodes: [],
       isDevelopmentIdentity: true,
     });
-    http.expectOne('/api/v1/permits').flush({ items: [], count: 0 });
+    http.expectOne((request) => request.url === '/api/v1/permits').flush({ items: [], count: 0 });
     http.expectOne('/api/v1/tasks').flush({
       items: [
         {
@@ -71,7 +71,7 @@ describe('Dashboard', () => {
       competencyCodes: [],
       isDevelopmentIdentity: true,
     });
-    http.expectOne('/api/v1/permits').flush({ items: [], count: 0 });
+    http.expectOne((request) => request.url === '/api/v1/permits').flush({ items: [], count: 0 });
     http.expectOne('/api/v1/tasks').flush({ items: [], count: 0 });
     fixture.detectChanges();
 
@@ -104,7 +104,7 @@ describe('Dashboard', () => {
       competencyCodes: [],
       isDevelopmentIdentity: true,
     });
-    http.expectOne('/api/v1/permits').flush({ items: [], count: 0 });
+    http.expectOne((request) => request.url === '/api/v1/permits').flush({ items: [], count: 0 });
     http.expectOne('/api/v1/tasks').flush({ items: [], count: 0 });
     fixture.detectChanges();
 
@@ -114,7 +114,7 @@ describe('Dashboard', () => {
     );
   });
 
-  it('shows administrators all recent non-draft permits, including closed permits', async () => {
+  it('shows global monitors all recent non-draft permits, including closed permits', async () => {
     await TestBed.configureTestingModule({
       imports: [Dashboard],
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
@@ -124,12 +124,12 @@ describe('Dashboard', () => {
     const http = TestBed.inject(HttpTestingController);
 
     http.expectOne('/api/v1/me').flush({
-      userId: 'superadmin.local',
-      displayName: 'Super Administrator',
-      roles: ['Administrator'],
-      locationScopes: ['*'],
+      userId: 'area.owner.orf.demo',
+      displayName: 'Manager Pemilik Wilayah ORF',
+      roles: ['AreaOwnerManager'],
+      locationScopes: ['ORF'],
       competencyCodes: [],
-      isDevelopmentIdentity: false,
+      isDevelopmentIdentity: true,
     });
     http
       .expectOne(
@@ -157,35 +157,37 @@ describe('Dashboard', () => {
         count: 12,
         generatedAt: '2026-09-25T02:00:00Z',
       });
-    http.expectOne('/api/v1/permits').flush({
-      items: [
-        {
-          id: 'draft-permit',
-          permitNumber: null,
-          status: 'DRAFT',
-          draft: {
-            title: 'Draft tersembunyi',
-            locationId: 'ORF',
-            permitClass: 'HotWork',
-            validUntil: '2026-09-30T00:00:00Z',
+    http
+      .expectOne((request) => request.url === '/api/v1/permits')
+      .flush({
+        items: [
+          {
+            id: 'draft-permit',
+            permitNumber: null,
+            status: 'DRAFT',
+            draft: {
+              title: 'Draft tersembunyi',
+              locationId: 'ORF',
+              permitClass: 'HotWork',
+              validUntil: '2026-09-30T00:00:00Z',
+            },
+            updatedAt: '2026-09-25T00:00:00Z',
           },
-          updatedAt: '2026-09-25T00:00:00Z',
-        },
-        {
-          id: 'closed-permit',
-          permitNumber: 'PTW-20260925-099',
-          status: 'CLOSED',
-          draft: {
-            title: 'PTW selesai dipantau',
-            locationId: 'SITE_OFFICE',
-            permitClass: 'ColdWork',
-            validUntil: '2026-09-24T00:00:00Z',
+          {
+            id: 'closed-permit',
+            permitNumber: 'PTW-20260925-099',
+            status: 'CLOSED',
+            draft: {
+              title: 'PTW selesai dipantau',
+              locationId: 'SITE_OFFICE',
+              permitClass: 'ColdWork',
+              validUntil: '2026-09-24T00:00:00Z',
+            },
+            updatedAt: '2026-09-25T01:00:00Z',
           },
-          updatedAt: '2026-09-25T01:00:00Z',
-        },
-      ],
-      count: 2,
-    });
+        ],
+        count: 2,
+      });
     http.expectOne('/api/v1/tasks').flush({ items: [], count: 0 });
     fixture.detectChanges();
 

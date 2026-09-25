@@ -111,10 +111,12 @@ public sealed record AttachmentPolicy(
 public interface IPermitStore
 {
     Task<StoredPermit?> FindAsync(Guid id, CancellationToken cancellationToken);
-    Task<IReadOnlyList<StoredPermit>> ListAsync(
+    Task<StorePage<StoredPermit>> ListAsync(
         string? sponsorId,
         IReadOnlySet<string> locationScopes,
         string? search,
+        int offset,
+        int limit,
         CancellationToken cancellationToken);
     Task<OperationsBoardPage> ListOperationsBoardAsync(
         IReadOnlySet<string> locationScopes,

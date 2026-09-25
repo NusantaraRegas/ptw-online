@@ -3,8 +3,8 @@
     <p class="eyebrow">Monitoring wilayah</p>
     <h1>Papan Operasi</h1>
     <p class="subtitle">
-      {{ isAdministrator() ? 'Seluruh PTW non-draft' : 'Kondisi PTW operasional' }} dalam cakupan
-      <strong>{{ scopeLabel() }}</strong
+      {{ canMonitorAllStatuses() ? 'Seluruh PTW non-draft' : 'Kondisi PTW operasional' }} dalam
+      cakupan <strong>{{ scopeLabel() }}</strong
       >.
     </p>
   </div>
@@ -102,9 +102,9 @@
       <span>Status</span>
       <select formControlName="status">
         <option value="">
-          {{ isAdministrator() ? 'Semua status kecuali draft' : 'Semua status operasi' }}
+          {{ canMonitorAllStatuses() ? 'Semua status kecuali draft' : 'Semua status operasi' }}
         </option>
-        @if (isAdministrator()) {
+        @if (canMonitorAllStatuses()) {
           <option value="UNDER_VALIDATION">Validasi HSE berjalan</option>
           <option value="REVISION_REQUIRED">Perlu revisi</option>
           <option value="AWAITING_AREA_APPROVAL">Menunggu persetujuan</option>
@@ -112,7 +112,7 @@
         <option value="ISSUED">Diterbitkan</option>
         <option value="SUSPENDED">Ditangguhkan</option>
         <option value="CLOSURE_REQUESTED">Menunggu verifikasi penutupan</option>
-        @if (isAdministrator()) {
+        @if (canMonitorAllStatuses()) {
           <option value="CLOSED">Ditutup</option>
           <option value="REJECTED">Ditolak</option>
           <option value="CANCELLED">Dibatalkan</option>

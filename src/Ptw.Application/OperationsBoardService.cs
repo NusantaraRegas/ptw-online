@@ -43,6 +43,9 @@ public sealed class OperationsBoardService(
     {
         var actor = actorContext.Current;
         var isAdministrator = actor.Roles.Contains("Administrator");
+        var canMonitorAllLocations = PermitMonitoringAccess.CanMonitorAllLocations(actor);
+        var canMonitorAllStatuses = isAdministrator || canMonitorAllLocations;
+        var readLocationScopes = PermitMonitoringAccess.ReadLocationScopes(actor);
         if (!actor.Roles.Overlaps(AllowedRoles))
         {
             throw new UnauthorizedAccessException(
@@ -58,8 +61,8 @@ public sealed class OperationsBoardService(
 
         var normalizedLocation = NormalizeOptional(locationId);
         if (normalizedLocation is not null
-            && !actor.LocationScopes.Contains("*")
-            && !actor.LocationScopes.Contains(normalizedLocation))
+            && !readLocationScopes.Contains("*")
+            && !readLocationScopes.Contains(normalizedLocation))
         {
             throw new UnauthorizedAccessException(
                 "Lokasi Papan Operasi berada di luar cakupan otorisasi pengguna.");
@@ -68,7 +71,7 @@ public sealed class OperationsBoardService(
         var normalizedStatus = NormalizeOptional(status);
         if (normalizedStatus is not null
             && (!Statuses.TryGetValue(normalizedStatus, out _)
-                || (!isAdministrator && !OperationalStatuses.Contains(normalizedStatus))))
+                || (!canMonitorAllStatuses && !OperationalStatuses.Contains(normalizedStatus))))
         {
             throw new InvalidRequestException(
                 "operations.status_invalid",
@@ -98,13 +101,13 @@ public sealed class OperationsBoardService(
 
         var now = clock.UtcNow;
         var page = await store.ListOperationsBoardAsync(
-            actor.LocationScopes,
+            readLocationScopes,
             new OperationsBoardQuery(
                 normalizedStatus is null ? null : Statuses[normalizedStatus],
                 normalizedLocation,
                 parsedClass,
                 normalizedSearch,
-                isAdministrator,
+                canMonitorAllStatuses,
                 offset,
                 limit,
                 now,

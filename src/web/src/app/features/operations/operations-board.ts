@@ -15,7 +15,11 @@ import {
   switchMap,
   tap,
 } from 'rxjs';
-import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
+import {
+  canMonitorAllPermits,
+  CurrentIdentity,
+  IdentityApi,
+} from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
 import {
   OperationsApi,
@@ -53,9 +57,13 @@ export class OperationsBoard {
   protected readonly refreshing = signal(false);
   protected readonly error = signal('');
   protected readonly locationError = signal('');
-  protected readonly isAdministrator = computed(() =>
-    (this.identity()?.roles ?? []).includes('Administrator'),
-  );
+  protected readonly canMonitorAllStatuses = computed(() => {
+    const identity = this.identity();
+    return (
+      identity?.roles.includes('Administrator') === true ||
+      canMonitorAllPermits(identity?.roles ?? [], identity?.locationScopes ?? [])
+    );
+  });
 
   protected readonly metrics = computed(() => ({
     total: 0,
@@ -94,7 +102,7 @@ export class OperationsBoard {
     return [...options.values()].sort((left, right) => left.name.localeCompare(right.name, 'id'));
   });
   protected readonly scopeLabel = computed(() => {
-    if (this.isAdministrator()) return 'seluruh wilayah';
+    if (this.canMonitorAllStatuses()) return 'seluruh wilayah';
     const scopes = this.identity()?.locationScopes ?? [];
     if (scopes.includes('*')) return 'Seluruh wilayah yang diizinkan';
     if (scopes.length === 0) return 'Tidak ada wilayah yang ditugaskan';

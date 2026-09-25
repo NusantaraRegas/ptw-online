@@ -13,8 +13,10 @@ public sealed class PermitsController(
     [HttpGet]
     public Task<PagedResponse<PermitResponse>> List(
         [FromQuery] string? search,
-        CancellationToken cancellationToken) =>
-        service.ListAsync(search, cancellationToken);
+        [FromQuery] int offset = 0,
+        [FromQuery] int limit = 25,
+        CancellationToken cancellationToken = default) =>
+        service.ListAsync(search, offset, limit, cancellationToken);
 
     [HttpGet("/api/v1/tasks")]
     public Task<PagedResponse<PermitTaskResponse>> ListTasks(CancellationToken cancellationToken) =>

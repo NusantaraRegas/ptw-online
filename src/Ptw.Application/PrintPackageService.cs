@@ -133,14 +133,14 @@ public sealed class PrintPackageService(
         var stored = await permitStore.FindAsync(permitId, cancellationToken)
             ?? throw new ResourceNotFoundException("Permit", permitId);
         var actor = actorContext.Current;
-        if (!actor.LocationScopes.Contains("*")
-            && !actor.LocationScopes.Contains(stored.Permit.Draft.LocationId))
+        if (!PermitMonitoringAccess.CanReadLocation(actor, stored.Permit.Draft.LocationId))
         {
             throw new UnauthorizedAccessException("Lokasi PTW berada di luar cakupan otorisasi pengguna.");
         }
 
         // A Sponsor without a broader review role only ever sees their own permits.
-        if (!actor.Roles.Overlaps(["Auditor", "Administrator", "HSEValidator", "AreaOwnerManager"])
+        if (!actor.Roles.Overlaps(
+                ["Auditor", "Administrator", "HSEValidator", "AreaOwnerSeniorOfficer", "AreaOwnerManager"])
             && !string.Equals(stored.Permit.Draft.SponsorId, actor.Id, StringComparison.OrdinalIgnoreCase))
         {
             throw new UnauthorizedAccessException("PTW berada di luar cakupan otorisasi pengguna.");

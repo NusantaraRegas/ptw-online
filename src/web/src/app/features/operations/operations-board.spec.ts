@@ -7,7 +7,7 @@ import { OperationsBoard } from './operations-board';
 describe('OperationsBoard', () => {
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
-  it('renders scoped operational data with business labels and a safety warning', async () => {
+  it('renders ORF area-owner global monitoring with business labels and a safety warning', async () => {
     await TestBed.configureTestingModule({
       imports: [OperationsBoard],
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
@@ -59,6 +59,8 @@ describe('OperationsBoard', () => {
 
     const text = fixture.nativeElement.textContent.replace(/\s+/g, ' ').trim();
     expect(text).toContain('Diterbitkan belum otomatis mengizinkan pekerjaan dimulai');
+    expect(text).toContain('Seluruh PTW non-draft');
+    expect(text).toContain('seluruh wilayah');
     expect(text).toContain('Onshore Receiving Facility');
     expect(text).toContain('Pekerjaan Panas');
     expect(text).toContain('Pekerjaan harus dihentikan');
@@ -70,6 +72,11 @@ describe('OperationsBoard', () => {
       'HotWork',
     );
     expect(text).not.toContain('AreaOwnerManager');
+    expect(
+      Array.from<HTMLOptionElement>(
+        fixture.nativeElement.querySelectorAll('select[formControlName="status"] option'),
+      ).map((option) => option.value),
+    ).toContain('CLOSED');
   });
 
   it('sends status filters to the scoped operations endpoint', async () => {

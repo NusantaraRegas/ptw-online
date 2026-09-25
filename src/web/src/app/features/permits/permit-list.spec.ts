@@ -24,10 +24,18 @@ describe('PermitList', () => {
       competencyCodes: [],
       isDevelopmentIdentity: true,
     });
-    http.expectOne('/api/v1/permits').flush({ items: [], count: 0 });
+    http
+      .expectOne(
+        (request) =>
+          request.url === '/api/v1/permits' &&
+          request.params.get('offset') === '0' &&
+          request.params.get('limit') === '25',
+      )
+      .flush({ items: [], count: 0 });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('a[href="/permits/new"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('h1')?.textContent.trim()).toBe('Daftar PTW');
     expect(fixture.nativeElement.textContent).toContain(
       'Belum ada PTW yang tersedia untuk akun dan cakupan lokasi Anda.',
     );
@@ -50,7 +58,14 @@ describe('PermitList', () => {
       competencyCodes: [],
       isDevelopmentIdentity: true,
     });
-    http.expectOne('/api/v1/permits').flush({ items: [], count: 0 });
+    http
+      .expectOne(
+        (request) =>
+          request.url === '/api/v1/permits' &&
+          request.params.get('offset') === '0' &&
+          request.params.get('limit') === '25',
+      )
+      .flush({ items: [], count: 0 });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('a[href="/permits/new"]')).not.toBeNull();
@@ -76,21 +91,23 @@ describe('PermitList', () => {
     });
     const statuses = ['ISSUED', 'CLOSED', 'REJECTED', 'SUSPENDED'];
     const permitClasses = ['HotWork', 'ColdWork', 'ConfinedSpaceEntry', 'HotWork'];
-    http.expectOne('/api/v1/permits').flush({
-      items: statuses.map((status, index) => ({
-        id: `permit-${index}`,
-        permitNumber: `PTW-${index}`,
-        status,
-        updatedAt: '2026-09-23T08:00:00Z',
-        draft: {
-          permitClass: permitClasses[index],
-          title: `Permit ${status}`,
-          locationId: 'ORF',
-          company: 'PT Kontraktor',
-        },
-      })),
-      count: statuses.length,
-    });
+    http
+      .expectOne((request) => request.url === '/api/v1/permits')
+      .flush({
+        items: statuses.map((status, index) => ({
+          id: `permit-${index}`,
+          permitNumber: `PTW-${index}`,
+          status,
+          updatedAt: '2026-09-23T08:00:00Z',
+          draft: {
+            permitClass: permitClasses[index],
+            title: `Permit ${status}`,
+            locationId: 'ORF',
+            company: 'PT Kontraktor',
+          },
+        })),
+        count: statuses.length,
+      });
     fixture.detectChanges();
 
     const badges = Array.from<HTMLElement>(
@@ -132,7 +149,7 @@ describe('PermitList', () => {
       competencyCodes: [],
       isDevelopmentIdentity: true,
     });
-    http.expectOne('/api/v1/permits').flush({ items: [], count: 0 });
+    http.expectOne((request) => request.url === '/api/v1/permits').flush({ items: [], count: 0 });
 
     const search = fixture.nativeElement.querySelector('#permit-search') as HTMLInputElement;
     search.value = 'pengelasan pipa';
@@ -142,7 +159,10 @@ describe('PermitList', () => {
 
     const request = http.expectOne(
       (candidate) =>
-        candidate.url === '/api/v1/permits' && candidate.params.get('search') === 'pengelasan pipa',
+        candidate.url === '/api/v1/permits' &&
+        candidate.params.get('search') === 'pengelasan pipa' &&
+        candidate.params.get('offset') === '0' &&
+        candidate.params.get('limit') === '25',
     );
     request.flush({
       items: [
@@ -166,5 +186,69 @@ describe('PermitList', () => {
     expect(fixture.nativeElement.querySelectorAll('.permit-item')).toHaveLength(1);
     expect(fixture.nativeElement.textContent).toContain('1 PTW');
     expect(fixture.nativeElement.textContent).toContain('hasil pencarian');
+  });
+
+  it('uses server-side pagination and lets the user choose the page size', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PermitList],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PermitList);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    const page = { items: [], count: 60 };
+
+    http.expectOne('/api/v1/me').flush({
+      userId: 'superadmin.local',
+      displayName: 'Super Administrator',
+      roles: ['Administrator'],
+      locationScopes: ['*'],
+      competencyCodes: [],
+      isDevelopmentIdentity: false,
+    });
+    http
+      .expectOne(
+        (request) =>
+          request.url === '/api/v1/permits' &&
+          request.params.get('offset') === '0' &&
+          request.params.get('limit') === '25',
+      )
+      .flush(page);
+    fixture.detectChanges();
+
+    const buttons = fixture.nativeElement.querySelectorAll('.pagination button');
+    (buttons[1] as HTMLButtonElement).click();
+    http
+      .expectOne(
+        (request) =>
+          request.url === '/api/v1/permits' &&
+          request.params.get('offset') === '25' &&
+          request.params.get('limit') === '25',
+      )
+      .flush(page);
+    fixture.detectChanges();
+
+    const pageSize = fixture.nativeElement.querySelector('#permit-page-size') as HTMLSelectElement;
+    expect(Array.from(pageSize.options).map((option) => option.textContent?.trim())).toEqual([
+      '10',
+      '25',
+      '50',
+      '100',
+    ]);
+    pageSize.selectedIndex = 0;
+    pageSize.dispatchEvent(new Event('change'));
+    http
+      .expectOne(
+        (request) =>
+          request.url === '/api/v1/permits' &&
+          request.params.get('offset') === '0' &&
+          request.params.get('limit') === '10',
+      )
+      .flush(page);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.pagination')?.textContent).toContain(
+      'Menampilkan 1â€“10 dari 60 PTW',
+    );
   });
 });

@@ -246,6 +246,12 @@ export interface PagedPermits {
   count: number;
 }
 
+export interface PermitListFilters {
+  search?: string;
+  offset: number;
+  limit: number;
+}
+
 export interface PermitTask {
   id: string;
   permitId: string;
@@ -291,9 +297,13 @@ export interface PagedHistory<T> {
 @Injectable({ providedIn: 'root' })
 export class PermitApi {
   constructor(private readonly http: HttpClient) {}
-  list(search?: string): Observable<PagedPermits> {
+  list(filters: PermitListFilters): Observable<PagedPermits> {
     return this.http.get<PagedPermits>('/api/v1/permits', {
-      params: search ? { search } : {},
+      params: {
+        ...(filters.search ? { search: filters.search } : {}),
+        offset: filters.offset,
+        limit: filters.limit,
+      },
     });
   }
 

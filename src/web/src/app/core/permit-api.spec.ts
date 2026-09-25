@@ -49,6 +49,19 @@ describe('PermitApi', () => {
     request.flush({ items: [], count: 0 });
   });
 
+  it('sends search and server-side pagination parameters for the permit list', () => {
+    api.list({ search: 'pompa', offset: 25, limit: 25 }).subscribe();
+    const request = http.expectOne(
+      (candidate) =>
+        candidate.url === '/api/v1/permits' &&
+        candidate.params.get('search') === 'pompa' &&
+        candidate.params.get('offset') === '25' &&
+        candidate.params.get('limit') === '25',
+    );
+    expect(request.request.method).toBe('GET');
+    request.flush({ items: [], count: 0 });
+  });
+
   it('loads the controlled work types used by the form and PDF', () => {
     api.listWorkTypes().subscribe();
     const request = http.expectOne('/api/v1/reference-data/work-types');

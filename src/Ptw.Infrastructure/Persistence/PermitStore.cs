@@ -26,10 +26,12 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         return ToStored(record, renewalPermitId);
     }
 
-    public async Task<IReadOnlyList<StoredPermit>> ListAsync(
+    public async Task<StorePage<StoredPermit>> ListAsync(
         string? sponsorId,
         IReadOnlySet<string> locationScopes,
         string? search,
+        int offset,
+        int limit,
         CancellationToken cancellationToken)
     {
         var query = dbContext.Permits.AsNoTracking();
@@ -53,15 +55,21 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                 || EF.Functions.Like(x.DraftJson, pattern, @"\"));
         }
 
-        var records = await query.OrderByDescending(x => x.UpdatedAt).Take(200).ToListAsync(cancellationToken);
+        var count = await query.CountAsync(cancellationToken);
+        var records = await query
+            .OrderByDescending(x => x.UpdatedAt)
+            .ThenByDescending(x => x.Id)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
         var recordIds = records.Select(x => x.Id).ToArray();
         var renewals = await dbContext.Permits.AsNoTracking()
             .Where(x => x.RenewedFromPermitId != null && recordIds.Contains(x.RenewedFromPermitId.Value))
             .Select(x => new { SourceId = x.RenewedFromPermitId!.Value, RenewalId = x.Id })
             .ToDictionaryAsync(x => x.SourceId, x => x.RenewalId, cancellationToken);
-        return records.Select(record => ToStored(
+        return new StorePage<StoredPermit>(records.Select(record => ToStored(
             record,
-            renewals.GetValueOrDefault(record.Id))).ToArray();
+            renewals.GetValueOrDefault(record.Id))).ToArray(), count);
     }
 
     public async Task<OperationsBoardPage> ListOperationsBoardAsync(

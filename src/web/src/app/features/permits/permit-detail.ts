@@ -224,8 +224,14 @@ export class PermitDetail {
         (task.type === 'AREA_APPROVE_AND_ISSUE' && this.roles().includes('AreaOwnerManager')))
     );
   });
+  protected readonly hasCommandLocationScope = computed(() => {
+    const locationId = this.permit()?.draft.locationId;
+    const scopes = this.identity()?.locationScopes ?? [];
+    return !!locationId && (scopes.includes('*') || scopes.includes(locationId));
+  });
   protected readonly canSuspend = computed(
     () =>
+      this.hasCommandLocationScope() &&
       this.permit()?.status === 'ISSUED' &&
       this.roles().some((role) =>
         ['HSEValidator', 'AreaOwnerManager', 'Administrator'].includes(role),
@@ -264,6 +270,7 @@ export class PermitDetail {
   );
   protected readonly canResolveSuspension = computed(
     () =>
+      this.hasCommandLocationScope() &&
       this.permit()?.status === 'SUSPENDED' &&
       this.roles().some((role) => ['AreaOwnerManager', 'Administrator'].includes(role)),
   );

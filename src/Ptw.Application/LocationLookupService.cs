@@ -16,7 +16,7 @@ public sealed class LocationLookupService(
         var items = (await store.ListAsync(cancellationToken))
             .Where(item => item.Entry.Status == LocationMasterStatus.Approved
                 && item.Entry.IsEffectiveAt(now)
-                && HasLocationScope(actor, item.Entry.Code))
+                && PermitMonitoringAccess.CanReadLocation(actor, item.Entry.Code))
             .Select(item => new LocationOptionResponse(
                 item.Entry.Id,
                 item.Entry.Code,
@@ -24,7 +24,4 @@ public sealed class LocationLookupService(
             .ToArray();
         return new PagedResponse<LocationOptionResponse>(items, items.Length);
     }
-
-    private static bool HasLocationScope(Actor actor, string locationCode) =>
-        actor.LocationScopes.Contains("*") || actor.LocationScopes.Contains(locationCode);
 }

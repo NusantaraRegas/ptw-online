@@ -171,14 +171,14 @@
       <h2>PTW terbaru</h2>
       <p>
         {{
-          isAdministrator()
+          isGlobalMonitor()
             ? 'Aktivitas seluruh PTW kecuali draft'
             : 'Draft dan aktivitas terakhir Anda'
         }}
       </p>
     </div>
-    <a [routerLink]="isAdministrator() ? '/operations' : '/permits'">
-      {{ isAdministrator() ? 'Buka Papan Operasi' : 'Lihat PTW Saya' }}
+    <a [routerLink]="isGlobalMonitor() ? '/operations' : '/permits'">
+      {{ isGlobalMonitor() ? 'Buka Papan Operasi' : 'Lihat PTW Saya' }}
     </a>
   </header>
   @if (!online()) {
@@ -198,7 +198,7 @@
       <p>
         {{
           canCreatePermit()
-            ? isAdministrator()
+            ? isGlobalMonitor()
               ? 'Belum ada PTW non-draft yang dapat dipantau.'
               : 'Buat PTW pertama untuk memulai alur perencanaan.'
             : 'Belum ada PTW yang tersedia untuk akun dan cakupan lokasi Anda.'

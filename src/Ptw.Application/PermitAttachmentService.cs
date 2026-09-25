@@ -343,9 +343,13 @@ public sealed class PermitAttachmentService(
             throw new UnauthorizedAccessException("Role pengguna diperlukan untuk membaca lampiran PTW.");
         }
 
-        EnsureLocationScope(actor, stored.Permit.Draft.LocationId);
+        if (!PermitMonitoringAccess.CanReadLocation(actor, stored.Permit.Draft.LocationId))
+        {
+            throw new UnauthorizedAccessException("PTW berada di luar cakupan pemantauan pengguna.");
+        }
         if (actor.Roles.Contains("Sponsor")
-            && !actor.Roles.Overlaps(["HSEValidator", "AreaOwnerManager", "Administrator"])
+            && !actor.Roles.Overlaps(
+                ["HSEValidator", "AreaOwnerSeniorOfficer", "AreaOwnerManager", "Administrator"])
             && !string.Equals(actor.Id, stored.Permit.Draft.SponsorId, StringComparison.OrdinalIgnoreCase))
         {
             throw new UnauthorizedAccessException("Lampiran PTW berada di luar kepemilikan Sponsor.");
