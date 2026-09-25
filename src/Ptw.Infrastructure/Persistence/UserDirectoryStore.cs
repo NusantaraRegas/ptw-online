@@ -270,8 +270,16 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         var record = await dbContext.UserAccounts.SingleOrDefaultAsync(x => x.SubjectId == subjectId, cancellationToken)
             ?? throw new ResourceNotFoundException("Pengguna", subjectId);
         ApplyConcurrency(record, expectedETag);
-        var credential = await dbContext.UserCredentials.SingleAsync(x => x.SubjectId == subjectId, cancellationToken);
         var (salt, hash) = HashPassword(password);
+        var credential = await dbContext.UserCredentials.SingleOrDefaultAsync(
+            x => x.SubjectId == subjectId,
+            cancellationToken);
+        if (credential is null)
+        {
+            credential = new UserCredentialRecord { SubjectId = subjectId };
+            dbContext.UserCredentials.Add(credential);
+        }
+
         credential.PasswordSalt = salt;
         credential.PasswordHash = hash;
         credential.Iterations = PasswordIterations;

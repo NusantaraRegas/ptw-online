@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Ptw.Api;
 using Ptw.Contracts;
+using Ptw.Infrastructure.Persistence;
 
 namespace Ptw.Api.IntegrationTests;
 
@@ -45,6 +46,33 @@ public sealed class AdministratorPasswordBootstrapTests(PtwApiFactory factory)
             $"/api/v1/admin/users/login-events?subjectId={Uri.EscapeDataString(subjectId)}");
         Assert.NotNull(journal);
         Assert.Contains(journal.Items, x => x.Outcome == "succeeded" && x.IdentitySource == "development-local");
+    }
+
+    [Fact]
+    public async Task CreatesTheFirstCredentialForASeededAdministrator()
+    {
+        var (subjectId, userName) = await CreateAdministratorAsync();
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+            var credential = await dbContext.UserCredentials.FindAsync(subjectId);
+            Assert.NotNull(credential);
+            dbContext.UserCredentials.Remove(credential);
+            await dbContext.SaveChangesAsync();
+        }
+
+        var exitCode = await BootstrapCommand.ResetAdministratorPasswordAsync(
+            factory.Services,
+            NullLogger.Instance,
+            subjectId,
+            new StringReader(BootstrapPassword + "\n"));
+
+        Assert.Equal(0, exitCode);
+        using var client = factory.CreateClient();
+        using var login = await client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new LoginRequest(userName, BootstrapPassword));
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
     }
 
     [Fact]
