@@ -231,6 +231,10 @@ if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))
 {
     await using var migrationScope = app.Services.CreateAsyncScope();
     var migrationDb = migrationScope.ServiceProvider.GetRequiredService<PtwDbContext>();
+    // Seed and backfill migrations run large single statements; the request-path default of 30 s
+    // made one time out under host load and, because compose gates api on this step, took the
+    // site down. Migrations are one-shot and may legitimately take minutes.
+    migrationDb.Database.SetCommandTimeout(TimeSpan.FromMinutes(15));
     await migrationDb.Database.MigrateAsync();
     return 0;
 }
