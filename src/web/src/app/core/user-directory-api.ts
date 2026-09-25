@@ -38,6 +38,12 @@ export interface CreateUser {
   password: string;
 }
 
+export interface UpdateUser {
+  displayName: string;
+  position: string | null;
+  department: string | null;
+}
+
 interface PagedUsers {
   items: UserAccount[];
   count: number;
@@ -53,6 +59,14 @@ export class UserDirectoryApi {
 
   create(request: CreateUser): Observable<UserAccount> {
     return this.http.post<UserAccount>('/api/v1/admin/users', request);
+  }
+
+  update(user: UserAccount, request: UpdateUser): Observable<UserAccount> {
+    return this.http.patch<UserAccount>(
+      `/api/v1/admin/users/${encodeURIComponent(user.subjectId)}`,
+      request,
+      { headers: new HttpHeaders({ 'If-Match': user.eTag }) },
+    );
   }
 
   setActive(user: UserAccount, isActive: boolean): Observable<UserAccount> {

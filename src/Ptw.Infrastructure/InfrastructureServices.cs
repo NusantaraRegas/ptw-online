@@ -33,7 +33,6 @@ public static class InfrastructureServices
         });
         services.AddScoped<IDemoModeStore, DemoModeStore>();
         services.AddScoped<IAuthorizationAssignmentResolver, AuthorizationAssignmentResolver>();
-        services.AddScoped<IPolicyUatStore, PolicyUatStore>();
         services.AddSingleton<IClock, SystemClock>();
         var demoModeEnabledByDefault = isDevelopment
             && (!bool.TryParse(configuration["DemoMode:EnabledByDefault"], out var configuredDemoMode)

@@ -104,6 +104,37 @@ public sealed class UserAuthorizationAssignmentTests
         Assert.Equal("authorization.invalid_transition", exception.Code);
     }
 
+    [Fact]
+    public void ApprovedAssignmentRevisionCreatesANewDraftVersion()
+    {
+        var assignment = Create();
+        assignment.SubmitForApproval("admin.maker", Now.AddMinutes(1));
+        assignment.Approve("admin.checker", Now.AddMinutes(2));
+
+        assignment.ReviseApproved(
+            "operator.dua",
+            "PTW_REVIEWER",
+            ["permit.review"],
+            null,
+            false,
+            [],
+            AuthorizationAssignmentKind.Direct,
+            null,
+            Now.AddHours(1),
+            Now.AddDays(2),
+            "admin.editor",
+            Now.AddMinutes(3));
+
+        Assert.Equal(AuthorizationAssignmentStatus.Draft, assignment.Status);
+        Assert.Equal(4, assignment.Version);
+        Assert.Equal("operator.dua", assignment.SubjectId);
+        Assert.Equal("admin.editor", assignment.MakerId);
+        Assert.Null(assignment.CheckerId);
+        Assert.Null(assignment.ApprovedAt);
+        Assert.False(assignment.IsEffectiveAt(Now.AddHours(2)));
+        Assert.Contains(assignment.Events, item => item.Type == "authorization_revision_started");
+    }
+
     private static UserAuthorizationAssignment Create(
         string subjectId = "operator.satu",
         string roleCode = "PTW_ISSUER",

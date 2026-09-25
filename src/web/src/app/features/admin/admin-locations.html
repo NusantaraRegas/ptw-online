@@ -2,8 +2,6 @@
   <a routerLink="/admin" aria-current="page">Master lokasi</a>
   <a routerLink="/admin/users">Pengguna</a>
   <a routerLink="/admin/authorizations">Otorisasi pengguna</a>
-  <a routerLink="/admin/policy">Kesiapan policy</a>
-  <a routerLink="/admin/policy-uat">UAT policy</a>
   <a routerLink="/admin/settings">Pengaturan aplikasi</a>
 </nav>
 
@@ -21,14 +19,6 @@
     </button>
   }
 </div>
-
-<section class="boundary-note" aria-label="Batas implementasi">
-  <span aria-hidden="true">i</span>
-  <p>
-    Framework ini belum menjadi authority policy PTW. Daftar lokasi, pemilik area, dan assignment
-    produksi tetap menunggu OPN-001/002 disahkan.
-  </p>
-</section>
 
 @if (accessDenied()) {
   <section class="card access-card">

@@ -177,6 +177,40 @@ public sealed class UserAuthorizationAssignment
         Raise("authorization_draft_updated", new { SubjectId, RoleCode, Version });
     }
 
+    public void ReviseApproved(
+        string subjectId,
+        string roleCode,
+        IReadOnlyList<string> actionCodes,
+        Guid? locationId,
+        bool includeDescendants,
+        IReadOnlyList<string> requiredCompetencyCodes,
+        AuthorizationAssignmentKind kind,
+        Guid? sourceAuthorizationId,
+        DateTimeOffset effectiveFrom,
+        DateTimeOffset? effectiveUntil,
+        string actorId,
+        DateTimeOffset now)
+    {
+        EnsureStatus(AuthorizationAssignmentStatus.Approved);
+        ApplyDraft(
+            subjectId,
+            roleCode,
+            actionCodes,
+            locationId,
+            includeDescendants,
+            requiredCompetencyCodes,
+            kind,
+            sourceAuthorizationId,
+            effectiveFrom,
+            effectiveUntil);
+        Status = AuthorizationAssignmentStatus.Draft;
+        MakerId = Required(actorId, "Maker");
+        CheckerId = null;
+        ApprovedAt = null;
+        Touch(now);
+        Raise("authorization_revision_started", new { SubjectId, RoleCode, Version });
+    }
+
     public void SubmitForApproval(string actorId, DateTimeOffset now)
     {
         EnsureStatus(AuthorizationAssignmentStatus.Draft);

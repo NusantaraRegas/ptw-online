@@ -62,6 +62,67 @@ describe('UserAuthorizationApi', () => {
     request.flush({ items: [], count: 0 });
   });
 
+  it('updates a controlled direct draft with concurrency protection', () => {
+    const assignment = {
+      ...draft,
+      id: 'assignment-id',
+      status: 'DRAFT' as const,
+      isEffective: false,
+      version: 1,
+      makerId: 'admin',
+      checkerId: null,
+      approvedAt: null,
+      createdAt: '2026-09-25T00:00:00.000Z',
+      updatedAt: '2026-09-25T00:00:00.000Z',
+      eTag: '"authorization-v1"',
+    };
+    const direct = {
+      subjectId: 'area.manager',
+      roleCode: 'AreaOwnerManager',
+      locationId: 'location-id',
+      effectiveFrom: '2026-09-25T00:00:00.000Z',
+      effectiveUntil: null,
+    };
+
+    api.updateDirectDraft(assignment, direct).subscribe();
+    const request = http.expectOne('/api/v1/admin/authorizations/assignment-id/direct-draft');
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.headers.get('If-Match')).toBe('"authorization-v1"');
+    expect(request.request.body).toEqual(direct);
+    request.flush({});
+  });
+
+  it('revises an approved assignment with concurrency and idempotency protection', () => {
+    const assignment = {
+      ...draft,
+      id: 'assignment-id',
+      status: 'APPROVED' as const,
+      isEffective: true,
+      version: 3,
+      makerId: 'maker',
+      checkerId: 'checker',
+      approvedAt: '2026-09-25T00:00:00.000Z',
+      createdAt: '2026-09-25T00:00:00.000Z',
+      updatedAt: '2026-09-25T00:00:00.000Z',
+      eTag: '"authorization-v3"',
+    };
+    const direct = {
+      subjectId: 'area.manager',
+      roleCode: 'AreaOwnerManager',
+      locationId: 'location-id',
+      effectiveFrom: '2026-09-25T00:00:00.000Z',
+      effectiveUntil: null,
+    };
+
+    api.reviseDirect(assignment, direct).subscribe();
+    const request = http.expectOne('/api/v1/admin/authorizations/assignment-id/revise-direct');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.headers.get('If-Match')).toBe('"authorization-v3"');
+    expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
+    expect(request.request.body).toEqual(direct);
+    request.flush({});
+  });
+
   it('sends concurrency and idempotency headers for approval', () => {
     api.approve('assignment-id', '"authorization-v2"').subscribe();
     const request = http.expectOne('/api/v1/admin/authorizations/assignment-id/approve');

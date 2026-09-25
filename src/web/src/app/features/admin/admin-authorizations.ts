@@ -36,6 +36,7 @@ export class AdminAuthorizations {
   protected readonly error = signal('');
   protected readonly accessDenied = signal(false);
   protected readonly formOpen = signal(false);
+  protected readonly editingAssignment = signal<UserAuthorization | null>(null);
   protected readonly subjectCount = computed(
     () => new Set(this.assignments().map((item) => item.subjectId.toLowerCase())).size,
   );
@@ -72,7 +73,39 @@ export class AdminAuthorizations {
   }
 
   protected toggleForm(): void {
-    this.formOpen.update((value) => !value);
+    if (this.formOpen()) {
+      this.closeForm();
+      return;
+    }
+    this.editingAssignment.set(null);
+    this.form.reset({ effectiveFrom: this.localDateTimeValue(), neverExpires: true });
+    this.selectedRoleCode.set('');
+    this.formOpen.set(true);
+    this.error.set('');
+  }
+
+  protected edit(entry: UserAuthorization): void {
+    if (entry.status === 'PENDING_APPROVAL' || entry.kind !== 'DIRECT') return;
+    this.editingAssignment.set(entry);
+    this.selectedRoleCode.set(entry.roleCode);
+    this.form.reset({
+      subjectId: entry.subjectId,
+      roleCode: entry.roleCode,
+      locationId: entry.locationId ?? '',
+      effectiveFrom: this.localDateTimeValue(new Date(entry.effectiveFrom)),
+      effectiveUntil: entry.effectiveUntil
+        ? this.localDateTimeValue(new Date(entry.effectiveUntil))
+        : '',
+      neverExpires: entry.effectiveUntil === null,
+    });
+    this.formOpen.set(true);
+    this.error.set('');
+  }
+
+  protected closeForm(): void {
+    this.formOpen.set(false);
+    this.editingAssignment.set(null);
+    this.selectedRoleCode.set('');
     this.error.set('');
   }
 
@@ -95,22 +128,26 @@ export class AdminAuthorizations {
 
     this.saving.set(true);
     this.error.set('');
-    this.api
-      .createDirect(draft)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (entry) => {
-          this.assignments.update((items) => [entry, ...items]);
-          this.form.reset({
-            effectiveFrom: this.localDateTimeValue(),
-            neverExpires: true,
-          });
-          this.selectedRoleCode.set('');
-          this.formOpen.set(false);
-          this.saving.set(false);
-        },
-        error: (response) => this.handleError(response, 'Draft assignment gagal dibuat.'),
-      });
+    const editing = this.editingAssignment();
+    const request = !editing
+      ? this.api.createDirect(draft)
+      : editing.status === 'APPROVED'
+        ? this.api.reviseDirect(editing, draft)
+        : this.api.updateDirectDraft(editing, draft);
+    request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (entry) => {
+        this.assignments.update((items) =>
+          editing ? items.map((item) => (item.id === entry.id ? entry : item)) : [entry, ...items],
+        );
+        this.closeForm();
+        this.saving.set(false);
+      },
+      error: (response) =>
+        this.handleError(
+          response,
+          editing ? 'Assignment gagal diperbarui.' : 'Draft assignment gagal dibuat.',
+        ),
+    });
   }
 
   protected submit(entry: UserAuthorization): void {

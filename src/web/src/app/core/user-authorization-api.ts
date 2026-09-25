@@ -68,6 +68,33 @@ export class UserAuthorizationApi {
     return this.http.post<UserAuthorization>('/api/v1/admin/authorizations/direct', draft);
   }
 
+  updateDirectDraft(
+    assignment: UserAuthorization,
+    draft: DirectUserAuthorizationDraft,
+  ): Observable<UserAuthorization> {
+    return this.http.patch<UserAuthorization>(
+      `/api/v1/admin/authorizations/${assignment.id}/direct-draft`,
+      draft,
+      { headers: new HttpHeaders({ 'If-Match': assignment.eTag }) },
+    );
+  }
+
+  reviseDirect(
+    assignment: UserAuthorization,
+    draft: DirectUserAuthorizationDraft,
+  ): Observable<UserAuthorization> {
+    return this.http.post<UserAuthorization>(
+      `/api/v1/admin/authorizations/${assignment.id}/revise-direct`,
+      draft,
+      {
+        headers: new HttpHeaders({
+          'If-Match': assignment.eTag,
+          'Idempotency-Key': crypto.randomUUID(),
+        }),
+      },
+    );
+  }
+
   listDirectRoleOptions(): Observable<PagedRoleOptions> {
     return this.http.get<PagedRoleOptions>('/api/v1/admin/authorizations/direct-role-options');
   }

@@ -50,17 +50,6 @@ export const routes: Routes = [
       import('./features/admin/admin-authorizations').then((m) => m.AdminAuthorizations),
   },
   {
-    path: 'admin/policy',
-    canActivate: [authenticatedGuard],
-    loadComponent: () =>
-      import('./features/admin/admin-policy-readiness').then((m) => m.AdminPolicyReadiness),
-  },
-  {
-    path: 'admin/policy-uat',
-    canActivate: [authenticatedGuard],
-    loadComponent: () => import('./features/admin/admin-policy-uat').then((m) => m.AdminPolicyUat),
-  },
-  {
     path: 'admin/settings',
     canActivate: [authenticatedGuard],
     loadComponent: () => import('./features/admin/admin-settings').then((m) => m.AdminSettings),

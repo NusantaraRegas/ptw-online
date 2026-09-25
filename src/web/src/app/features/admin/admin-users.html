@@ -2,8 +2,6 @@
   <a routerLink="/admin">Master lokasi</a>
   <a routerLink="/admin/users" aria-current="page">Pengguna</a>
   <a routerLink="/admin/authorizations">Otorisasi pengguna</a>
-  <a routerLink="/admin/policy">Kesiapan policy</a>
-  <a routerLink="/admin/policy-uat">UAT policy</a>
   <a routerLink="/admin/settings">Pengaturan aplikasi</a>
 </nav>
 
@@ -20,14 +18,6 @@
   }
 </div>
 
-<section class="boundary-note" aria-label="Batas tanda tangan elektronik">
-  <span aria-hidden="true">i</span>
-  <p>
-    Gambar ini hanya bukti visual persetujuan elektronik pada baris approval digital. Tanda tangan
-    lapangan pada Bagian 3 tetap diisi pada hardcopy sampai OPN-008 disahkan.
-  </p>
-</section>
-
 @if (accessDenied()) {
   <section class="card access-card">
     <h2>Akses Administrator diperlukan</h2>
@@ -42,16 +32,24 @@
     <form class="card user-form" [formGroup]="form" (ngSubmit)="create()">
       <header>
         <div>
-          <h2>Pengguna baru</h2>
-          <p>Role diberikan terpisah melalui assignment yang disetujui Administrator.</p>
+          <h2>{{ editingUser() ? 'Edit pengguna' : 'Pengguna baru' }}</h2>
+          <p>
+            {{
+              editingUser()
+                ? 'Subject ID dan username adalah identitas tetap dan tidak dapat diubah.'
+                : 'Role diberikan terpisah melalui assignment yang disetujui Administrator.'
+            }}
+          </p>
         </div>
       </header>
       <div class="form-grid">
         <label
-          ><span>Subject ID</span><input formControlName="subjectId" autocomplete="off"
+          ><span>Subject ID</span
+          ><input formControlName="subjectId" autocomplete="off" [readOnly]="!!editingUser()"
         /></label>
         <label
-          ><span>Username</span><input formControlName="userName" autocomplete="username"
+          ><span>Username</span
+          ><input formControlName="userName" autocomplete="username" [readOnly]="!!editingUser()"
         /></label>
         <label
           ><span>Nama lengkap</span><input formControlName="displayName" autocomplete="name"
@@ -62,14 +60,18 @@
         <label
           ><span>Departemen</span><input formControlName="department" autocomplete="organization"
         /></label>
-        <label
-          ><span>Password awal</span
-          ><input type="password" formControlName="password" autocomplete="new-password"
-        /></label>
+        @if (!editingUser()) {
+          <label
+            ><span>Password awal</span
+            ><input type="password" formControlName="password" autocomplete="new-password"
+          /></label>
+        }
       </div>
       <footer>
-        <button type="button" class="secondary-action" (click)="toggleForm()">Batal</button
-        ><button class="primary-action" type="submit" [disabled]="saving()">Simpan pengguna</button>
+        <button type="button" class="secondary-action" (click)="closeForm()">Batal</button
+        ><button class="primary-action" type="submit" [disabled]="saving()">
+          {{ editingUser() ? 'Simpan perubahan' : 'Simpan pengguna' }}
+        </button>
       </footer>
     </form>
   }
@@ -127,6 +129,9 @@
               >
             }
             <div class="row-actions">
+              <button type="button" (click)="edit(user)" [disabled]="actingId() === user.subjectId">
+                Edit
+              </button>
               <label class="upload-action"
                 >Unggah PNG<input
                   type="file"

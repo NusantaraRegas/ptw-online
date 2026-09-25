@@ -71,6 +71,57 @@ public sealed class UserAuthorizationApiTests(PtwApiFactory factory)
             assignment.ActionCodes);
         Assert.DoesNotContain("admin.manage", assignment.ActionCodes);
 
+        using var update = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/api/v1/admin/authorizations/{assignment.Id}/direct-draft")
+        {
+            Content = JsonContent.Create(new
+            {
+                SubjectId = $"area.manager.updated.{suffix}",
+                RoleCode = "AreaOwnerManager",
+                LocationId = location.Id,
+                EffectiveFrom = DateTimeOffset.UtcNow,
+                EffectiveUntil = (DateTimeOffset?)null,
+                ActionCodes = MaliciousActions
+            })
+        };
+        update.Headers.TryAddWithoutValidation("If-Match", assignment.ETag);
+        using var updateResponse = await maker.SendAsync(update);
+        updateResponse.EnsureSuccessStatusCode();
+        var updated = Required(
+            await updateResponse.Content.ReadFromJsonAsync<UserAuthorizationResponse>());
+
+        Assert.Equal("area.manager.updated." + suffix, updated.SubjectId);
+        Assert.Equal("AreaOwnerManager", updated.RoleCode);
+        Assert.Equal(location.Id, updated.LocationId);
+        Assert.DoesNotContain("admin.manage", updated.ActionCodes);
+        Assert.Contains("permit.approve-and-issue", updated.ActionCodes);
+
+        var pending = await SubmitAsync(maker, updated);
+        var approved = await ApproveAsync(maker, pending);
+        using var revise = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1/admin/authorizations/{approved.Id}/revise-direct")
+        {
+            Content = JsonContent.Create(new DirectUserAuthorizationDraftRequest(
+                approved.SubjectId,
+                approved.RoleCode,
+                approved.LocationId,
+                approved.EffectiveFrom,
+                approved.EffectiveUntil))
+        };
+        revise.Headers.TryAddWithoutValidation("If-Match", approved.ETag);
+        revise.Headers.TryAddWithoutValidation("Idempotency-Key", Guid.NewGuid().ToString("N"));
+        using var reviseResponse = await maker.SendAsync(revise);
+        reviseResponse.EnsureSuccessStatusCode();
+        var revised = Required(
+            await reviseResponse.Content.ReadFromJsonAsync<UserAuthorizationResponse>());
+
+        Assert.Equal("DRAFT", revised.Status);
+        Assert.Null(revised.CheckerId);
+        Assert.Null(revised.ApprovedAt);
+        Assert.False(revised.IsEffective);
+
         using var missingLocation = await maker.PostAsJsonAsync(
             "/api/v1/admin/authorizations/direct",
             new DirectUserAuthorizationDraftRequest(

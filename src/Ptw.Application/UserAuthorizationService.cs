@@ -162,6 +162,95 @@ public sealed class UserAuthorizationService(
             cancellationToken));
     }
 
+    public async Task<UserAuthorizationResponse> UpdateDirectDraftAsync(
+        Guid id,
+        DirectUserAuthorizationDraftRequest request,
+        string expectedETag,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        var actor = EnsureAdministrator();
+        var stored = await GetStoredAsync(id, cancellationToken);
+        if (stored.Entry.Kind != AuthorizationAssignmentKind.Direct)
+        {
+            throw new InvalidRequestException(
+                "authorization.direct_required",
+                "Hanya assignment langsung yang dapat diubah melalui form ini.");
+        }
+
+        var controlled = ToControlledDirectDraft(request);
+        await EnsureReferencesAsync(
+            controlled,
+            AuthorizationAssignmentKind.Direct,
+            false,
+            cancellationToken);
+        stored.Entry.UpdateDraft(
+            controlled.SubjectId,
+            controlled.RoleCode,
+            controlled.ActionCodes,
+            controlled.LocationId,
+            controlled.IncludeDescendants,
+            controlled.RequiredCompetencyCodes,
+            AuthorizationAssignmentKind.Direct,
+            null,
+            controlled.EffectiveFrom,
+            controlled.EffectiveUntil,
+            actor.Id,
+            clock.UtcNow);
+        return ToResponse(await store.UpdateAsync(
+            stored.Entry,
+            expectedETag,
+            actor,
+            correlationId,
+            null,
+            cancellationToken));
+    }
+
+    public Task<UserAuthorizationResponse> ReviseDirectAsync(
+        Guid id,
+        DirectUserAuthorizationDraftRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken) =>
+        ExecuteCommandAsync(
+            id,
+            "ReviseDirectUserAuthorization",
+            idempotencyKey,
+            new { Id = id, Request = request },
+            expectedETag,
+            correlationId,
+            async (entry, actor, now, token) =>
+            {
+                if (entry.Kind != AuthorizationAssignmentKind.Direct)
+                {
+                    throw new InvalidRequestException(
+                        "authorization.direct_required",
+                        "Hanya assignment langsung yang dapat direvisi melalui form ini.");
+                }
+
+                var controlled = ToControlledDirectDraft(request);
+                await EnsureReferencesAsync(
+                    controlled,
+                    AuthorizationAssignmentKind.Direct,
+                    false,
+                    token);
+                entry.ReviseApproved(
+                    controlled.SubjectId,
+                    controlled.RoleCode,
+                    controlled.ActionCodes,
+                    controlled.LocationId,
+                    controlled.IncludeDescendants,
+                    controlled.RequiredCompetencyCodes,
+                    AuthorizationAssignmentKind.Direct,
+                    null,
+                    controlled.EffectiveFrom,
+                    controlled.EffectiveUntil,
+                    actor.Id,
+                    now);
+            },
+            cancellationToken);
+
     public Task<UserAuthorizationResponse> SubmitAsync(
         Guid id,
         string expectedETag,

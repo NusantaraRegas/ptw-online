@@ -2,8 +2,6 @@
   <a routerLink="/admin">Master lokasi</a>
   <a routerLink="/admin/users">Pengguna</a>
   <a routerLink="/admin/authorizations" aria-current="page">Otorisasi pengguna</a>
-  <a routerLink="/admin/policy">Kesiapan policy</a>
-  <a routerLink="/admin/policy-uat">UAT policy</a>
   <a routerLink="/admin/settings">Pengaturan aplikasi</a>
 </nav>
 
@@ -21,15 +19,6 @@
     </button>
   }
 </div>
-
-<section class="boundary-note" aria-label="Batas implementasi">
-  <span aria-hidden="true">i</span>
-  <p>
-    Framework ini belum menjadi authority workflow PTW. Role dan action di bawah belum merupakan
-    matriks produksi sampai OPN-002 disahkan. Assignment hilang, kedaluwarsa, atau ambigu akan
-    ditolak secara fail-safe oleh resolver.
-  </p>
-</section>
 
 @if (accessDenied()) {
   <section class="card access-card">
@@ -63,10 +52,22 @@
     <form class="card assignment-form" [formGroup]="form" (ngSubmit)="create()">
       <header>
         <div>
-          <h2>Draft assignment baru</h2>
+          <h2>
+            {{
+              editingAssignment()?.status === 'APPROVED'
+                ? 'Revisi assignment'
+                : editingAssignment()
+                  ? 'Edit draft assignment'
+                  : 'Draft assignment baru'
+            }}
+          </h2>
           <p>
-            Administrator dapat membuat, mengajukan, dan menyetujui assignment yang sama. Semua
-            transisi tetap diaudit.
+            @if (editingAssignment()?.status === 'APPROVED') {
+              Saat disimpan, versi aktif menjadi Draft dan harus diajukan serta disetujui kembali.
+            } @else {
+              Administrator dapat membuat, mengajukan, dan menyetujui assignment yang sama. Semua
+              transisi tetap diaudit.
+            }
           </p>
         </div>
         <span>Persetujuan administrator</span>
@@ -152,9 +153,9 @@
         }
       </div>
       <footer>
-        <button type="button" class="secondary-action" (click)="toggleForm()">Batal</button>
+        <button type="button" class="secondary-action" (click)="closeForm()">Batal</button>
         <button type="submit" class="primary-action" [disabled]="saving()">
-          {{ saving() ? 'Menyimpan…' : 'Simpan draft' }}
+          {{ saving() ? 'Menyimpan…' : editingAssignment() ? 'Simpan perubahan' : 'Simpan draft' }}
         </button>
       </footer>
     </form>
@@ -206,6 +207,11 @@
             </span>
             <div class="row-actions">
               @if (item.status === 'DRAFT') {
+                @if (item.kind === 'DIRECT') {
+                  <button type="button" (click)="edit(item)" [disabled]="actingId() === item.id">
+                    Edit
+                  </button>
+                }
                 <button type="button" (click)="submit(item)" [disabled]="actingId() === item.id">
                   Ajukan
                 </button>
@@ -214,7 +220,13 @@
                   Setujui
                 </button>
               } @else {
-                <span>v{{ item.version }}</span>
+                @if (item.kind === 'DIRECT') {
+                  <button type="button" (click)="edit(item)" [disabled]="actingId() === item.id">
+                    Edit
+                  </button>
+                } @else {
+                  <span>v{{ item.version }}</span>
+                }
               }
             </div>
           </article>

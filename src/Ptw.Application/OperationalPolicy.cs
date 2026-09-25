@@ -1,5 +1,3 @@
-using Ptw.Contracts;
-
 namespace Ptw.Application;
 
 public static class PermitPolicyOperations
@@ -108,8 +106,6 @@ public sealed record PolicyAuthorizationEvidence(
 
 public interface IOperationalPolicyGate
 {
-    Task<OperationalPolicyReadinessResponse> GetReadinessAsync(CancellationToken cancellationToken);
-
     Task<PolicyAuthorizationEvidence?> AuthorizePermitCommandAsync(
         Actor actor,
         string operation,
@@ -122,95 +118,9 @@ public sealed class OperationalPolicyGate(
     ILocationMasterStore locationStore,
     IUserAuthorizationStore authorizationStore,
     IAuthorizationAssignmentResolver authorizationResolver,
-    IPolicyUatStore policyUatStore,
     IClock clock) : IOperationalPolicyGate
 {
     private static readonly string[] RequiredDecisions = ["OPN-001", "OPN-002"];
-
-    public async Task<OperationalPolicyReadinessResponse> GetReadinessAsync(
-        CancellationToken cancellationToken)
-    {
-        var now = clock.UtcNow;
-        var requirements = new List<PolicyRequirementResponse>();
-
-        AddRequirement(
-            requirements,
-            "policy.version",
-            "Versi policy",
-            !string.IsNullOrWhiteSpace(settings.PolicyVersion),
-            "Versi konfigurasi policy wajib dicatat sebelum aktivasi.");
-
-        PolicyUatRunSummaryResponse? passingUatRun = null;
-        if (!string.IsNullOrWhiteSpace(settings.PolicyVersion))
-        {
-            passingUatRun = await policyUatStore.FindLatestPassingRunAsync(
-                settings.PolicyVersion,
-                cancellationToken);
-        }
-
-        AddRequirement(
-            requirements,
-            "uat.passing_run",
-            "Bukti UAT policy",
-            passingUatRun is not null,
-            passingUatRun is null
-                ? "Belum ada UAT lulus untuk versi policy yang dikonfigurasi."
-                : $"Run {passingUatRun.Id} lulus pada {passingUatRun.ExecutedAt:O}; hash laporan {passingUatRun.ReportHash}.");
-
-        foreach (var decision in RequiredDecisions)
-        {
-            var configured = TryGetNonEmpty(settings.AcceptedDecisionReferences, decision, out var reference);
-            AddRequirement(
-                requirements,
-                $"decision.{decision.ToLowerInvariant()}",
-                $"Pengesahan {decision}",
-                configured,
-                configured
-                    ? $"Referensi: {reference}"
-                    : $"Referensi keputusan {decision} yang telah disahkan belum dikonfigurasi.");
-        }
-
-        foreach (var operation in PermitPolicyOperations.Required)
-        {
-            var configured = TryGetNonEmpty(settings.PermitActionCodes, operation, out var actionCode);
-            AddRequirement(
-                requirements,
-                $"action.{operation.ToLowerInvariant()}",
-                $"Action untuk {operation}",
-                configured,
-                configured
-                    ? $"Action: {actionCode}"
-                    : $"Mapping action untuk command {operation} belum dikonfigurasi.");
-        }
-
-        var approvedLocations = await locationStore.CountApprovedEffectiveAsync(now, cancellationToken);
-        AddRequirement(
-            requirements,
-            "location.approved_effective",
-            "Master lokasi efektif",
-            approvedLocations > 0,
-            approvedLocations > 0
-                ? $"{approvedLocations} lokasi disetujui sedang efektif."
-                : "Belum ada lokasi disetujui yang efektif.");
-
-        var approvedAssignments = await authorizationStore.CountApprovedEffectiveAsync(now, cancellationToken);
-        AddRequirement(
-            requirements,
-            "authorization.approved_effective",
-            "Assignment efektif",
-            approvedAssignments > 0,
-            approvedAssignments > 0
-                ? $"{approvedAssignments} assignment disetujui sedang efektif."
-                : "Belum ada assignment disetujui yang efektif.");
-
-        return new OperationalPolicyReadinessResponse(
-            settings.EnforceMasterAuthorization,
-            requirements.All(item => item.Satisfied),
-            settings.EnforceMasterAuthorization ? "MASTER_AUTHORIZATION" : "PREPARATION",
-            settings.PolicyVersion,
-            requirements,
-            now);
-    }
 
     public async Task<PolicyAuthorizationEvidence?> AuthorizePermitCommandAsync(
         Actor actor,
@@ -223,8 +133,15 @@ public sealed class OperationalPolicyGate(
             return null;
         }
 
-        var readiness = await GetReadinessAsync(cancellationToken);
-        if (!readiness.ReadyForActivation)
+        var now = clock.UtcNow;
+        var configurationComplete = !string.IsNullOrWhiteSpace(settings.PolicyVersion)
+            && RequiredDecisions.All(decision =>
+                TryGetNonEmpty(settings.AcceptedDecisionReferences, decision, out _))
+            && PermitPolicyOperations.Required.All(requiredOperation =>
+                TryGetNonEmpty(settings.PermitActionCodes, requiredOperation, out _))
+            && await locationStore.CountApprovedEffectiveAsync(now, cancellationToken) > 0
+            && await authorizationStore.CountApprovedEffectiveAsync(now, cancellationToken) > 0;
+        if (!configurationComplete)
         {
             throw new PolicyActivationException(
                 "Master authorization diaktifkan, tetapi konfigurasi belum memenuhi seluruh prasyarat OPN-001/002.");
@@ -235,7 +152,6 @@ public sealed class OperationalPolicyGate(
             throw new PolicyActivationException($"Mapping action untuk command {operation} tidak tersedia.");
         }
 
-        var now = clock.UtcNow;
         var locations = await locationStore.FindApprovedEffectiveByCodeAsync(
             locationCode,
             now,
@@ -305,27 +221,5 @@ public sealed class OperationalPolicyGate(
 
         value = string.Empty;
         return false;
-    }
-
-    private static void AddRequirement(
-        List<PolicyRequirementResponse> requirements,
-        string code,
-        string label,
-        bool satisfied,
-        string detail) => requirements.Add(new PolicyRequirementResponse(code, label, satisfied, detail));
-}
-
-public sealed class OperationalPolicyService(
-    IOperationalPolicyGate gate,
-    IActorContext actorContext)
-{
-    public Task<OperationalPolicyReadinessResponse> GetReadinessAsync(CancellationToken cancellationToken)
-    {
-        if (!actorContext.Current.Roles.Contains("Administrator"))
-        {
-            throw new UnauthorizedAccessException("Peran Administrator diperlukan untuk melihat kesiapan policy.");
-        }
-
-        return gate.GetReadinessAsync(cancellationToken);
     }
 }

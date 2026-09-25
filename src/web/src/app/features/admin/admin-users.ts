@@ -3,7 +3,12 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { CreateUser, UserAccount, UserDirectoryApi } from '../../core/user-directory-api';
+import {
+  CreateUser,
+  UpdateUser,
+  UserAccount,
+  UserDirectoryApi,
+} from '../../core/user-directory-api';
 
 @Component({
   selector: 'app-admin-users',
@@ -23,6 +28,7 @@ export class AdminUsers {
   protected readonly error = signal('');
   protected readonly accessDenied = signal(false);
   protected readonly formOpen = signal(false);
+  protected readonly editingUser = signal<UserAccount | null>(null);
   protected readonly form = this.formBuilder.nonNullable.group({
     subjectId: ['', [Validators.required, Validators.maxLength(200)]],
     userName: ['', [Validators.required, Validators.maxLength(100)]],
@@ -37,7 +43,42 @@ export class AdminUsers {
   }
 
   protected toggleForm(): void {
-    this.formOpen.update((value) => !value);
+    if (this.formOpen()) {
+      this.closeForm();
+      return;
+    }
+    this.editingUser.set(null);
+    this.form.reset();
+    this.form.controls.password.setValidators([
+      Validators.required,
+      Validators.minLength(12),
+      Validators.maxLength(128),
+    ]);
+    this.form.controls.password.updateValueAndValidity();
+    this.formOpen.set(true);
+    this.error.set('');
+  }
+
+  protected edit(user: UserAccount): void {
+    this.editingUser.set(user);
+    this.form.reset({
+      subjectId: user.subjectId,
+      userName: user.userName,
+      displayName: user.displayName,
+      position: user.position ?? '',
+      department: user.department ?? '',
+      password: '',
+    });
+    this.form.controls.password.clearValidators();
+    this.form.controls.password.updateValueAndValidity();
+    this.formOpen.set(true);
+    this.error.set('');
+  }
+
+  protected closeForm(): void {
+    this.formOpen.set(false);
+    this.editingUser.set(null);
+    this.form.reset();
     this.error.set('');
   }
 
@@ -50,18 +91,26 @@ export class AdminUsers {
 
     this.saving.set(true);
     this.error.set('');
-    this.api
-      .create(this.toRequest())
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (user) => {
+    const editing = this.editingUser();
+    const request = editing
+      ? this.api.update(editing, this.toUpdateRequest())
+      : this.api.create(this.toRequest());
+    request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (user) => {
+        if (editing) {
+          this.replace(user);
+        } else {
           this.users.update((items) => [user, ...items]);
-          this.form.reset();
-          this.formOpen.set(false);
-          this.saving.set(false);
-        },
-        error: (response) => this.handleError(response, 'Pengguna gagal dibuat.'),
-      });
+        }
+        this.closeForm();
+        this.saving.set(false);
+      },
+      error: (response) =>
+        this.handleError(
+          response,
+          editing ? 'Profil pengguna gagal diperbarui.' : 'Pengguna gagal dibuat.',
+        ),
+    });
   }
 
   protected setActive(user: UserAccount): void {
@@ -127,6 +176,15 @@ export class AdminUsers {
       position: value.position.trim() || null,
       department: value.department.trim() || null,
       password: value.password,
+    };
+  }
+
+  private toUpdateRequest(): UpdateUser {
+    const value = this.form.getRawValue();
+    return {
+      displayName: value.displayName.trim(),
+      position: value.position.trim() || null,
+      department: value.department.trim() || null,
     };
   }
 

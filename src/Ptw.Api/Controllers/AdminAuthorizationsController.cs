@@ -66,6 +66,37 @@ public sealed class AdminAuthorizationsController(UserAuthorizationService servi
         return response;
     }
 
+    [HttpPatch("{id:guid}/direct-draft")]
+    [ProducesResponseType<UserAuthorizationResponse>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<UserAuthorizationResponse>> UpdateDirectDraft(
+        Guid id,
+        DirectUserAuthorizationDraftRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await service.UpdateDirectDraftAsync(
+            id,
+            request,
+            Request.Headers.IfMatch.ToString(),
+            CorrelationId,
+            cancellationToken);
+        Response.Headers.ETag = response.ETag;
+        return response;
+    }
+
+    [HttpPost("{id:guid}/revise-direct")]
+    [ProducesResponseType<UserAuthorizationResponse>(StatusCodes.Status200OK)]
+    public Task<ActionResult<UserAuthorizationResponse>> ReviseDirect(
+        Guid id,
+        DirectUserAuthorizationDraftRequest request,
+        CancellationToken cancellationToken) =>
+        CommandAsync((etag, key) => service.ReviseDirectAsync(
+            id,
+            request,
+            etag,
+            key,
+            CorrelationId,
+            cancellationToken));
+
     [HttpPost("{id:guid}/submit")]
     [ProducesResponseType<UserAuthorizationResponse>(StatusCodes.Status200OK)]
     public Task<ActionResult<UserAuthorizationResponse>> Submit(Guid id, CancellationToken cancellationToken) =>
