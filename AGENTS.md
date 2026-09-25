@@ -23,7 +23,7 @@ Urutan rujukan ketika implementasi ambigu:
 4. BRD, PRD, dan FSD baseline;
 5. asumsi teknis yang dinyatakan secara eksplisit.
 
-Jangan mengarang kebijakan untuk OPN-001–012. Jangan hard-code location authority, risk/approval matrix, checklist final, ambang atau umur gas test, urutan review, contractor acknowledgement, kontrak E-SIMI, retention, atau RPO/RTO tanpa decision record yang disahkan. Identitas produksi (OPN-007 bagian 1), topologi produksi satu host (OPN-009), dan unggahan tanpa scanner (PROD-UPLOAD-SCAN) telah ACCEPTED 24 September 2026; ikuti record tersebut apa adanya dan jangan memperluasnya tanpa record baru.
+Jangan mengarang kebijakan untuk OPN-001–012. Jangan hard-code location authority, risk/approval matrix, checklist final, ambang atau umur gas test, urutan review, contractor acknowledgement, kontrak E-SIMI, retention, atau RPO/RTO tanpa decision record yang disahkan. Identitas produksi (OPN-007 bagian 1), topologi produksi satu host (OPN-009), dan unggahan tanpa scanner (PROD-UPLOAD-SCAN) telah ACCEPTED 24 September 2026, dan alur sistem saat ini disahkan pengguna sebagai baseline operasional pada 25 September 2026 (PTW-WORKFLOW-BASELINE); ikuti record tersebut apa adanya, jangan menggambarkan alur yang disahkan sebagai "Development/UAT", dan jangan mengubahnya tanpa superseding record.
 
 ## Invariant keselamatan
 
@@ -106,7 +106,7 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 
 ## Kontrak flow MVP saat ini
 
-- Konfigurasi dasar/produksi tidak merilis lokasi apa pun dan harus fail-closed sampai LocationRelease, assignment effective-dated, dan ConfigurationBundle disahkan. Konfigurasi `Development` saat ini hanya membuka `ORF`, `SITE_OFFICE`, dan `WATER_BASED` untuk pengujian routing; jangan memperlakukannya sebagai pengesahan rollout atau menyalinnya ke produksi.
+- Konfigurasi dasar (`appsettings.json`) tidak merilis lokasi apa pun dan tetap fail-closed. `appsettings.Development.json` dan `appsettings.Production.json` membuka `ORF`, `SITE_OFFICE`, dan `WATER_BASED` sesuai klarifikasi 16 September 2026 dan pengesahan alur 25 September 2026 (PTW-WORKFLOW-BASELINE); jangan menambah lokasi atau pemilik wilayah tanpa record baru. Assignment effective-dated dan ConfigurationBundle (OPN-001/002) adalah backlog.
 - Setelah Sponsor submit, sistem membuat tepat satu task `HSE_VALIDATION` pada PermitVersion yang sama. Distribusi Gas bukan validator.
 - PIC HSE dapat memvalidasi, meminta revisi, menolak, atau mengeskalasi dengan catatan; Sponsor tidak boleh memvalidasi PTW miliknya sendiri.
 - Permintaan revisi membatalkan task pending dan membuat tepat satu task `SPONSOR_REVISION` yang assigned langsung kepada Sponsor PTW. Task itu notifikasi, bukan status lifecycle: mengikuti versi draft selama perbaikan, terlihat berdasarkan identitas actor walaupun role berubah, selesai otomatis saat submit ulang, dan dibatalkan saat cancel/reject.

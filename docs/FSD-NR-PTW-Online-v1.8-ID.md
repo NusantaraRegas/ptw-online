@@ -4,7 +4,7 @@
 | Atribut | Nilai |
 | --- | --- |
 | Versi | 1.8 — penyelarasan flow dengan sistem berjalan: review Bagian 7 SO/Officer, pembagian pengisian formulir, renewal dan closure berbasis hardcopy terverifikasi |
-| Tanggal | 24 September 2026 |
+| Tanggal | 25 September 2026 |
 | Status | Draft untuk review Arsitektur, Security, Operasi, HSSE, dan Delivery |
 | Input | [BRD v1.8](BRD-NR-PTW-Online-v1.8-ID.md), [PRD v1.8](PRD-NR-PTW-Online-v1.8-ID.md) |
 | Menggantikan | FSD v1.7 (16 September 2026) |

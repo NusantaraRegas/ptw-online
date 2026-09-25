@@ -52,6 +52,8 @@ describe('App', () => {
       fixture.nativeElement.querySelector('a[href="/tasks"]')?.getAttribute('aria-label'),
     ).toBe('Tugas Saya, 3 tugas perlu perhatian');
     expect(fixture.nativeElement.querySelector('.notification-button .unread-dot')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href="/reports"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Pencarian & Laporan');
 
     const notificationButton = fixture.nativeElement.querySelector(
       '.notification-button',

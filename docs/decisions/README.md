@@ -18,7 +18,8 @@ Development" pada record OPN merujuk keputusan tersebut dan tidak mengubah statu
 | [OPN-008](OPN-008.md) | Retensi, e-sign, klasifikasi, RPO/RTO | Legal/Records/TI | DRAFT | records/security/DR, status hukum bukti persetujuan |
 | [OPN-009](OPN-009.md) | Topologi produksi dan HA | TI | ACCEPTED (24 Sep 2026) | observability/on-call belum diputuskan |
 | [PROD-UPLOAD-SCAN](PROD-UPLOAD-SCAN.md) | Unggahan tanpa malware scanner | TI/HSE | ACCEPTED risiko (24 Sep 2026) | scanner resmi (backlog) |
-| [PTW-RENEWAL](PTW-RENEWAL.md) | Renewal berbasis review pemilik wilayah | PO/Operasi | IMPLEMENTED DEVELOPMENT BASELINE | pengesahan produksi mengikuti OPN-002/010 |
+| [PTW-RENEWAL](PTW-RENEWAL.md) | Renewal berbasis review pemilik wilayah | PO/Operasi | ACCEPTED melalui PTW-WORKFLOW-BASELINE (25 Sep 2026) | batas renewal berantai (OPN-010, backlog) |
+| [PTW-WORKFLOW-BASELINE](PTW-WORKFLOW-BASELINE.md) | Pengesahan alur sistem saat ini sebagai baseline operasional | PO | ACCEPTED (25 Sep 2026) | tidak ada; OPN yang masih DRAFT adalah backlog |
 
 OPN-010 (definisi tujuh hari dan batas renewal), OPN-011 (materi kampanye), dan OPN-012 (QR dan
 kualitas scan) tercatat pada BRD v1.8 Bagian 13 dan belum memiliki record terpisah; ketiganya adalah

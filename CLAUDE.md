@@ -42,7 +42,7 @@ tests/Ptw.Domain.Tests           unit state machine
 tests/Ptw.Api.IntegrationTests   end-to-end via PtwApiFactory + Testcontainers
 tests/Ptw.Printing.Tests         regresi layout dokumen (akses internal via InternalsVisibleTo)
 docs/                            BRD/PRD/FSD v1.8 (sumber requirement)
-docs/decisions/                  OPN-001..006, 008 (DRAFT); OPN-007 (identitas produksi ACCEPTED, E-SIMI DRAFT); OPN-009 dan PROD-UPLOAD-SCAN (ACCEPTED 24 Sep 2026); PTW-RENEWAL (baseline Development) — DRAFT bukan keputusan
+docs/decisions/                  OPN-001..006, 008 (DRAFT, backlog); OPN-007 (identitas produksi ACCEPTED, E-SIMI DRAFT); OPN-009 dan PROD-UPLOAD-SCAN (ACCEPTED 24 Sep 2026); PTW-RENEWAL dan PTW-WORKFLOW-BASELINE (alur saat ini ACCEPTED pengguna 25 Sep 2026) — DRAFT bukan keputusan
 docs/implementation-status.md    matriks traceability requirement -> komponen -> test
 .github/workflows/ci.yml         CI: build/test backend, build/test frontend, compose config; format/prettier/audit belum di CI
 ```
@@ -143,7 +143,7 @@ disamarkan sebagai selesai.
 - [ ] Renewal tidak mengubah status PTW asal dan tidak membuat permit saat request: Sponsor mengajukan signed field copy `CLEAN` yang cocok dengan exact PrintPackage/PermitVersion, task `AREA_RENEWAL_REVIEW` dibuat, dan draft penerus hanya lahir atomik saat Manager pemilik area menyetujui. Draft penerus tetap melewati submit, validasi HSE, review Bagian 7 oleh SO/Officer pemilik wilayah, dan approve-and-issue normal.
 - [ ] Suspend tetap menghentikan hak kerja seketika; resolve hanya kembali ke `ISSUED`.
 - [ ] Tidak ada endpoint atau helper generik bergaya `setStatus`.
-- [ ] Tidak ada kebijakan OPN-001–012 yang dikarang: location authority, risk/approval matrix, checklist final, ambang/umur gas test, urutan review, contractor acknowledgement, kontrak E-SIMI, retention, RPO/RTO. Tanpa decision record, jalur tersebut fail-closed. Identitas produksi (OPN-007 bagian 1), topologi produksi (OPN-009), dan unggahan tanpa scanner (PROD-UPLOAD-SCAN) sudah ACCEPTED 24 September 2026; ikuti record tersebut, jangan memperluasnya. Klasifikasi header HOT/COLD hanya merepresentasikan checklist formulir (dan memetakan `RiskLevel` legacy pada COLD), bukan matriks routing risiko OPN-002.
+- [ ] Tidak ada kebijakan OPN-001–012 yang dikarang: location authority, risk/approval matrix, checklist final, ambang/umur gas test, urutan review, contractor acknowledgement, kontrak E-SIMI, retention, RPO/RTO. Tanpa decision record, jalur tersebut fail-closed. Identitas produksi (OPN-007 bagian 1), topologi produksi (OPN-009), dan unggahan tanpa scanner (PROD-UPLOAD-SCAN) sudah ACCEPTED 24 September 2026, dan alur sistem saat ini disahkan pengguna sebagai baseline operasional 25 September 2026 (PTW-WORKFLOW-BASELINE); ikuti record tersebut, jangan memperluasnya, dan jangan menggambarkan alur yang disahkan sebagai menunggu UAT atau sign-off. Klasifikasi header HOT/COLD hanya merepresentasikan checklist formulir (dan memetakan `RiskLevel` legacy pada COLD), bukan matriks routing risiko OPN-002.
 
 Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputusan eksplisit.
 

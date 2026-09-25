@@ -39,11 +39,6 @@ export const routes: Routes = [
       import('./features/operations/operations-board').then((m) => m.OperationsBoard),
   },
   {
-    path: 'reports',
-    canActivate: [authenticatedGuard],
-    loadComponent: () => import('./features/placeholder/placeholder').then((m) => m.ReportsPage),
-  },
-  {
     path: 'admin/users',
     canActivate: [authenticatedGuard],
     loadComponent: () => import('./features/admin/admin-users').then((m) => m.AdminUsers),

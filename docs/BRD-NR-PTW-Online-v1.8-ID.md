@@ -5,7 +5,7 @@
 | --- | --- |
 | Produk | NR PTW Online |
 | Versi | 1.8 — penyelarasan flow dengan sistem berjalan: review Bagian 7 SO/Officer, pembagian pengisian formulir, renewal dan closure berbasis hardcopy terverifikasi |
-| Tanggal | 24 September 2026 |
+| Tanggal | 25 September 2026 |
 | Status | Draft terkontrol; memerlukan persetujuan Product Owner, Operasi, HSSE, dan TI |
 | Pemilik bisnis yang diusulkan | Fungsi Operasi/HSSE Nusantara Regas |
 | Dokumen terkait | [PRD v1.8](PRD-NR-PTW-Online-v1.8-ID.md), [FSD v1.8](FSD-NR-PTW-Online-v1.8-ID.md) |
@@ -44,7 +44,7 @@ BRD ini menyepakati kebutuhan dan aturan bisnis. Jika sumber bertentangan, uruta
 1. SOP PTW NR yang berlaku dan revisi yang disahkan.
 2. Keputusan tertulis Product Owner, Operasi, HSSE, dan TI.
 3. Formulir PTW terkontrol FM-001/002/003-B-002-NR-B220 beserta maksud kontrol keselamatannya.
-4. Perilaku sistem yang telah diterima pengguna sampai 24 September 2026 (DEC-117 sampai DEC-127).
+4. Perilaku sistem yang telah diterima pengguna sampai 25 September 2026 (DEC-117 sampai DEC-128).
 5. Keputusan yang dikonfirmasi dari rapat progress 7 September 2026 dan rapat tindak lanjut 12 Agustus 2026.
 6. BRD, PRD, dan pola operasional E-SIMI milik NR.
 7. Benchmark PGE/JPO sebagai referensi, bukan kebijakan NR.
@@ -65,6 +65,7 @@ BRD ini menyepakati kebutuhan dan aturan bisnis. Jika sumber bertentangan, uruta
 | Arahan kesetiaan template cetak, 16 September 2026 | Paket cetak wajib mereproduksi formulir terkontrol; layout digital alternatif atau template placeholder ditolak; materi kampanye tidak berlaku pada rilis awal |
 | Verifikasi sistem berjalan, 22 September 2026 | Flow review Bagian 7 SO/Officer, pembagian pengisian Bagian 1–7, dokumen dasar wajib, renewal/closure berbasis hardcopy terverifikasi, notifikasi revisi, identitas lokal Development dikonfirmasi sesuai dan diadopsi sebagai baseline v1.8 |
 | Klarifikasi dokumen wajib, 24 September 2026 | Prosedur Pekerjaan yang wajib diunggah juga wajib otomatis dicentang dan dicetak sebagai item Bagian 4 |
+| Pengesahan alur sistem, 25 September 2026 | Sistem yang berjalan beserta alurnya disetujui pengguna sebagai baseline operasional (`docs/decisions/PTW-WORKFLOW-BASELINE.md`) |
 
 ### 2.2 Keputusan flow sampai versi 1.8
 
@@ -97,6 +98,7 @@ BRD ini menyepakati kebutuhan dan aturan bisnis. Jika sumber bertentangan, uruta
 | DEC-125 | Rilis Development memakai akun lokal terkelola, login cookie HTTP-only, dan assignment role yang disetujui Administrator; role dan scope dihitung ulang setiap request. Spesimen tanda tangan visual berversi dicetak sebagai bukti persetujuan elektronik, bukan tanda tangan digital tersertifikasi. SSO/IdP produksi menunggu OPN-007. | Dikonfirmasi 22 Sep 2026 |
 | DEC-126 | Deklarasi SIMOPS, elemen CLSR bebas, dan isolasi/precaution bebas tidak ditampilkan pada form Sponsor karena tidak terdapat pada formulir terkontrol; kondisi operasi ditetapkan SO/Officer pada Bagian 7. | Dikonfirmasi 22 Sep 2026 |
 | DEC-127 | Prosedur Pekerjaan wajib memiliki lampiran bertaut sebelum submit dan otomatis menjadi item wajib checklist Bagian 4 serta paket cetak. Sponsor tidak dapat membatalkan pilihannya. ID, BPJS TK, FTW, dan E-SIMI tetap hanya menjadi evidence pengajuan dan tidak ditambahkan ke Bagian 4. | Dikonfirmasi 24 Sep 2026 |
+| DEC-128 | Sistem yang berjalan saat ini beserta alurnya (lifecycle, validator HSE tunggal, review Bagian 7 SO/Officer, approve-and-issue Manager, closure pool Bagian 10, renewal berbasis review, dokumen wajib, katalog terkontrol, paket cetak dua halaman, tiga lokasi aktif, login Portal) disahkan sebagai baseline operasional. Perubahan berikutnya memerlukan superseding record. | Disahkan 25 Sep 2026 |
 
 ## 3. Latar belakang dan masalah bisnis
 
