@@ -155,7 +155,7 @@ tests/Ptw.Printing.Tests         regresi layout dokumen
 deploy/compose                   compose.dev.yaml (production-like), compose.hotreload.yaml (bind mount + dotnet watch/ng serve)
 deploy/nginx                     konfigurasi reverse proxy
 docs/                            BRD/PRD/FSD v1.8, status implementasi
-docs/decisions/                  register OPN-001..009 (semua masih DRAFT) dan PTW-RENEWAL (baseline Development)
+docs/decisions/                  register OPN-001..009, PROD-UPLOAD-SCAN, PTW-RENEWAL, PTW-WORKFLOW-BASELINE (alur disahkan stakeholder 25 Sep 2026; OPN yang tersisa adalah backlog)
 .github/workflows/ci.yml         CI: build/test backend, build/test frontend, validasi compose config
 ```
 
@@ -483,11 +483,11 @@ Workflow GitHub Actions di [ci.yml](.github/workflows/ci.yml) menjalankan build/
 | [PRD v1.8](docs/PRD-NR-PTW-Online-v1.8-ID.md) | kebutuhan produk |
 | [FSD v1.8](docs/FSD-NR-PTW-Online-v1.8-ID.md) | spesifikasi fungsional |
 | [Status implementasi](docs/implementation-status.md) | traceability requirement → komponen → endpoint → migration → test |
-| [Decision records](docs/decisions/README.md) | register OPN-001..009 (status DRAFT, bukan keputusan) dan PTW-RENEWAL (baseline Development) |
+| [Decision records](docs/decisions/README.md) | register OPN-001..009, PROD-UPLOAD-SCAN, PTW-RENEWAL, dan PTW-WORKFLOW-BASELINE; alur disahkan stakeholder 25 September 2026, backlog tercatat per record |
 | [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) | panduan kerja dan aturan normatif untuk kontributor dan agen |
 
 Urutan rujukan ketika ambigu: permintaan pengguna, decision record yang disahkan, invariant dan kontrak yang sudah diuji, BRD/PRD/FSD v1.8, lalu asumsi teknis yang dinyatakan eksplisit. Kebijakan OPN yang belum disahkan tidak boleh dikarang; jalur tersebut fail-closed.
 
 ## Batas produksi
 
-Konfigurasi dasar (`appsettings.json`) tetap fail-closed: login nonaktif, master authorization wajib siap, issuance policy tidak approved, dan attachment memerlukan scanner. `appsettings.Production.json` bersama `compose.prod.yaml` membuka jalur yang telah disahkan 24 September 2026: login Portal API (OPN-007), topologi satu host tanpa HA (OPN-009), unggahan tanpa scanner (PROD-UPLOAD-SCAN), serta profil role, release lokasi, dan issuance policy yang sama dengan alur Development. Yang masih terbuka: matriks OPN-001/002 (`EnforceMasterAuthorization=false` di produksi), kontrak E-SIMI, retensi dan RPO/RTO eksplisit (OPN-008), observability/on-call, dan pemulihan otomatis; sistem tidak memiliki HA dan pemulihan bergantung pada backup yang ditarik sistem internal.
+Konfigurasi dasar (`appsettings.json`) tetap fail-closed: login nonaktif, master authorization wajib siap, issuance policy tidak approved, dan attachment memerlukan scanner. `appsettings.Production.json` bersama `compose.prod.yaml` membuka jalur yang telah disahkan 24 September 2026: login Portal API (OPN-007), topologi satu host tanpa HA (OPN-009), unggahan tanpa scanner (PROD-UPLOAD-SCAN), serta profil role, release lokasi, dan issuance policy yang sama dengan alur Development. Keadaan sistem disahkan stakeholder 25 September 2026 (PTW-WORKFLOW-BASELINE Amendemen 2). Backlog yang tersisa: pejabat pengganti/delegasi (fail-closed), master lokasi/katalog effective-dated (`EnforceMasterAuthorization=false` di produksi), SLA/eskalasi, integrasi API E-SIMI, periode retensi dan angka RPO/RTO (OPN-008), observability/on-call, dan pemulihan otomatis; sistem tidak memiliki HA dan pemulihan bergantung pada backup yang ditarik sistem internal.

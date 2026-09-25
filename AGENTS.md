@@ -23,7 +23,7 @@ Urutan rujukan ketika implementasi ambigu:
 4. BRD, PRD, dan FSD baseline;
 5. asumsi teknis yang dinyatakan secara eksplisit.
 
-Jangan mengarang kebijakan untuk OPN-001–012. Jangan hard-code location authority, risk/approval matrix, checklist final, ambang atau umur gas test, urutan review, contractor acknowledgement, kontrak E-SIMI, retention, atau RPO/RTO tanpa decision record yang disahkan. Identitas produksi (OPN-007 bagian 1), topologi produksi satu host (OPN-009), dan unggahan tanpa scanner (PROD-UPLOAD-SCAN) telah ACCEPTED 24 September 2026, dan alur sistem saat ini disahkan pengguna sebagai baseline operasional pada 25 September 2026 (PTW-WORKFLOW-BASELINE); ikuti record tersebut apa adanya, jangan menggambarkan alur yang disahkan sebagai "Development/UAT", dan jangan mengubahnya tanpa superseding record.
+Jangan mengarang kebijakan untuk item yang masih backlog: pejabat pengganti/delegasi, SLA dan eskalasi, ambang atau umur gas test digital, periode retensi, angka RPO/RTO, klasifikasi data, kontrak API E-SIMI, scope perusahaan Kontraktor, dan QR. Keadaan sistem dan alur saat ini disahkan stakeholder pada 25 September 2026 (PTW-WORKFLOW-BASELINE Amendemen 2) bersama OPN-007, OPN-009, dan PROD-UPLOAD-SCAN (24 September 2026); OPN-001 sampai OPN-006, OPN-010, dan OPN-011 ACCEPTED sejauh keadaan sistem menjawabnya, OPN-008 dan OPN-012 sebagian. Ikuti record tersebut apa adanya, jangan menggambarkan alur yang disahkan sebagai "Development/UAT", dan jangan mengubahnya tanpa superseding record.
 
 ## Invariant keselamatan
 

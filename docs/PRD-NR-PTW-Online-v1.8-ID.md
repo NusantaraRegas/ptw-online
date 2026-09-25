@@ -142,7 +142,7 @@ Tidak ada state digital `APPROVED`, `READY_FOR_ISSUE`, `WORK_PERIOD_ACTIVE`, ata
 | FR-AUT-007 | Assignment pengganti Manager wajib memuat principal, acting user, dasar dokumen, scope, risk limit, effective dates, issuer/approver, alasan, dan status; sampai tersedia, approval dengan `ActingAssignmentId` ditolak. |
 | FR-AUT-008 | Administrator mengunggah spesimen tanda tangan PNG (maksimum 256 KB, 2000×2000 piksel) berversi; versi lama tidak ditimpa dan versi exact dibekukan pada evidence. |
 | FR-AUT-009 | Pengguna tanpa scope tidak dapat menemukan data melalui URL, daftar, task, attachment, atau paket cetak. |
-| FR-AUT-010 | Akun Kontraktor terkait Sponsor NR dan masa aktif; scope perusahaan eksplisit menunggu OPN-006. |
+| FR-AUT-010 | Akun Kontraktor terkait Sponsor NR dan masa aktif (OPN-006 ACCEPTED baseline); scope perusahaan eksplisit adalah backlog. |
 | FR-AUT-011 | Nama dan jabatan aktor pada evidence dan UI berasal dari profil akun server; username/ID tidak dipakai sebagai fallback nama. Evidence lama tanpa nama diperkaya saat dibaca. |
 | FR-AUT-012 | Sponsor tidak dapat memvalidasi PTW miliknya; Sponsor dan validator HSE tidak dapat menjadi reviewer Bagian 7; Manager penerbit harus berbeda dari Sponsor, validator HSE, dan reviewer. |
 
@@ -182,7 +182,7 @@ Tidak ada state digital `APPROVED`, `READY_FOR_ISSUE`, `WORK_PERIOD_ACTIVE`, ata
 | FR-RUL-001 | Katalog header klasifikasi, Bagian 1, Bagian 4, Bagian 5, dan Bagian 7 dibaca dari endpoint reference data server dan divalidasi ulang server; katalog adalah transkripsi formulir terkontrol. |
 | FR-RUL-002 | Perubahan katalog hanya melalui decision record dan kenaikan versi renderer; tidak ada editor katalog di UI pada rilis awal. |
 | FR-RUL-003 | Penerbitan memerlukan policy penerbitan aktif (versi ruleset, versi template cetak, versi campaign asset) yang dikonfigurasi server; tanpa itu approve-and-issue diblokir. |
-| FR-RUL-004 | Ruleset deklaratif, simulasi, publish future-effective, dan `RuleEvaluationSnapshot` menjadi backlog setelah OPN-003. |
+| FR-RUL-004 | Ruleset deklaratif, simulasi, publish future-effective, dan `RuleEvaluationSnapshot` adalah backlog; katalog statis disahkan sebagai master checklist baseline (OPN-003). |
 
 ### 5.5 Epic E — Dokumen dan bukti
 
@@ -194,7 +194,7 @@ Tidak ada state digital `APPROVED`, `READY_FOR_ISSUE`, `WORK_PERIOD_ACTIVE`, ata
 | FR-DOC-004 | File tidak diberikan lewat public path; download memakai endpoint terotorisasi; file selain `CLEAN` tidak dapat diunduh. |
 | FR-DOC-005 | Penggantian/penghapusan file bersifat logis; versi yang menjadi dasar keputusan tidak dihapus. Sponsor hanya dapat menambah/menghapus saat `DRAFT`/`REVISION_REQUIRED` dan saat lampiran tidak terkunci oleh review renewal. |
 | FR-DOC-006 | Submit mewajibkan lampiran untuk JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, dan E-SIMI, serta untuk setiap pilihan Bagian 4; JSA dan Prosedur Pekerjaan wajib ada pada pilihan Bagian 4, dan metadata lampiran JSA harus sama dengan nomor/revisi/tanggal JSA pada draft. |
-| FR-DOC-007 | Item khusus pekerjaan di luar katalog menjadi backlog OPN-003. |
+| FR-DOC-007 | Item khusus pekerjaan di luar katalog adalah backlog (OPN-003 ACCEPTED untuk katalog baseline). |
 | FR-DOC-008 | Draft penerus renewal tidak menyalin file; UI menampilkan daftar dokumen yang harus diunggah ulang. |
 | FR-DOC-009 | `SIGNED_FIELD_COPY` wajib merujuk PrintPackage `READY`, membawa nomor/revisi/tanggal, dan hanya dapat diunggah saat `ISSUED`, `SUSPENDED`, `EXPIRED`, atau saat tindak lanjut closure diminta. |
 | FR-DOC-010 | Dengan `Attachments:RequireMalwareScan=false` (Development dan, sebagai risiko yang diterima pada PROD-UPLOAD-SCAN, Production) upload yang lolos pemeriksaan signature PDF/JPEG/PNG diberi evidence `CLEAN` berprefix `trusted-upload:`; default dasar tetap `true` sehingga tanpa scanner sistem fail-closed. Adapter scanner resmi adalah backlog. |
@@ -470,7 +470,7 @@ Sebuah requirement selesai apabila acceptance telah diuji positif dan negatif; a
 
 ## 15. Isu produk terbuka
 
-PRD mengikuti OPN-001 sampai OPN-012 pada BRD. Identitas produksi (OPN-007 bagian 1), topologi produksi (OPN-009), unggahan tanpa scanner (PROD-UPLOAD-SCAN), dan alur sistem saat ini (PTW-WORKFLOW-BASELINE) telah disahkan pada 24–25 September 2026. Item yang masih terbuka adalah backlog dan tidak menahan alur yang disahkan: posisi SO/Officer dan Manager per wilayah sebagai master effective-dated dan assignment acting (OPN-002), katalog formulir sebagai master effective-dated (OPN-003), SLA (OPN-005), onboarding/scope Kontraktor (OPN-006), kontrak E-SIMI (OPN-007 bagian 2), status hukum bukti persetujuan visual dan retensi/RPO/RTO (OPN-008), definisi tujuh hari dan renewal berantai (OPN-010), serta halaman kampanye dan QR (OPN-011/012).
+PRD mengikuti OPN-001 sampai OPN-012 pada BRD Bagian 13. Keadaan sistem dan alur disahkan stakeholder pada 25 September 2026 (PTW-WORKFLOW-BASELINE Amendemen 2): OPN-001 sampai OPN-007, OPN-009, OPN-010, dan OPN-011 ACCEPTED sejauh keadaan sistem menjawabnya, OPN-008 dan OPN-012 ACCEPTED sebagian. Backlog yang tersisa tidak menahan alur: pejabat pengganti/delegasi (fail-closed), SLA dan eskalasi, master lokasi/katalog effective-dated, scope perusahaan Kontraktor, integrasi API E-SIMI, periode retensi dan angka RPO/RTO, observability/on-call, halaman kampanye, dan QR/reference.
 
 ## 16. Referensi versi platform resmi
 

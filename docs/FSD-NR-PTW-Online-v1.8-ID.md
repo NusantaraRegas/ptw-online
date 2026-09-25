@@ -236,7 +236,7 @@ Profil role (`UserAuthorizationRoleProfiles`) di server menurunkan action code:
 
 Profil ini dipakai Development dan Production sebagai baseline yang disahkan (PTW-WORKFLOW-BASELINE), bukan matriks OPN-002 effective-dated; tanpa profil terkonfigurasi, assignment langsung fail-closed. Frontend hanya menyembunyikan aksi; API selalu mengevaluasi ulang. Query memakai filter scope; attachment dan print package memeriksa parent permit. Scope baca dipisahkan dari scope command oleh `PermitMonitoringAccess`: SO/Officer dan Manager berscope `ORF` membaca PTW lintas lokasi (daftar, detail, lampiran, paket cetak, history, Papan Operasi) sesuai Amendemen 1 PTW-WORKFLOW-BASELINE, sedangkan task pool dan command tetap memakai scope lokasi asli.
 
-`ApproveAndIssuePermit` saat ini hanya menerima kapasitas `Manager`; `ActingAssignmentId` menghasilkan `authorization.acting_assignment_not_ready`. Model `ActingAssignment` lengkap adalah backlog OPN-002.
+`ApproveAndIssuePermit` hanya menerima kapasitas `Manager`; `ActingAssignmentId` menghasilkan `authorization.acting_assignment_not_ready`. OPN-002 disahkan untuk alur dan SoD baseline (25 September 2026); model `ActingAssignment` lengkap tetap backlog fail-closed.
 
 ### 7.3 Resolver pemilik area
 
@@ -464,7 +464,7 @@ CI (`.github/workflows/ci.yml`): build/test backend, build/test frontend, `compo
 
 - SQL full + differential/log backup sesuai target RPO; backup off-host terenkripsi;
 - volume lampiran dan paket cetak dibackup konsisten dengan metadata;
-- target awal RPO 15 menit/RTO 4 jam, dikonfirmasi TI (OPN-008);
+- RPO/RTO mengikuti jadwal sistem backup internal (OPN-009); angka eksplisit belum ditetapkan (OPN-008 backlog);
 - baseline load 200 concurrent users, 50.000 PTW/tahun, 20 lampiran/PTW;
 - Compose satu host bukan HA (OPN-009).
 
@@ -498,7 +498,7 @@ Migration additive sampai `20260925040421_SeedLocationMasterAndUserSignatures`. 
 
 ## 21. Keputusan sebelum aktivasi produksi
 
-Identitas produksi (OPN-007 bagian 1), topologi produksi (OPN-009), unggahan tanpa scanner (PROD-UPLOAD-SCAN), dan alur sistem saat ini (PTW-WORKFLOW-BASELINE, termasuk Amendemen 1 scope baca ORF) telah disahkan pada 24–25 September 2026 dan menjadi dasar aktivasi. Item berikut tetap backlog dengan jalur fail-closed. Paling kritis: posisi SO/Officer dan Manager per wilayah dan assignment effective-dated (OPN-002), pengesahan katalog formulir (OPN-003), SSO dan E-SIMI (OPN-007), malware scanner produksi, status hukum bukti persetujuan visual (OPN-008), definisi tujuh hari dan renewal berantai (OPN-010).
+Keadaan sistem dan alur disahkan stakeholder pada 25 September 2026 (PTW-WORKFLOW-BASELINE Amendemen 1 dan 2) bersama OPN-007, OPN-009, dan PROD-UPLOAD-SCAN (24 September 2026); OPN-001 sampai OPN-006, OPN-010, dan OPN-011 ACCEPTED sejauh keadaan sistem menjawabnya, OPN-008 dan OPN-012 ACCEPTED sebagian. Backlog dengan jalur fail-closed: pejabat pengganti/delegasi (OPN-002), master lokasi/katalog effective-dated (OPN-001/003), SLA dan eskalasi (OPN-005), scope perusahaan Kontraktor (OPN-006), integrasi API E-SIMI (OPN-007), malware scanner produksi (PROD-UPLOAD-SCAN), periode retensi dan angka RPO/RTO (OPN-008), observability/on-call (OPN-009), QR/reference (OPN-012).
 
 ## 22. Checklist kesiapan produksi
 

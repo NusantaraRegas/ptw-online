@@ -1,9 +1,9 @@
 # PTW Renewal: baseline Development
 
-- Status: IMPLEMENTED DEVELOPMENT BASELINE
+- Status: ACCEPTED melalui PTW-WORKFLOW-BASELINE (25 September 2026, dikukuhkan stakeholder pada Amendemen 2)
 - Sumber arahan: permintaan pengguna 4 September 2026; direvisi mengikuti verifikasi sistem berjalan 22 September 2026 (BRD v1.8 DEC-121)
 - Menggantikan: baseline renewal 4 September 2026 (draft penerus dibuat langsung oleh Sponsor)
-- Pengesahan produksi: mengikuti OPN-002 (posisi Manager pemilik wilayah), OPN-010 (definisi tujuh hari dan batas renewal berantai), dan konfigurasi policy effective-dated
+- Pengesahan produksi: OPN-002 dan OPN-010 disahkan 25 September 2026 (tujuh hari dari `validFrom` sampai `validUntil`, tanpa batas renewal berantai pada baseline)
 
 ## Keputusan implementasi
 

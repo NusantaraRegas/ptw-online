@@ -2,7 +2,7 @@
 
 - Status: ACCEPTED
 - Owner: Product Owner (pengguna)
-- Approver: Product Owner (pengguna)
+- Approver: Product Owner (25 September 2026); dikukuhkan Product Owner bersama stakeholder Operasi, HSSE, General Affair, Transport & Operasi FSRU, dan TI (Amendemen 2, 25 September 2026)
 - Tanggal keputusan: 25 September 2026
 - Berlaku mulai: 25 September 2026
 - Menggantikan: status "Development/UAT" pada alur, checklist, dan paket cetak yang tercatat di
@@ -53,11 +53,11 @@ Konfigurasi dasar `appsettings.json` tetap fail-closed; pengesahan ini diwujudka
 
 ## Yang tidak diputuskan oleh record ini
 
-OPN-001/002 (master lokasi effective-dated, assignment acting, matriks risiko), OPN-004 (gas
-test), OPN-005 (SLA dan eskalasi), OPN-006 (onboarding kontraktor), OPN-008 (retensi, RPO/RTO,
-status hukum e-sign), kontrak E-SIMI, serta OPN-010-012 tetap terbuka sebagai backlog. Ketiadaan
-keputusan tersebut tidak lagi menghalangi pemakaian alur yang disahkan di atas, tetapi jalur yang
-memerlukannya tetap fail-closed sampai ada record baru.
+Lihat Amendemen 2 untuk disposisi setiap OPN setelah pengesahan stakeholder. Yang tetap terbuka
+sebagai backlog: assignment acting/delegasi (fail-closed), SLA dan penerima eskalasi, periode retensi
+dan angka RPO/RTO, klasifikasi data, observability/on-call, integrasi API E-SIMI, malware scanner,
+scope perusahaan Kontraktor, dan QR code. Ketiadaan keputusan tersebut tidak menghalangi pemakaian
+alur yang disahkan di atas, tetapi jalur yang memerlukannya tetap fail-closed sampai ada record baru.
 
 ## Konsekuensi dan kontrol
 
@@ -80,8 +80,36 @@ memerlukannya tetap fail-closed sampai ada record baru.
   pemilik wilayah ORF pada baseline saat ini; master lokasi effective-dated dan matriks otoritas
   command tetap backlog OPN-001/002. Perubahan berikutnya memerlukan superseding record.
 
+## Amendemen 2 (25 September 2026): pengesahan stakeholder dan disposisi OPN
+
+- Status: ACCEPTED, 25 September 2026, Product Owner bersama stakeholder Operasi, HSSE, General Affair, Transport & Operasi FSRU, dan TI.
+- Keputusan: keadaan sistem dan alur saat ini (termasuk Amendemen 1, hardening sesi/kredensial,
+  seed master lokasi dan assignment, serta Papan Operasi) disahkan stakeholder sebagai baseline
+  operasional. Pengesahan ini memenuhi butir 1-4 dan 6 kriteria sign-off BRD v1.8 Bagian 15.
+- Disposisi decision record berdasarkan keadaan sistem yang disahkan:
+
+| Record | Disposisi | Yang ditutup oleh keadaan sistem | Yang tetap backlog |
+| --- | --- | --- | --- |
+| OPN-001 | ACCEPTED (scope rilis awal) | Tiga area root `ORF`, `SITE_OFFICE`, `WATER_BASED` dengan departemen pemilik; master lokasi ter-seed dan disetujui (`SeedLocationMasterAndUserSignatures`); tanpa hierarchy/descendant; pekerjaan lintas area dipecah menjadi PTW terpisah; perubahan master lewat maker-checker Administrator | Aktivasi `HO`/`FSRU`, struktur sublokasi/equipment, frekuensi rekonsiliasi sumber data |
+| OPN-002 | ACCEPTED (alur dan SoD baseline) | Enam role (`Administrator`, `Sponsor`, `HSEValidator`, `AreaOwnerSeniorOfficer`, `AreaOwnerManager`, `Auditor`) dengan action code server-side; route tunggal per lokasi tanpa matriks risiko (klasifikasi header hanya checklist formulir); pasangan SoD sebagaimana diimplementasikan; fail-safe DENY saat assignment tidak efektif; assignment effective-dated per orang dikelola Administrator | Approval sebagai pejabat pengganti (`ActingAssignmentId` tetap ditolak), kompetensi formal, pasangan SoD tambahan untuk review renewal/close |
+| OPN-003 | ACCEPTED | Katalog statis di `Ptw.Domain` (header, Bagian 1, 4, 5, 7) dan `PermitMandatoryDocumentCatalog` adalah master checklist baseline; versinya terikat `IssuancePolicy.RuleVersion` dan `RendererVersion` | Master katalog effective-dated di database, item khusus pekerjaan, rules engine deklaratif |
+| OPN-004 | ACCEPTED (hybrid) | Gas test, monitoring, dan retest sepenuhnya pada hardcopy Bagian 6/8 sesuai SOP HSSE; sistem tidak menyimpan ambang, pembacaan, atau umur hasil dan tidak mengaitkannya dengan `ISSUED` | Digitalisasi gas test (bila diminta kelak) |
+| OPN-005 | ACCEPTED (urutan review) | Urutan dan entry/exit criteria validasi HSE, review Bagian 7, approve-and-issue, revisi, suspend, closure sebagaimana tercantum pada record | SLA per task, kalender kerja, reminder, penerima eskalasi |
+| OPN-006 | ACCEPTED (baseline) | Kontraktor dan User Sponsor memakai role `Sponsor`; Sponsor merekam pelaksana dan mewakili crew; tanda tangan Pelaksana Pekerjaan pada hardcopy; akun Kontraktor didaftarkan Administrator dan terikat scope Sponsor | Scope perusahaan eksplisit (`ExternalUserCompany`), acknowledgement digital berdasar hukum |
+| OPN-007 bagian 2 | ACCEPTED (berbasis bukti) | Keterkaitan E-SIMI dibuktikan nomor referensi pada draft dan lampiran berkode `ESIMI` yang wajib sebelum submit | Integrasi API/verifikasi otomatis E-SIMI |
+| OPN-008 | ACCEPTED sebagian | Spesimen tanda tangan visual berversi adalah bukti persetujuan elektronik (bukan PSrE); audit append-only; lampiran tidak dihapus fisik; tidak ada penghapusan otomatis; backup ditarik sistem internal | Periode retensi/legal hold, klasifikasi data formal, angka RPO/RTO eksplisit |
+| OPN-009 | ACCEPTED (24 Sep 2026) | Topologi satu host sesuai record | Observability/on-call |
+| OPN-010 | ACCEPTED | Masa berlaku maksimum tujuh hari dari `validFrom` sampai `validUntil` yang dipilih Sponsor; renewal membuat PTW dan nomor baru non-overlap; tidak ada batas jumlah renewal berantai pada baseline | Tidak ada |
+| OPN-011 | ACCEPTED | Materi kampanye tidak termasuk rilis (`CampaignAssetVersion` `NOT-APPLICABLE`) | Halaman kampanye bila diminta kelak |
+| OPN-012 | ACCEPTED sebagian | Keterbacaan hardcopy dikonfirmasi reviewer (`EvidenceReadable`) pada renewal dan closure; pemeriksaan signature PDF/JPEG/PNG dan batas ukuran | QR/reference pada lembar cetak, resolusi scan minimum |
+
+- Record OPN-001 sampai OPN-006 dan OPN-008 diperbarui statusnya merujuk amendemen ini; form
+  keputusan yang masih memuat `TBD` pada record tersebut adalah lembar kerja untuk perluasan
+  di masa depan, bukan prasyarat baseline.
+
 ## Bukti pengesahan
 
-- Referensi: pernyataan pengguna 25 September 2026 bahwa sistem dan alur saat ini telah disetujui;
-  DEC-117 sampai DEC-128 pada BRD v1.8.
-- Approver dan tanggal: Product Owner, 25 September 2026 (record dan Amendemen 1).
+- Referensi: pernyataan pengguna 25 September 2026 bahwa sistem dan alur saat ini telah disetujui,
+  lalu bahwa keadaan sistem dan alur telah disetujui stakeholder; DEC-117 sampai DEC-128 pada
+  BRD v1.8.
+- Approver dan tanggal: Product Owner, 25 September 2026 (record dan Amendemen 1); Product Owner bersama stakeholder Operasi, HSSE, General Affair, Transport & Operasi FSRU, dan TI, 25 September 2026 (Amendemen 2).
