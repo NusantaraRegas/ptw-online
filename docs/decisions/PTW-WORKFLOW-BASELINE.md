@@ -66,8 +66,22 @@ memerlukannya tetap fail-closed sampai ada record baru.
   sebagai status alur, bukan sebagai "Development/UAT".
 - Invariant keselamatan (Gate A `CLAUDE.md`) dan test regresi yang ada adalah bukti teknis baseline.
 
+## Amendemen 1 (25 September 2026): scope baca lintas lokasi untuk pemilik wilayah ORF
+
+- Status: ACCEPTED, 25 September 2026, Product Owner.
+- Keputusan: SO/Officer dan Manager Pemilik Wilayah yang memiliki scope lokasi `ORF` memperoleh
+  scope **baca** lintas lokasi, setara Administrator, untuk daftar dan detail PTW, lampiran, paket
+  cetak, history, dan Papan Operasi termasuk seluruh status non-draft. Implementasi:
+  `PermitMonitoringAccess` di `Ptw.Application`.
+- Batas: perluasan ini hanya untuk pemantauan. Task pool, command, dan keputusan (review Bagian 7,
+  approve-and-issue, closure, renewal, suspend) tetap memakai assignment dan scope lokasi asli
+  aktor. Tidak ada role atau lokasi lain yang memperoleh perluasan ini.
+- Hubungan dengan OPN-001/002: amendemen ini menutup pertanyaan otoritas baca lintas lokasi untuk
+  pemilik wilayah ORF pada baseline saat ini; master lokasi effective-dated dan matriks otoritas
+  command tetap backlog OPN-001/002. Perubahan berikutnya memerlukan superseding record.
+
 ## Bukti pengesahan
 
 - Referensi: pernyataan pengguna 25 September 2026 bahwa sistem dan alur saat ini telah disetujui;
   DEC-117 sampai DEC-128 pada BRD v1.8.
-- Approver dan tanggal: Product Owner, 25 September 2026.
+- Approver dan tanggal: Product Owner, 25 September 2026 (record dan Amendemen 1).
