@@ -28,6 +28,7 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
     public DbSet<AuthorizationCommandReceiptRecord> AuthorizationCommandReceipts => Set<AuthorizationCommandReceiptRecord>();
     public DbSet<UserAccountRecord> UserAccounts => Set<UserAccountRecord>();
     public DbSet<UserCredentialRecord> UserCredentials => Set<UserCredentialRecord>();
+    public DbSet<LoginAuditEventRecord> LoginAuditEvents => Set<LoginAuditEventRecord>();
     public DbSet<UserSignatureVersionRecord> UserSignatureVersions => Set<UserSignatureVersionRecord>();
     public DbSet<PolicyUatSuiteRecord> PolicyUatSuites => Set<PolicyUatSuiteRecord>();
     public DbSet<PolicyUatRunRecord> PolicyUatRuns => Set<PolicyUatRunRecord>();
@@ -390,9 +391,30 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         userAccount.Property(x => x.DisplayName).HasMaxLength(200);
         userAccount.Property(x => x.Position).HasMaxLength(200);
         userAccount.Property(x => x.Department).HasMaxLength(200);
+        // Existing rows receive a distinct stamp from the column default; the application always
+        // writes an explicit value afterwards.
+        userAccount.Property(x => x.SecurityStamp)
+            .HasMaxLength(64)
+            .HasDefaultValueSql("LOWER(CONVERT(varchar(36), NEWID()))");
         userAccount.Property(x => x.RowVersion).IsRowVersion();
         userAccount.HasIndex(x => x.NormalizedUserName).IsUnique();
         userAccount.HasIndex(x => new { x.IsActive, x.DisplayName });
+
+        var loginAudit = modelBuilder.Entity<LoginAuditEventRecord>();
+        loginAudit.ToTable("LoginAuditEvent", "sec");
+        loginAudit.HasKey(x => x.Sequence);
+        loginAudit.Property(x => x.Sequence).ValueGeneratedOnAdd();
+        loginAudit.Property(x => x.UserName).HasMaxLength(100);
+        loginAudit.Property(x => x.SubjectId).HasMaxLength(200);
+        loginAudit.Property(x => x.DirectoryResult).HasMaxLength(40);
+        loginAudit.Property(x => x.IdentitySource).HasMaxLength(40);
+        loginAudit.Property(x => x.Outcome).HasMaxLength(40);
+        loginAudit.Property(x => x.SourceAddress).HasMaxLength(64);
+        loginAudit.Property(x => x.CorrelationId).HasMaxLength(100);
+        loginAudit.HasIndex(x => x.Id).IsUnique();
+        loginAudit.HasIndex(x => x.OccurredAt);
+        loginAudit.HasIndex(x => new { x.SubjectId, x.OccurredAt });
+        loginAudit.HasIndex(x => new { x.Outcome, x.OccurredAt });
 
         var userCredential = modelBuilder.Entity<UserCredentialRecord>();
         userCredential.ToTable(

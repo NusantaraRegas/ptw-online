@@ -120,6 +120,12 @@ services:
       Attachments__StoragePath: /var/lib/ptw/attachments
       GeneratedDocuments__StoragePath: /var/lib/ptw/generated-documents
       Authentication__DataProtectionPath: /var/lib/ptw/data-protection
+      # The key ring on the volume is encrypted with this certificate (fail-closed: the api refuses
+      # to start without it outside Development). The PFX lives on the host, outside the repository.
+      Authentication__DataProtectionCertificatePath: /etc/ptw/data-protection/keyring.pfx
+      Authentication__DataProtectionCertificatePassword: ${PTW_DATA_PROTECTION_CERT_PASSWORD:?set the key ring certificate password in .env}
+      # Optional online breached-password check (k-anonymity range API); https only.
+      PasswordPolicy__BreachCheck__Enabled: ${PTW_PASSWORD_BREACH_CHECK_ENABLED:-false}
       PortalAuth__BaseUrl: ${PTW_PORTAL_API_BASE_URL:?set the Portal API base URL}
       # Literal `true` only when the OPN-007 amendment applies (internal-network portal without TLS);
       # any other value keeps the https-only startup check.
@@ -132,6 +138,7 @@ services:
       - attachment-data:/var/lib/ptw/attachments
       - generated-document-data:/var/lib/ptw/generated-documents
       - data-protection-keys:/var/lib/ptw/data-protection
+      - ${PTW_DATA_PROTECTION_CERT_DIR:?set the directory holding keyring.pfx}:/etc/ptw/data-protection:ro
     tmpfs:
       - /tmp
     depends_on:

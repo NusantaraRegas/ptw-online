@@ -7,9 +7,12 @@ namespace Ptw.Application;
 
 public sealed class UserDirectoryService(
     IUserDirectoryStore store,
+    ILoginAuditStore loginAudit,
+    IBreachedPasswordChecker breachedPasswords,
     IActorContext actorContext,
     IClock clock)
 {
+    private const int MaxLoginEvents = 500;
     private const int MaxSignatureBytes = 256 * 1024;
     private const int MaxSignatureDimension = 2000;
 
@@ -42,7 +45,7 @@ public sealed class UserDirectoryService(
         CancellationToken cancellationToken)
     {
         var actor = EnsureAdministrator();
-        ValidatePassword(request.Password);
+        await ValidatePasswordAsync(request.Password, request.UserName, cancellationToken);
         var account = UserAccount.Create(
             request.SubjectId,
             request.UserName,
@@ -104,7 +107,8 @@ public sealed class UserDirectoryService(
         CancellationToken cancellationToken)
     {
         var actor = EnsureAdministrator();
-        ValidatePassword(request.Password);
+        var stored = await RequiredAsync(subjectId, cancellationToken);
+        await ValidatePasswordAsync(request.Password, stored.Account.UserName, cancellationToken);
         return Map(await store.ResetPasswordAsync(
             subjectId,
             request.Password,
@@ -112,6 +116,44 @@ public sealed class UserDirectoryService(
             actor,
             correlationId,
             cancellationToken));
+    }
+
+    /// <summary>Ends every live session of the account ("log out everywhere").</summary>
+    public async Task<UserAccountResponse> RevokeSessionsAsync(
+        string subjectId,
+        string expectedETag,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        var actor = EnsureAdministrator();
+        var stored = await RequiredAsync(subjectId, cancellationToken);
+        stored.Account.RevokeSessions(clock.UtcNow);
+        return Map(await store.RevokeSessionsAsync(stored.Account, expectedETag, actor, correlationId, cancellationToken));
+    }
+
+    /// <summary>Recent login journal (newest first) so lockouts and unexpected paths are visible to Administrators.</summary>
+    public async Task<PagedResponse<LoginAuditEventResponse>> ListLoginEventsAsync(
+        int? limit,
+        string? subjectId,
+        CancellationToken cancellationToken)
+    {
+        EnsureAdministrator();
+        var effectiveLimit = Math.Clamp(limit ?? 100, 1, MaxLoginEvents);
+        var events = await loginAudit.ListRecentAsync(
+            effectiveLimit,
+            string.IsNullOrWhiteSpace(subjectId) ? null : subjectId.Trim(),
+            cancellationToken);
+        var items = events.Select(x => new LoginAuditEventResponse(
+            x.Id,
+            x.OccurredAt,
+            x.UserName,
+            x.SubjectId,
+            x.DirectoryResult,
+            x.IdentitySource,
+            x.Outcome,
+            x.SourceAddress,
+            x.CorrelationId)).ToArray();
+        return new(items, items.Length);
     }
 
     public async Task<UserAccountResponse> UploadSignatureAsync(
@@ -181,7 +223,7 @@ public sealed class UserDirectoryService(
         return actor;
     }
 
-    private static void ValidatePassword(string password)
+    private async Task ValidatePasswordAsync(string password, string userName, CancellationToken cancellationToken)
     {
         if (password.Length < 12 || password.Length > 128
             || !password.Any(char.IsUpper)
@@ -191,6 +233,24 @@ public sealed class UserDirectoryService(
             throw new InvalidRequestException(
                 "user.password_weak",
                 "Password harus 12-128 karakter dan memuat huruf besar, huruf kecil, serta angka.");
+        }
+
+        var normalizedUserName = userName.Trim();
+        if (normalizedUserName.Length >= 4
+            && password.Contains(normalizedUserName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidRequestException(
+                "user.password_contains_username",
+                "Password tidak boleh memuat username.");
+        }
+
+        // Local passwords exist for break-glass Administrator access, so a password that already
+        // circulates in breach corpora is refused even when it satisfies the composition rule.
+        if (await breachedPasswords.IsBreachedAsync(password, cancellationToken))
+        {
+            throw new InvalidRequestException(
+                "user.password_breached",
+                "Password ini ditemukan pada daftar kebocoran data publik. Gunakan password lain.");
         }
     }
 
@@ -204,6 +264,7 @@ public sealed class UserDirectoryService(
         stored.Account.Version,
         stored.Account.CreatedAt,
         stored.Account.UpdatedAt,
+        stored.LockedUntil,
         stored.Signature is null ? null : new UserSignatureResponse(
             stored.Signature.Id,
             stored.Signature.Version,

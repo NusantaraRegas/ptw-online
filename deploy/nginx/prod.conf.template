@@ -73,9 +73,10 @@ server {
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "same-origin" always;
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
-    # Angular injects scoped component styles at runtime. Script execution remains
-    # strict; unsafe-inline is intentionally limited to style-src.
-    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+    # Angular injects component styles at runtime through <style> elements that carry the nonce
+    # from <app-root ngCspNonce>. The nonce is this request's id, substituted into index.html
+    # below, so 'unsafe-inline' is no longer needed for style-src.
+    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'nonce-$request_id'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
 
     # Shared by every proxied location below (inherited unless a location sets its own).
     proxy_http_version 1.1;
@@ -120,6 +121,9 @@ server {
     location = /index.html {
         limit_req zone=ptw_static burst=200 nodelay;
         expires -1;
+        # Per-request CSP nonce for Angular (see the Content-Security-Policy header above).
+        sub_filter '__PTW_CSP_NONCE__' '$request_id';
+        sub_filter_once off;
         try_files $uri =404;
     }
 

@@ -23,6 +23,14 @@ public static class InfrastructureServices
         services.AddScoped<ILocationMasterStore, LocationMasterStore>();
         services.AddScoped<IUserAuthorizationStore, UserAuthorizationStore>();
         services.AddScoped<IUserDirectoryStore, UserDirectoryStore>();
+        services.AddScoped<ILoginAuditStore, LoginAuditStore>();
+        var breachedPasswordSettings = BreachedPasswordSettings.FromConfiguration(configuration);
+        services.AddSingleton(breachedPasswordSettings);
+        services.AddHttpClient<IBreachedPasswordChecker, BreachedPasswordChecker>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(breachedPasswordSettings.TimeoutSeconds);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("NrPtwOnline/1.0");
+        });
         services.AddScoped<IDemoModeStore, DemoModeStore>();
         services.AddScoped<IAuthorizationAssignmentResolver, AuthorizationAssignmentResolver>();
         services.AddScoped<IPolicyUatStore, PolicyUatStore>();

@@ -18,6 +18,14 @@ jobs:
       - run: dotnet restore PtwOnline.sln
       - run: dotnet build PtwOnline.sln --configuration Release --no-restore
       - run: dotnet test PtwOnline.sln --configuration Release --no-build
+      - name: Vulnerable NuGet packages (high/critical fail the build)
+        run: |
+          set -o pipefail
+          dotnet list PtwOnline.sln package --vulnerable --include-transitive | tee vulnerable-packages.txt
+          if grep -Eq '\b(High|Critical)\b' vulnerable-packages.txt; then
+            echo "::error::Vulnerable package(s) with High or Critical severity found."
+            exit 1
+          fi
 
   frontend:
     runs-on: ubuntu-latest
@@ -34,6 +42,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test -- --watch=false
+      - run: npm audit --audit-level=high
 
   compose:
     runs-on: ubuntu-latest
@@ -45,3 +54,4 @@ jobs:
         env:
           PTW_SQL_SA_PASSWORD: ci-only-placeholder
           PTW_SQL_APP_PASSWORD: ci-only-placeholder
+          PTW_DATA_PROTECTION_CERT_PASSWORD: ci-only-placeholder

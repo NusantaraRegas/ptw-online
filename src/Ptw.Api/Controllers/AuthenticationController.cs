@@ -41,13 +41,16 @@ public sealed class AuthenticationController(
         var authenticated = await authenticationService.AuthenticateAsync(
             request.UserName,
             request.Password,
+            HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            HttpContext.Items["X-Correlation-ID"]?.ToString() ?? HttpContext.TraceIdentifier,
             cancellationToken);
         var account = authenticated.Account.Account;
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, account.SubjectId),
             new Claim(ClaimTypes.Name, account.DisplayName),
-            new Claim("identity_source", authenticated.IdentitySource)
+            new Claim("identity_source", authenticated.IdentitySource),
+            new Claim("security_stamp", account.SecurityStamp)
         };
         var principal = new ClaimsPrincipal(new ClaimsIdentity(
             claims,

@@ -20,9 +20,14 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         var signatures = await dbContext.UserSignatureVersions.AsNoTracking()
             .Where(x => x.IsActive)
             .ToDictionaryAsync(x => x.SubjectId, StringComparer.OrdinalIgnoreCase, cancellationToken);
+        var now = clock.UtcNow;
+        var lockedUntil = await dbContext.UserCredentials.AsNoTracking()
+            .Where(x => x.LockedUntil != null && x.LockedUntil > now)
+            .ToDictionaryAsync(x => x.SubjectId, x => x.LockedUntil, StringComparer.OrdinalIgnoreCase, cancellationToken);
         return accounts.Select(account => ToStored(
             account,
-            signatures.GetValueOrDefault(account.SubjectId))).ToArray();
+            signatures.GetValueOrDefault(account.SubjectId),
+            lockedUntil.GetValueOrDefault(account.SubjectId))).ToArray();
     }
 
     public async Task<StoredUserAccount?> FindAsync(string subjectId, CancellationToken cancellationToken)
@@ -36,7 +41,7 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
 
         var signature = await dbContext.UserSignatureVersions.AsNoTracking()
             .SingleOrDefaultAsync(x => x.SubjectId == subjectId && x.IsActive, cancellationToken);
-        return ToStored(account, signature);
+        return ToStored(account, signature, await ActiveLockAsync(subjectId, cancellationToken));
     }
 
     public async Task<StoredUserAccount?> FindByUserNameAsync(string userName, CancellationToken cancellationToken)
@@ -54,7 +59,7 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         return ToStored(account, signature);
     }
 
-    public async Task<StoredUserAccount?> AuthenticateAsync(
+    public async Task<LocalAuthenticationResult> AuthenticateAsync(
         string userName,
         string password,
         CancellationToken cancellationToken)
@@ -62,16 +67,30 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         var normalized = NormalizeUserName(userName);
         var account = await dbContext.UserAccounts
             .SingleOrDefaultAsync(x => x.NormalizedUserName == normalized, cancellationToken);
-        if (account is null || !account.IsActive)
+        if (account is null)
         {
-            return null;
+            return new LocalAuthenticationResult(LocalAuthenticationOutcome.UnknownUser, null, null);
+        }
+
+        if (!account.IsActive)
+        {
+            return new LocalAuthenticationResult(LocalAuthenticationOutcome.AccountInactive, ToStored(account, null), null);
         }
 
         var credential = await dbContext.UserCredentials
             .SingleOrDefaultAsync(x => x.SubjectId == account.SubjectId, cancellationToken);
-        if (credential is null || credential.LockedUntil > clock.UtcNow)
+        if (credential is null)
         {
-            return null;
+            return new LocalAuthenticationResult(LocalAuthenticationOutcome.InvalidPassword, ToStored(account, null), null);
+        }
+
+        var now = clock.UtcNow;
+        if (credential.LockedUntil > now)
+        {
+            return new LocalAuthenticationResult(
+                LocalAuthenticationOutcome.LockedOut,
+                ToStored(account, null, credential.LockedUntil),
+                credential.LockedUntil);
         }
 
         var candidate = Rfc2898DeriveBytes.Pbkdf2(
@@ -83,14 +102,18 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         if (!CryptographicOperations.FixedTimeEquals(candidate, credential.PasswordHash))
         {
             credential.FailedAttempts++;
-            if (credential.FailedAttempts >= 5)
+            var lockoutTriggered = credential.FailedAttempts >= 5;
+            if (lockoutTriggered)
             {
-                credential.LockedUntil = clock.UtcNow.AddMinutes(5);
+                credential.LockedUntil = now.AddMinutes(5);
                 credential.FailedAttempts = 0;
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
-            return null;
+            return new LocalAuthenticationResult(
+                lockoutTriggered ? LocalAuthenticationOutcome.LockoutTriggered : LocalAuthenticationOutcome.InvalidPassword,
+                ToStored(account, null, credential.LockedUntil),
+                credential.LockedUntil);
         }
 
         credential.FailedAttempts = 0;
@@ -98,7 +121,7 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         await dbContext.SaveChangesAsync(cancellationToken);
         var signature = await dbContext.UserSignatureVersions.AsNoTracking()
             .SingleOrDefaultAsync(x => x.SubjectId == account.SubjectId && x.IsActive, cancellationToken);
-        return ToStored(account, signature);
+        return new LocalAuthenticationResult(LocalAuthenticationOutcome.Succeeded, ToStored(account, signature), null);
     }
 
     public async Task<ResolvedUserIdentity?> ResolveIdentityAsync(
@@ -156,6 +179,7 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
             account.SubjectId,
             account.DisplayName,
             account.IsActive,
+            account.SecurityStamp,
             assignments.Select(x => x.RoleCode).ToHashSet(StringComparer.OrdinalIgnoreCase),
             scopes,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase));
@@ -256,11 +280,36 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         credential.PasswordChangedAt = clock.UtcNow;
         record.Version++;
         record.UpdatedAt = clock.UtcNow;
+        // A new password ends every session that was opened with the old one.
+        record.SecurityStamp = UserAccount.NewSecurityStamp();
         AddEvidence(subjectId, "user_password_reset", actor.Id, correlationId, new { SubjectId = subjectId, record.Version });
         await SaveConcurrencySafeAsync(cancellationToken);
         var signature = await dbContext.UserSignatureVersions.AsNoTracking()
             .SingleOrDefaultAsync(x => x.SubjectId == subjectId && x.IsActive, cancellationToken);
         return ToStored(record, signature);
+    }
+
+    public async Task<StoredUserAccount> RevokeSessionsAsync(
+        UserAccount account,
+        string expectedETag,
+        Actor actor,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        var record = await dbContext.UserAccounts.SingleOrDefaultAsync(
+            x => x.SubjectId == account.SubjectId,
+            cancellationToken) ?? throw new ResourceNotFoundException("Pengguna", account.SubjectId);
+        ApplyConcurrency(record, expectedETag);
+        Apply(record, account);
+        AddEvidence(account.SubjectId, "user_sessions_revoked", actor.Id, correlationId, new
+        {
+            account.SubjectId,
+            account.Version
+        });
+        await SaveConcurrencySafeAsync(cancellationToken);
+        var signature = await dbContext.UserSignatureVersions.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.SubjectId == account.SubjectId && x.IsActive, cancellationToken);
+        return ToStored(record, signature, await ActiveLockAsync(account.SubjectId, cancellationToken));
     }
 
     public async Task<StoredUserAccount> AddSignatureAsync(
@@ -391,7 +440,8 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         IsActive = account.IsActive,
         Version = account.Version,
         CreatedAt = account.CreatedAt,
-        UpdatedAt = account.UpdatedAt
+        UpdatedAt = account.UpdatedAt,
+        SecurityStamp = account.SecurityStamp
     };
 
     private static void Apply(UserAccountRecord record, UserAccount account)
@@ -402,9 +452,22 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         record.IsActive = account.IsActive;
         record.Version = account.Version;
         record.UpdatedAt = account.UpdatedAt;
+        record.SecurityStamp = account.SecurityStamp;
     }
 
-    private static StoredUserAccount ToStored(UserAccountRecord account, UserSignatureVersionRecord? signature) => new(
+    private async Task<DateTimeOffset?> ActiveLockAsync(string subjectId, CancellationToken cancellationToken)
+    {
+        var lockedUntil = await dbContext.UserCredentials.AsNoTracking()
+            .Where(x => x.SubjectId == subjectId)
+            .Select(x => x.LockedUntil)
+            .SingleOrDefaultAsync(cancellationToken);
+        return lockedUntil > clock.UtcNow ? lockedUntil : null;
+    }
+
+    private static StoredUserAccount ToStored(
+        UserAccountRecord account,
+        UserSignatureVersionRecord? signature,
+        DateTimeOffset? lockedUntil = null) => new(
         UserAccount.Rehydrate(
             account.SubjectId,
             account.UserName,
@@ -414,9 +477,11 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
             account.IsActive,
             account.Version,
             account.CreatedAt,
-            account.UpdatedAt),
+            account.UpdatedAt,
+            account.SecurityStamp),
         EncodeETag(account.RowVersion),
-        signature is null ? null : ToEntry(signature));
+        signature is null ? null : ToEntry(signature),
+        lockedUntil);
 
     private static UserSignatureEntry ToEntry(UserSignatureVersionRecord signature) => new(
         signature.Id,

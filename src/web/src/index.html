@@ -9,6 +9,7 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico?v=235a71a1" />
   </head>
   <body>
-    <app-root></app-root>
+    <!-- nginx replaces the placeholder with the request id that the CSP header also carries. -->
+    <app-root ngCspNonce="__PTW_CSP_NONCE__"></app-root>
   </body>
 </html>

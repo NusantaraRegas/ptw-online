@@ -12,6 +12,14 @@ public sealed class AdminUsersController(UserDirectoryService service) : Control
     public Task<PagedResponse<UserAccountResponse>> List(CancellationToken cancellationToken) =>
         service.ListAsync(cancellationToken);
 
+    /// <summary>Recent login journal, newest first; Administrators use it to see lockouts and unexpected paths.</summary>
+    [HttpGet("login-events")]
+    public Task<PagedResponse<LoginAuditEventResponse>> LoginEvents(
+        [FromQuery] int? limit,
+        [FromQuery] string? subjectId,
+        CancellationToken cancellationToken) =>
+        service.ListLoginEventsAsync(limit, subjectId, cancellationToken);
+
     [HttpGet("{subjectId}")]
     public async Task<ActionResult<UserAccountResponse>> Get(
         string subjectId,
@@ -73,6 +81,21 @@ public sealed class AdminUsersController(UserDirectoryService service) : Control
         var response = await service.ResetPasswordAsync(
             subjectId,
             request,
+            Request.Headers.IfMatch.ToString(),
+            CorrelationId,
+            cancellationToken);
+        Response.Headers.ETag = response.ETag;
+        return response;
+    }
+
+    /// <summary>Ends every live session of the account ("log out everywhere").</summary>
+    [HttpPost("{subjectId}/sessions/revoke")]
+    public async Task<ActionResult<UserAccountResponse>> RevokeSessions(
+        string subjectId,
+        CancellationToken cancellationToken)
+    {
+        var response = await service.RevokeSessionsAsync(
+            subjectId,
             Request.Headers.IfMatch.ToString(),
             CorrelationId,
             cancellationToken);

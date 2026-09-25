@@ -23,6 +23,8 @@ export interface UserAccount {
   version: number;
   createdAt: string;
   updatedAt: string;
+  /** Set while the local password is locked after repeated failures; null otherwise. */
+  lockedUntil: string | null;
   signature: UserSignature | null;
   eTag: string;
 }

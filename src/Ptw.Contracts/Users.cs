@@ -39,5 +39,17 @@ public sealed record UserAccountResponse(
     int Version,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
+    DateTimeOffset? LockedUntil,
     UserSignatureResponse? Signature,
     string ETag);
+
+public sealed record LoginAuditEventResponse(
+    Guid Id,
+    DateTimeOffset OccurredAt,
+    string UserName,
+    string? SubjectId,
+    string DirectoryResult,
+    string IdentitySource,
+    string Outcome,
+    string SourceAddress,
+    string CorrelationId);

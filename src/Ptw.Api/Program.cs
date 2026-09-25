@@ -21,9 +21,16 @@ var dataProtectionPath = builder.Configuration["Authentication:DataProtectionPat
 if (!string.IsNullOrWhiteSpace(dataProtectionPath))
 {
     Directory.CreateDirectory(dataProtectionPath);
-    builder.Services.AddDataProtection()
+    var dataProtection = builder.Services.AddDataProtection()
         .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
         .SetApplicationName("NrPtwOnline");
+    // Keys at rest are encrypted with a certificate held outside the repository; outside Development
+    // the loader refuses to start without one (see DataProtectionKeyCertificate).
+    var keyCertificate = DataProtectionKeyCertificate.Load(builder.Configuration, builder.Environment.IsDevelopment());
+    if (keyCertificate is not null)
+    {
+        dataProtection.ProtectKeysWithCertificate(keyCertificate);
+    }
 }
 
 builder.Services.AddProblemDetails();
@@ -98,14 +105,16 @@ if (forwardedHeadersConfigured)
     });
 }
 var attachmentMaxFileBytes = builder.Configuration.GetValue<long>("Attachments:MaxFileBytes");
-if (attachmentMaxFileBytes > 0)
+// The largest legitimate body is one attachment plus multipart overhead (nginx: PTW_UPLOAD_MAX_BODY).
+// Kestrel enforces the same ceiling itself so a misconfigured proxy cannot widen it; without
+// attachments the ceiling shrinks to the signature upload plus JSON commands.
+var maxRequestBodyBytes = attachmentMaxFileBytes > 0 ? attachmentMaxFileBytes + 1024 * 1024 : 1024 * 1024;
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = maxRequestBodyBytes);
+builder.Services.Configure<FormOptions>(options =>
 {
-    builder.Services.Configure<FormOptions>(options =>
-    {
-        options.MemoryBufferThreshold = 64 * 1024;
-        options.MultipartBodyLengthLimit = attachmentMaxFileBytes + 1024 * 1024;
-    });
-}
+    options.MemoryBufferThreshold = 64 * 1024;
+    options.MultipartBodyLengthLimit = maxRequestBodyBytes;
+});
 builder.Services
     .AddAuthentication(options =>
     {
@@ -147,7 +156,13 @@ builder.Services
             var resolved = string.IsNullOrWhiteSpace(subjectId)
                 ? null
                 : await store.ResolveIdentityAsync(subjectId, DateTimeOffset.UtcNow, context.HttpContext.RequestAborted);
-            if (resolved is null || !resolved.IsActive)
+            // The stamp in the cookie must match the account's current stamp: a password reset,
+            // deactivation, or explicit revocation rotates it and ends every earlier session.
+            var cookieStamp = context.Principal?.FindFirst("security_stamp")?.Value;
+            if (resolved is null
+                || !resolved.IsActive
+                || string.IsNullOrEmpty(cookieStamp)
+                || !string.Equals(cookieStamp, resolved.SecurityStamp, StringComparison.Ordinal))
             {
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);

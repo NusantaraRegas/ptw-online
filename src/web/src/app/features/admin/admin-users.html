@@ -120,6 +120,12 @@
             <span class="status" [class.inactive]="!user.isActive">{{
               user.isActive ? 'Aktif' : 'Nonaktif'
             }}</span>
+            @if (user.lockedUntil) {
+              <span class="status locked"
+                >Terkunci sampai
+                {{ user.lockedUntil | date: 'dd/MM/yyyy HH:mm' : 'Asia/Jakarta' }} WIB</span
+              >
+            }
             <div class="row-actions">
               <label class="upload-action"
                 >Unggah PNG<input

@@ -11,7 +11,8 @@ public sealed class UserAccount
         bool isActive,
         int version,
         DateTimeOffset createdAt,
-        DateTimeOffset updatedAt)
+        DateTimeOffset updatedAt,
+        string securityStamp)
     {
         SubjectId = Required(subjectId, "Subject ID", 200);
         UserName = Required(userName, "Username", 100).ToLowerInvariant();
@@ -22,6 +23,7 @@ public sealed class UserAccount
         Version = version;
         CreatedAt = createdAt.ToUniversalTime();
         UpdatedAt = updatedAt.ToUniversalTime();
+        SecurityStamp = Required(securityStamp, "Security stamp", 64);
     }
 
     public string SubjectId { get; }
@@ -34,6 +36,15 @@ public sealed class UserAccount
     public DateTimeOffset CreatedAt { get; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    /// <summary>
+    /// Opaque value embedded in every session cookie and compared on each request. Rotating it
+    /// invalidates all sessions of the account at once (password reset, deactivation, or an explicit
+    /// "log out everywhere"), without waiting for the cookie to expire.
+    /// </summary>
+    public string SecurityStamp { get; private set; }
+
+    public static string NewSecurityStamp() => Guid.NewGuid().ToString("N");
+
     public static UserAccount Create(
         string subjectId,
         string userName,
@@ -41,7 +52,7 @@ public sealed class UserAccount
         string? position,
         string? department,
         DateTimeOffset now) =>
-        new(subjectId, userName, displayName, position, department, true, 1, now, now);
+        new(subjectId, userName, displayName, position, department, true, 1, now, now, NewSecurityStamp());
 
     public static UserAccount Rehydrate(
         string subjectId,
@@ -52,8 +63,9 @@ public sealed class UserAccount
         bool isActive,
         int version,
         DateTimeOffset createdAt,
-        DateTimeOffset updatedAt) =>
-        new(subjectId, userName, displayName, position, department, isActive, version, createdAt, updatedAt);
+        DateTimeOffset updatedAt,
+        string securityStamp) =>
+        new(subjectId, userName, displayName, position, department, isActive, version, createdAt, updatedAt, securityStamp);
 
     public void Update(string displayName, string? position, string? department, DateTimeOffset now)
     {
@@ -71,6 +83,19 @@ public sealed class UserAccount
         }
 
         IsActive = isActive;
+        if (!isActive)
+        {
+            // Deactivation must end the account's live sessions, not only block the next login.
+            SecurityStamp = NewSecurityStamp();
+        }
+
+        Touch(now);
+    }
+
+    /// <summary>Ends every live session of the account; the next request with an old cookie is rejected.</summary>
+    public void RevokeSessions(DateTimeOffset now)
+    {
+        SecurityStamp = NewSecurityStamp();
         Touch(now);
     }
 

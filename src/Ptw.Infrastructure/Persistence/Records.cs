@@ -341,7 +341,23 @@ public sealed class UserAccountRecord
     public int Version { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+    public string SecurityStamp { get; set; } = null!;
     public byte[] RowVersion { get; set; } = [];
+}
+
+/// <summary>Append-only login journal; rows are inserted once and never updated or deleted by the application.</summary>
+public sealed class LoginAuditEventRecord
+{
+    public long Sequence { get; set; }
+    public Guid Id { get; set; }
+    public DateTimeOffset OccurredAt { get; set; }
+    public string UserName { get; set; } = null!;
+    public string? SubjectId { get; set; }
+    public string DirectoryResult { get; set; } = null!;
+    public string IdentitySource { get; set; } = null!;
+    public string Outcome { get; set; } = null!;
+    public string SourceAddress { get; set; } = null!;
+    public string CorrelationId { get; set; } = null!;
 }
 
 public sealed class UserCredentialRecord
