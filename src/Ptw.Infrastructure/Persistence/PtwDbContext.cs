@@ -26,6 +26,9 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
     public DbSet<ConfigurationAuditEventRecord> ConfigurationAuditEvents => Set<ConfigurationAuditEventRecord>();
     public DbSet<DemoModeSettingRecord> DemoModeSettings => Set<DemoModeSettingRecord>();
     public DbSet<DemoModeCommandReceiptRecord> DemoModeCommandReceipts => Set<DemoModeCommandReceiptRecord>();
+    public DbSet<UserGuideSettingRecord> UserGuideSettings => Set<UserGuideSettingRecord>();
+    public DbSet<UserGuideVersionRecord> UserGuideVersions => Set<UserGuideVersionRecord>();
+    public DbSet<UserGuideCommandReceiptRecord> UserGuideCommandReceipts => Set<UserGuideCommandReceiptRecord>();
     public DbSet<LocationCommandReceiptRecord> LocationCommandReceipts => Set<LocationCommandReceiptRecord>();
     public DbSet<UserAuthorizationRecord> UserAuthorizations => Set<UserAuthorizationRecord>();
     public DbSet<UserAuthorizationVersionRecord> UserAuthorizationVersions => Set<UserAuthorizationVersionRecord>();
@@ -322,6 +325,46 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         demoModeReceipt.Property(x => x.Key).HasMaxLength(200);
         demoModeReceipt.Property(x => x.RequestHash).HasMaxLength(64).IsFixedLength();
         demoModeReceipt.HasIndex(x => new { x.ActorId, x.Operation, x.Key }).IsUnique();
+
+        var userGuideSetting = modelBuilder.Entity<UserGuideSettingRecord>();
+        userGuideSetting.ToTable(
+            "UserGuideSetting",
+            "cfg",
+            table => table.HasCheckConstraint("CK_UserGuideSetting_Version", "[Version] > 0"));
+        userGuideSetting.HasKey(x => x.Id);
+        userGuideSetting.Property(x => x.UpdatedBy).HasMaxLength(200);
+        userGuideSetting.Property(x => x.RowVersion).IsRowVersion();
+        userGuideSetting.HasOne<UserGuideVersionRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.CurrentVersionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var userGuideVersion = modelBuilder.Entity<UserGuideVersionRecord>();
+        userGuideVersion.ToTable(
+            "UserGuideVersion",
+            "cfg",
+            table => table.HasCheckConstraint("CK_UserGuideVersion_Size", "[SizeBytes] > 0"));
+        userGuideVersion.HasKey(x => x.Id);
+        userGuideVersion.Property(x => x.FileName).HasMaxLength(255);
+        userGuideVersion.Property(x => x.Sha256).HasMaxLength(64).IsFixedLength();
+        userGuideVersion.Property(x => x.StorageKey).HasMaxLength(500);
+        userGuideVersion.Property(x => x.ScanEvidenceReference).HasMaxLength(500);
+        userGuideVersion.Property(x => x.UploadedBy).HasMaxLength(200);
+        userGuideVersion.HasIndex(x => x.Version).IsUnique();
+        userGuideVersion.HasIndex(x => x.StorageKey).IsUnique();
+
+        var userGuideReceipt = modelBuilder.Entity<UserGuideCommandReceiptRecord>();
+        userGuideReceipt.ToTable("UserGuideCommandReceipt", "intg");
+        userGuideReceipt.HasKey(x => x.Id);
+        userGuideReceipt.Property(x => x.ActorId).HasMaxLength(200);
+        userGuideReceipt.Property(x => x.Operation).HasMaxLength(100);
+        userGuideReceipt.Property(x => x.Key).HasMaxLength(200);
+        userGuideReceipt.Property(x => x.RequestHash).HasMaxLength(64).IsFixedLength();
+        userGuideReceipt.HasIndex(x => new { x.ActorId, x.Operation, x.Key }).IsUnique();
+        userGuideReceipt.HasOne<UserGuideVersionRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.ResultVersionId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         var locationReceipt = modelBuilder.Entity<LocationCommandReceiptRecord>();
         locationReceipt.ToTable("LocationCommandReceipt", "intg");

@@ -8,6 +8,7 @@ namespace Ptw.Api.Controllers;
 [Route("api/v1/admin/settings")]
 public sealed class AdminSettingsController(
     DemoModeService service,
+    UserGuideService userGuideService,
     IWebHostEnvironment environment) : ControllerBase
 {
     [HttpGet("demo-mode")]
@@ -21,6 +22,26 @@ public sealed class AdminSettingsController(
     [HttpPost("demo-mode/disable")]
     public Task<DemoModeResponse> DisableDemoMode(CancellationToken cancellationToken) =>
         SetDemoMode(false, cancellationToken);
+
+    [HttpPost("user-guide")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<UserGuideResponse>> ReplaceUserGuide(
+        [FromForm] IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        await using var content = file.OpenReadStream();
+        var response = await userGuideService.ReplaceAsync(
+            file.FileName,
+            file.ContentType,
+            file.Length,
+            content,
+            Request.Headers.IfMatch.ToString(),
+            Request.Headers["Idempotency-Key"].ToString(),
+            CorrelationId,
+            cancellationToken);
+        Response.Headers.ETag = response.ETag;
+        return response;
+    }
 
     private Task<DemoModeResponse> SetDemoMode(bool enabled, CancellationToken cancellationToken)
     {

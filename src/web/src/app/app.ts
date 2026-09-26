@@ -13,6 +13,7 @@ import {
   roleDisplayLabel,
 } from './core/development-identity';
 import { PermitApi, PermitTask } from './core/permit-api';
+import { ApplicationSettingsApi, UserGuideSetting } from './core/application-settings-api';
 
 @Component({
   selector: 'app-root',
@@ -26,6 +27,7 @@ export class App {
   private readonly permitApi = inject(PermitApi);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
+  private readonly applicationSettingsApi = inject(ApplicationSettingsApi);
 
   protected readonly menuOpen = signal(false);
   protected readonly notificationsOpen = signal(false);
@@ -34,6 +36,8 @@ export class App {
   );
   protected readonly pendingTaskCount = signal(0);
   protected readonly pendingTasks = signal<PermitTask[]>([]);
+  protected readonly userGuide = signal<UserGuideSetting | null>(null);
+  protected readonly userGuideAvailable = computed(() => this.userGuide()?.available === true);
   protected readonly identity = signal<CurrentIdentity>({
     ...this.identityStore.selected(),
     isDevelopmentIdentity: false,
@@ -89,6 +93,15 @@ export class App {
           this.pendingTaskCount.set(page.count);
         },
       });
+    // The guide menu only appears once an Administrator has published a PDF; the shell reads
+    // the metadata once per load and never polls it.
+    this.applicationSettingsApi
+      .userGuide()
+      .pipe(
+        catchError(() => EMPTY),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((guide) => this.userGuide.set(guide));
     interval(30_000)
       .pipe(
         switchMap(() => this.permitApi.listTasks().pipe(catchError(() => EMPTY))),
@@ -142,5 +155,22 @@ export class App {
         globalThis.location.assign('/login');
       },
     });
+  }
+
+  protected downloadUserGuide(): void {
+    const guide = this.userGuide();
+    if (!guide?.available) return;
+    this.applicationSettingsApi
+      .downloadUserGuide()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = guide.fileName ?? 'panduan-pengguna.pdf';
+        link.click();
+        URL.revokeObjectURL(url);
+        this.closeMenu();
+      });
   }
 }

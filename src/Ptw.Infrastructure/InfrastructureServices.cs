@@ -32,6 +32,7 @@ public static class InfrastructureServices
             client.DefaultRequestHeaders.UserAgent.ParseAdd("NrPtwOnline/1.0");
         });
         services.AddScoped<IDemoModeStore, DemoModeStore>();
+        services.AddScoped<IUserGuideStore, UserGuideStore>();
         services.AddScoped<IAuthorizationAssignmentResolver, AuthorizationAssignmentResolver>();
         services.AddSingleton<IClock, SystemClock>();
         var demoModeEnabledByDefault = isDevelopment

@@ -1,1 +1,70 @@
 @use './admin-locations.scss';
+
+.guide-card {
+  margin-bottom: 18px;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.guide-card h2 {
+  margin: 0;
+  color: #294650;
+  font-size: 15px;
+}
+
+.guide-card p {
+  margin: 7px 0;
+  color: var(--nr-muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.guide-card small {
+  color: #71858e;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.guide-upload {
+  display: grid;
+  gap: 8px;
+}
+
+.guide-upload label {
+  color: #4c676e;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.guide-upload input {
+  width: 100%;
+  padding: 9px;
+  border: 1px solid #cddadd;
+  border-radius: 8px;
+  color: #294650;
+  background: white;
+  font-size: 10px;
+}
+
+.guide-upload input:focus-visible {
+  border-color: var(--nr-blue);
+  outline: 3px solid rgb(0 117 191 / 14%);
+}
+
+.guide-upload .primary-action {
+  justify-self: start;
+}
+
+.guide-message {
+  margin-top: -10px;
+  margin-bottom: 18px;
+}
+
+@media (max-width: 760px) {
+  .guide-card {
+    grid-template-columns: 1fr;
+  }
+}

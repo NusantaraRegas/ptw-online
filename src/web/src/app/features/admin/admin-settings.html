@@ -9,7 +9,7 @@
   <div>
     <p class="eyebrow">Konfigurasi akses</p>
     <h1>Pengaturan aplikasi</h1>
-    <p class="subtitle">Kelola fitur khusus yang tersedia pada halaman masuk.</p>
+    <p class="subtitle">Kelola konfigurasi aplikasi dan dokumen panduan pengguna.</p>
   </div>
 </div>
 
@@ -56,6 +56,60 @@
       <strong>{{ setting()?.enabled ? 'Aktif' : 'Nonaktif' }}</strong>
     </label>
   </section>
+
+  <section class="card guide-card" aria-labelledby="user-guide-title">
+    <div>
+      <h2 id="user-guide-title">Panduan pengguna</h2>
+      <p>
+        Unggah PDF baru untuk mengganti versi yang diunduh melalui menu
+        <strong>Panduan pengguna</strong> oleh seluruh pengguna.
+      </p>
+      @if (guideLoading()) {
+        <small aria-live="polite">Memuat informasi panduan&hellip;</small>
+      } @else if (userGuide(); as guide) {
+        <small>
+          @if (guide.available) {
+            Versi {{ guide.version }} · {{ guide.fileName }} ·
+            {{ guide.sizeBytes / 1048576 | number: '1.1-1' }} MB · diperbarui
+            {{ guide.updatedAt | date: 'dd/MM/yyyy HH:mm' : 'Asia/Jakarta' }} WIB oleh
+            {{ guide.updatedBy }}
+          } @else {
+            Belum ada panduan yang diterbitkan. Menu <strong>Panduan pengguna</strong> baru tampil
+            bagi pengguna setelah PDF pertama diunggah.
+          }
+        </small>
+      }
+    </div>
+    <div class="guide-upload">
+      <label for="user-guide-file">File PDF terbaru</label>
+      <input
+        #guideFile
+        id="user-guide-file"
+        type="file"
+        accept="application/pdf,.pdf"
+        aria-describedby="user-guide-help"
+        [disabled]="guideSaving() || guideLoading()"
+        (change)="selectGuide($event)"
+      />
+      <small id="user-guide-help"
+        >Hanya PDF; batas ukuran mengikuti konfigurasi upload aplikasi.</small
+      >
+      <button
+        class="primary-action"
+        type="button"
+        [disabled]="guideSaving() || !selectedGuide()"
+        (click)="uploadGuide(guideFile)"
+      >
+        {{ guideSaving() ? 'Mengunggah…' : 'Unggah dan terbitkan' }}
+      </button>
+    </div>
+  </section>
+  @if (guideError()) {
+    <p class="error-summary guide-message" role="alert">{{ guideError() }}</p>
+  }
+  @if (guideSuccess()) {
+    <p class="success-summary guide-message" role="status">{{ guideSuccess() }}</p>
+  }
 
   <section class="boundary-note" aria-label="Peringatan akses">
     <span aria-hidden="true">i</span>

@@ -49,6 +49,7 @@ builder.Services.AddScoped<UserAuthorizationService>();
 builder.Services.AddScoped<UserDirectoryService>();
 builder.Services.AddScoped<UserAuthenticationService>();
 builder.Services.AddScoped<DemoModeService>();
+builder.Services.AddScoped<UserGuideService>();
 builder.Services.AddScoped<IOperationalPolicyGate, OperationalPolicyGate>();
 builder.Services.AddSingleton(
     builder.Configuration.GetSection("OperationalPolicy").Get<OperationalPolicySettings>()

@@ -269,6 +269,43 @@ public sealed class DemoModeCommandReceiptRecord
     public DateTimeOffset ExpiresAt { get; set; }
 }
 
+public sealed class UserGuideSettingRecord
+{
+    public Guid Id { get; set; }
+    public Guid CurrentVersionId { get; set; }
+    public int Version { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public string UpdatedBy { get; set; } = null!;
+    public byte[] RowVersion { get; set; } = [];
+}
+
+public sealed class UserGuideVersionRecord
+{
+    public Guid Id { get; set; }
+    public int Version { get; set; }
+    public string FileName { get; set; } = null!;
+    public long SizeBytes { get; set; }
+    public string Sha256 { get; set; } = null!;
+    public string StorageKey { get; set; } = null!;
+    public string ScanEvidenceReference { get; set; } = null!;
+    public DateTimeOffset ScannedAt { get; set; }
+    public DateTimeOffset UploadedAt { get; set; }
+    public string UploadedBy { get; set; } = null!;
+}
+
+public sealed class UserGuideCommandReceiptRecord
+{
+    public Guid Id { get; set; }
+    public string ActorId { get; set; } = null!;
+    public string Operation { get; set; } = null!;
+    public string Key { get; set; } = null!;
+    public string RequestHash { get; set; } = null!;
+    public Guid ResultVersionId { get; set; }
+    public int ResultSettingVersion { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+}
+
 public sealed class LocationCommandReceiptRecord
 {
     public Guid Id { get; set; }

@@ -4,6 +4,17 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { App } from './app';
 
+const guide = (available: boolean) => ({
+  available,
+  fileName: available ? 'Panduan-Pengguna-PTW-Online-v1.0.pdf' : null,
+  sizeBytes: available ? 4482561 : 0,
+  sha256: available ? 'A'.repeat(64) : null,
+  version: available ? 1 : 0,
+  updatedAt: available ? '2026-09-26T03:00:00.000Z' : null,
+  updatedBy: available ? 'admin.maker' : null,
+  eTag: available ? '"1"' : '"0"',
+});
+
 describe('App', () => {
   it('creates the PTW application shell', async () => {
     sessionStorage.clear();
@@ -41,6 +52,7 @@ describe('App', () => {
       ],
       count: 3,
     });
+    http.expectOne('/api/v1/user-guide').flush(guide(true));
     fixture.detectChanges();
 
     expect(fixture.componentInstance).toBeTruthy();
@@ -85,6 +97,7 @@ describe('App', () => {
     expect(fixture.nativeElement.querySelector('.app-shell')).toBeNull();
     TestBed.inject(HttpTestingController).expectNone('/api/v1/me');
     TestBed.inject(HttpTestingController).expectNone('/api/v1/tasks');
+    TestBed.inject(HttpTestingController).expectNone('/api/v1/user-guide');
   });
 
   it('shows the persisted demo identity in the account selector', async () => {
@@ -106,10 +119,12 @@ describe('App', () => {
       isDevelopmentIdentity: true,
     });
     http.expectOne('/api/v1/tasks').flush({ items: [], count: 0 });
+    http.expectOne('/api/v1/user-guide').flush(guide(false));
     fixture.detectChanges();
 
     const selector = fixture.nativeElement.querySelector('select') as HTMLSelectElement;
     expect(selector.value).toBe('admin-checker');
+    expect(fixture.nativeElement.querySelector('.guide-download')).toBeNull();
     expect(fixture.nativeElement.querySelector('.task-attention-badge')).toBeNull();
     expect(fixture.nativeElement.querySelector('.notification-button .unread-dot')).toBeNull();
     (fixture.nativeElement.querySelector('.notification-button') as HTMLButtonElement).click();
@@ -139,6 +154,7 @@ describe('App', () => {
       isDevelopmentIdentity: true,
     });
     http.expectOne('/api/v1/tasks').flush({ items: [], count: 0 });
+    http.expectOne('/api/v1/user-guide').flush(guide(true));
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.user small')?.textContent.trim()).toBe(
@@ -171,9 +187,14 @@ describe('App', () => {
       isDevelopmentIdentity: true,
     });
     http.expectOne('/api/v1/tasks').flush({ items: [], count: 0 });
+    http.expectOne('/api/v1/user-guide').flush(guide(true));
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('a[href="/operations"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.guide-download')?.textContent).toContain(
+      'Panduan pengguna',
+    );
+    expect(fixture.nativeElement.querySelector('a[href="/admin"]')).toBeNull();
     sessionStorage.clear();
   });
 });

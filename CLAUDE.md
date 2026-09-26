@@ -44,6 +44,7 @@ tests/Ptw.Printing.Tests         regresi layout dokumen (akses internal via Inte
 docs/                            BRD/PRD/FSD v1.8 (sumber requirement)
 docs/decisions/                  PTW-WORKFLOW-BASELINE (alur disahkan pengguna dan stakeholder 25 Sep 2026; Amendemen 1 scope baca ORF, Amendemen 2 disposisi OPN); OPN-001..007, 009, 010, 011 ACCEPTED sejauh keadaan sistem menjawabnya; OPN-008 dan 012 ACCEPTED sebagian; PROD-UPLOAD-SCAN dan PTW-RENEWAL ACCEPTED — sisa TBD pada form OPN adalah backlog, bukan keputusan
 docs/implementation-status.md    matriks traceability requirement -> komponen -> test
+docs/Panduan-Pengguna-*          sumber panduan pengguna (.docx/.pdf, beberapa MB) — diabaikan Git; PDF aktif diterbitkan Administrator lewat aplikasi, bukan di-embed ke build
 .github/workflows/ci.yml         CI: build/test backend, build/test frontend, compose config; format/prettier/audit belum di CI
 ```
 
@@ -194,6 +195,7 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 - [ ] Assignment langsung (`POST /api/v1/admin/authorizations/direct`) hanya menerima user, role, area bila role area-scoped, dan periode; action code dan kompetensi diturunkan server dari `UserAuthorizationRoleProfiles`, input action code dari klien diabaikan, dan tanpa profil terkonfigurasi jalur ini fail-closed. Profil di `appsettings.Development.json` adalah konfigurasi UX/UAT, bukan matriks OPN-002; jangan menyalinnya ke production.
 - [ ] `TrustedUploadScanner` terdaftar hanya saat `Attachments:RequireMalwareScan=false` (evidence `trusted-upload:<sha256>`); default dasar tetap `true` sehingga `UnavailableMalwareScanner` fail-closed. Produksi memakai `false` sebagai risiko yang diterima (`docs/decisions/PROD-UPLOAD-SCAN.md`); jangan mengubah default dasar dan jangan menghapus kontrol kompensasi (signature check, ukuran, unduhan attachment `nosniff`/`no-store`).
 - [ ] Tidak ada secret, `.env`, token, connection string ber-secret, PII nyata, isi attachment, atau build output yang masuk Git.
+- [ ] Panduan pengguna: hanya Administrator yang menerbitkan PDF (`POST /api/v1/admin/settings/user-guide`, multipart, `If-Match`, `Idempotency-Key`, signature PDF, malware scan, audit konfigurasi, outbox, receipt); semua akun terautentikasi membaca `GET /api/v1/user-guide` dan mengunduh `/content` (`nosniff`, `no-store`). Build tidak memuat PDF bawaan: sebelum unggahan pertama API menjawab `available=false`/`404` dan menu shell disembunyikan. Jangan meng-embed atau meng-commit `docs/Panduan-Pengguna-*`.
 - [ ] Log tidak memuat token, secret, isi dokumen, atau PII berlebih; correlation ID (`X-Correlation-ID`) tetap dipertahankan.
 - [ ] File attachment berstatus selain `CLEAN` tidak dapat diunduh; hanya paket cetak `READY` yang merupakan dokumen resmi.
 - [ ] OpenAPI, CORS, TLS, CSP, upload limit, dan rate limit tetap fail-safe; OpenAPI tidak terekspos di luar Development.

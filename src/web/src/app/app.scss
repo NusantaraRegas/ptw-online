@@ -94,8 +94,7 @@ nav a {
   font-weight: 600;
   transition:
     color 160ms ease,
-    background 160ms ease,
-    transform 160ms ease;
+    background 160ms ease;
 }
 .nav-icon {
   width: 19px;
@@ -110,7 +109,9 @@ nav a {
 nav a:hover {
   color: var(--nr-blue-dark);
   background: var(--nr-blue-soft);
-  transform: translateX(2px);
+}
+.guide-download {
+  cursor: pointer;
 }
 nav a.active {
   color: var(--nr-blue-dark);

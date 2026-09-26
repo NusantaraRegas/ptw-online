@@ -52,6 +52,11 @@ secrets/
 .DS_Store
 Thumbs.db
 
+# User guide sources (docx/pdf, several MB each): managed inside the application by an
+# Administrator upload, never committed. See README "Panduan pengguna".
+docs/Panduan-Pengguna-*.docx
+docs/Panduan-Pengguna-*.pdf
+
 # Runtime data
 attachments/
 quarantine/

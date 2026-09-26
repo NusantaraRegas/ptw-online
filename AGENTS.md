@@ -88,6 +88,7 @@ Komunikasi antarmodul dilakukan melalui application interfaces atau domain event
 - High/critical dependency vulnerability harus ditutup atau memblokir delivery; jangan menonaktifkan NuGet/npm audit untuk membuat build hijau.
 - OpenAPI production exposure, CORS, TLS, CSP, upload limits, dan rate limits harus fail-safe.
 - `TrustedUploadScanner` (evidence `trusted-upload:<sha256>`) terdaftar hanya saat `Attachments:RequireMalwareScan=false`; default dasar tetap `true` sehingga `UnavailableMalwareScanner` fail-closed. Produksi memakai `false` sebagai risiko yang diterima pada `docs/decisions/PROD-UPLOAD-SCAN.md`; jangan mengubah default dasar dan jangan menghapus kontrol kompensasi (pemeriksaan signature PDF/JPEG/PNG, batas ukuran, unduhan `nosniff`/`no-store`).
+- Panduan pengguna (PDF) dikelola di aplikasi, bukan di Git: Administrator menerbitkannya lewat `POST /api/v1/admin/settings/user-guide` (multipart, `If-Match`, `Idempotency-Key`, signature PDF, malware scan, audit konfigurasi, outbox, receipt) dan seluruh akun terautentikasi mengunduhnya lewat `GET /api/v1/user-guide/content`. File sumber `docs/Panduan-Pengguna-*.docx|pdf` diabaikan `.gitignore` karena ukurannya; jangan meng-commit atau meng-embed-nya ke build, dan pertahankan state eksplisit `available=false`/`404` sebelum unggahan pertama.
 
 ## Frontend dan UX
 
