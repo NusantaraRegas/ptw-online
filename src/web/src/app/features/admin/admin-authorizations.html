@@ -15,7 +15,7 @@
   </div>
   @if (!accessDenied()) {
     <button class="primary-action" type="button" (click)="toggleForm()">
-      {{ formOpen() ? 'Tutup form' : '+ Draft assignment' }}
+      {{ formOpen() ? 'Tutup form' : '+ Assignment baru' }}
     </button>
   }
 </div>
@@ -55,22 +55,23 @@
           <h2>
             {{
               editingAssignment()?.status === 'APPROVED'
-                ? 'Revisi assignment'
+                ? 'Ubah assignment'
                 : editingAssignment()
-                  ? 'Edit draft assignment'
-                  : 'Draft assignment baru'
+                  ? 'Lengkapi dan berlakukan assignment'
+                  : 'Assignment baru'
             }}
           </h2>
           <p>
             @if (editingAssignment()?.status === 'APPROVED') {
-              Saat disimpan, versi aktif menjadi Draft dan harus diajukan serta disetujui kembali.
+              Perubahan berlaku segera setelah disimpan sebagai versi baru; versi sebelumnya
+              tersimpan pada riwayat.
             } @else {
-              Administrator dapat membuat, mengajukan, dan menyetujui assignment yang sama. Semua
-              transisi tetap diaudit.
+              Assignment berlaku segera setelah disimpan oleh Administrator. Setiap versi tetap
+              diaudit.
             }
           </p>
         </div>
-        <span>Persetujuan administrator</span>
+        <span>Berlaku saat disimpan</span>
       </header>
       <div class="form-grid">
         <label>
@@ -155,7 +156,9 @@
       <footer>
         <button type="button" class="secondary-action" (click)="closeForm()">Batal</button>
         <button type="submit" class="primary-action" [disabled]="saving()">
-          {{ saving() ? 'Menyimpan…' : editingAssignment() ? 'Simpan perubahan' : 'Simpan draft' }}
+          {{
+            saving() ? 'Menyimpan…' : editingAssignment() ? 'Simpan perubahan' : 'Simpan assignment'
+          }}
         </button>
       </footer>
     </form>
@@ -212,12 +215,12 @@
                     Edit
                   </button>
                 }
-                <button type="button" (click)="submit(item)" [disabled]="actingId() === item.id">
-                  Ajukan
+                <button type="button" (click)="activate(item)" [disabled]="actingId() === item.id">
+                  Berlakukan
                 </button>
               } @else if (item.status === 'PENDING_APPROVAL') {
-                <button type="button" (click)="approve(item)" [disabled]="actingId() === item.id">
-                  Setujui
+                <button type="button" (click)="activate(item)" [disabled]="actingId() === item.id">
+                  Berlakukan
                 </button>
               } @else {
                 @if (item.kind === 'DIRECT') {
@@ -233,7 +236,7 @@
         } @empty {
           <div class="empty">
             <strong>Belum ada assignment</strong>
-            <p>Buat draft pertama tanpa mengunci satu karyawan pada satu role saja.</p>
+            <p>Buat assignment pertama tanpa mengunci satu karyawan pada satu role saja.</p>
           </div>
         }
       </div>

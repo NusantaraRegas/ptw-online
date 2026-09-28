@@ -18,30 +18,57 @@ public sealed class UserAuthorizationAssignmentTests
     }
 
     [Fact]
-    public void MakerCannotApproveOwnAssignmentByDefault()
+    public void AdministratorApprovesOwnAssignmentDirectlyFromDraft()
     {
         var assignment = Create();
-        assignment.SubmitForApproval("admin.maker", Now.AddMinutes(1));
 
-        var exception = Assert.Throws<DomainRuleViolationException>(() =>
-            assignment.Approve("admin.maker", Now.AddMinutes(2)));
-
-        Assert.Equal("authorization.maker_checker_required", exception.Code);
-        Assert.Equal(AuthorizationAssignmentStatus.PendingApproval, assignment.Status);
-    }
-
-    [Fact]
-    public void AdministratorCanApproveOwnAssignmentWhenPolicyAllowsIt()
-    {
-        var assignment = Create();
-        assignment.SubmitForApproval("admin.maker", Now.AddMinutes(1));
-
-        assignment.Approve("admin.maker", Now.AddMinutes(2), allowMakerApproval: true);
+        assignment.Approve("admin.maker", Now.AddMinutes(1));
 
         Assert.Equal(AuthorizationAssignmentStatus.Approved, assignment.Status);
         Assert.Equal("admin.maker", assignment.MakerId);
         Assert.Equal("admin.maker", assignment.CheckerId);
+        Assert.Equal(Now.AddMinutes(1), assignment.ApprovedAt);
+        Assert.Equal(2, assignment.Version);
+        Assert.Contains(assignment.Events, item => item.Type == "authorization_approved");
+    }
+
+    [Fact]
+    public void LegacyPendingAssignmentCanStillBeApprovedByItsMaker()
+    {
+        var assignment = Create();
+        assignment.SubmitForApproval("admin.maker", Now.AddMinutes(1));
+
+        assignment.Approve("admin.maker", Now.AddMinutes(2));
+
+        Assert.Equal(AuthorizationAssignmentStatus.Approved, assignment.Status);
+        Assert.Equal("admin.maker", assignment.CheckerId);
         Assert.Equal(Now.AddMinutes(2), assignment.ApprovedAt);
+    }
+
+    [Fact]
+    public void ApprovedAssignmentCannotBeApprovedAgain()
+    {
+        var assignment = Create();
+        assignment.Approve("admin.maker", Now.AddMinutes(1));
+
+        var exception = Assert.Throws<DomainRuleViolationException>(() =>
+            assignment.Approve("admin.other", Now.AddMinutes(2)));
+
+        Assert.Equal("authorization.invalid_transition", exception.Code);
+        Assert.Equal("admin.maker", assignment.CheckerId);
+        Assert.Equal(Now.AddMinutes(1), assignment.ApprovedAt);
+    }
+
+    [Fact]
+    public void ApprovalRequiresACheckerIdentityOnTheAuditTrail()
+    {
+        var assignment = Create();
+
+        var exception = Assert.Throws<DomainRuleViolationException>(() =>
+            assignment.Approve(" ", Now.AddMinutes(1)));
+
+        Assert.Equal("authorization.required_field", exception.Code);
+        Assert.Equal(AuthorizationAssignmentStatus.Draft, assignment.Status);
     }
 
     [Fact]

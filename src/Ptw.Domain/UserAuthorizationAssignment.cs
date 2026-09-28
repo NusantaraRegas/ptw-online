@@ -220,17 +220,14 @@ public sealed class UserAuthorizationAssignment
         Raise("authorization_submitted_for_approval", new { SubjectId, RoleCode, Version });
     }
 
-    public void Approve(string checkerId, DateTimeOffset now, bool allowMakerApproval = false)
+    // OPN-007 Amendment 2 (28 Sep 2026): the Administrator sets and approves assignments alone,
+    // so approval is allowed straight from Draft and the maker may also be the checker. Both
+    // identities stay on the audit trail; PendingApproval is still accepted for rows left by the
+    // earlier maker-checker flow.
+    public void Approve(string checkerId, DateTimeOffset now)
     {
-        EnsureStatus(AuthorizationAssignmentStatus.PendingApproval);
+        EnsureStatus(AuthorizationAssignmentStatus.Draft, AuthorizationAssignmentStatus.PendingApproval);
         var checker = Required(checkerId, "Checker");
-        if (!allowMakerApproval && string.Equals(checker, MakerId, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new DomainRuleViolationException(
-                "authorization.maker_checker_required",
-                "Pembuat assignment tidak boleh menyetujui assignment yang sama.");
-        }
-
         CheckerId = checker;
         ApprovedAt = now.ToUniversalTime();
         Status = AuthorizationAssignmentStatus.Approved;
@@ -242,13 +239,6 @@ public sealed class UserAuthorizationAssignment
     {
         EnsureStatus(AuthorizationAssignmentStatus.PendingApproval);
         var checker = Required(checkerId, "Checker");
-        if (string.Equals(checker, MakerId, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new DomainRuleViolationException(
-                "authorization.maker_checker_required",
-                "Pembuat assignment tidak boleh memeriksa assignment yang sama.");
-        }
-
         var normalizedReason = Required(reason, "Alasan pengembalian");
         CheckerId = checker;
         Status = AuthorizationAssignmentStatus.Draft;

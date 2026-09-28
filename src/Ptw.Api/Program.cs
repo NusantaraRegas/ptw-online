@@ -64,10 +64,6 @@ builder.Services.AddSingleton(
     builder.Configuration.GetSection("UserAuthorizationRoleProfiles")
         .Get<UserAuthorizationRoleProfileSettings>()
     ?? new UserAuthorizationRoleProfileSettings());
-builder.Services.AddSingleton(
-    builder.Configuration.GetSection("UserAuthorizationApproval")
-        .Get<UserAuthorizationApprovalSettings>()
-    ?? new UserAuthorizationApprovalSettings());
 builder.Services.AddPtwInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
 // Resolved from IConfiguration at first use rather than from builder.Configuration here, so sources
 // appended after the builder phase (the integration-test host does this) still apply. Login settings

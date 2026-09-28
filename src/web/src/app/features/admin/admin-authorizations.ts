@@ -145,24 +145,34 @@ export class AdminAuthorizations {
       error: (response) =>
         this.handleError(
           response,
-          editing ? 'Assignment gagal diperbarui.' : 'Draft assignment gagal dibuat.',
+          editing ? 'Assignment gagal diperbarui.' : 'Assignment gagal dibuat.',
         ),
     });
   }
 
-  protected submit(entry: UserAuthorization): void {
-    this.runCommand(entry, 'submit');
-  }
-
-  protected approve(entry: UserAuthorization): void {
-    this.runCommand(entry, 'approve');
+  /** Activates a row left as Draft or PendingApproval by the earlier maker-checker flow. */
+  protected activate(entry: UserAuthorization): void {
+    this.actingId.set(entry.id);
+    this.error.set('');
+    this.api
+      .approve(entry.id, entry.eTag)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (updated) => {
+          this.assignments.update((items) =>
+            items.map((item) => (item.id === updated.id ? updated : item)),
+          );
+          this.actingId.set('');
+        },
+        error: (response) => this.handleError(response, 'Assignment gagal diberlakukan.'),
+      });
   }
 
   protected statusLabel(status: UserAuthorization['status']): string {
     return {
-      DRAFT: 'Draft',
-      PENDING_APPROVAL: 'Menunggu persetujuan',
-      APPROVED: 'Disetujui',
+      DRAFT: 'Belum berlaku',
+      PENDING_APPROVAL: 'Belum berlaku',
+      APPROVED: 'Berlaku',
     }[status];
   }
 
@@ -211,25 +221,6 @@ export class AdminAuthorizations {
           this.error.set(response?.error?.detail ?? 'Assignment otorisasi gagal dimuat.');
         },
       });
-  }
-
-  private runCommand(entry: UserAuthorization, command: 'submit' | 'approve'): void {
-    this.actingId.set(entry.id);
-    this.error.set('');
-    const request =
-      command === 'submit'
-        ? this.api.submit(entry.id, entry.eTag)
-        : this.api.approve(entry.id, entry.eTag);
-    request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (updated) => {
-        this.assignments.update((items) =>
-          items.map((item) => (item.id === updated.id ? updated : item)),
-        );
-        this.actingId.set('');
-      },
-      error: (response) =>
-        this.handleError(response, 'Status assignment otorisasi gagal diperbarui.'),
-    });
   }
 
   private toDraft(): DirectUserAuthorizationDraft {

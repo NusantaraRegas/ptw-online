@@ -143,7 +143,8 @@ describe('AdminAuthorizations', () => {
       ) as HTMLButtonElement
     ).click();
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Edit draft assignment');
+    expect(fixture.nativeElement.textContent).toContain('Lengkapi dan berlakukan assignment');
+    expect(fixture.nativeElement.textContent).not.toContain('Ajukan');
     (fixture.nativeElement.querySelector('form') as HTMLFormElement).dispatchEvent(
       new Event('submit'),
     );

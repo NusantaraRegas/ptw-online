@@ -27,4 +27,27 @@ describe('UserDirectoryApi', () => {
     request.flush({});
     http.verify();
   });
+
+  it('sets a new local password with concurrency protection', () => {
+    TestBed.configureTestingModule({
+      providers: [UserDirectoryApi, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const api = TestBed.inject(UserDirectoryApi);
+    const http = TestBed.inject(HttpTestingController);
+    const user = {
+      subjectId: 'operator.one',
+      userName: 'operator.one',
+      displayName: 'Operator One',
+      eTag: '"user-v2"',
+    } as UserAccount;
+
+    api.resetPassword(user, 'SandiBaru2026Aman').subscribe();
+
+    const request = http.expectOne('/api/v1/admin/users/operator.one/password');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.headers.get('If-Match')).toBe('"user-v2"');
+    expect(request.request.body).toEqual({ password: 'SandiBaru2026Aman' });
+    request.flush({});
+    http.verify();
+  });
 });

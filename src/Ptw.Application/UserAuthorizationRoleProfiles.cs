@@ -1,10 +1,5 @@
 namespace Ptw.Application;
 
-public sealed class UserAuthorizationApprovalSettings
-{
-    public bool AllowAdministratorSelfApproval { get; init; }
-}
-
 public sealed class UserAuthorizationRoleProfileSettings
 {
     public Dictionary<string, UserAuthorizationRoleProfile> Roles { get; init; } =

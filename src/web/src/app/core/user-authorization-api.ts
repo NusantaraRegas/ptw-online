@@ -99,10 +99,7 @@ export class UserAuthorizationApi {
     return this.http.get<PagedRoleOptions>('/api/v1/admin/authorizations/direct-role-options');
   }
 
-  submit(id: string, eTag: string): Observable<UserAuthorization> {
-    return this.command(id, 'submit', eTag);
-  }
-
+  /** Activates a Draft or PendingApproval row left by the earlier maker-checker flow. */
   approve(id: string, eTag: string): Observable<UserAuthorization> {
     return this.command(id, 'approve', eTag);
   }

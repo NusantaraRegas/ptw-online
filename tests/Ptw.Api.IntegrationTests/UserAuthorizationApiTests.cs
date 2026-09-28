@@ -70,10 +70,33 @@ public sealed class UserAuthorizationApiTests(PtwApiFactory factory)
             ManagerActions,
             assignment.ActionCodes);
         Assert.DoesNotContain("admin.manage", assignment.ActionCodes);
+        // OPN-007 Amendment 2: the Administrator sets and approves in one save.
+        Assert.Equal("APPROVED", assignment.Status);
+        Assert.True(assignment.IsEffective);
+        Assert.Equal($"admin.direct-maker.{suffix}", assignment.MakerId);
+        Assert.Equal(assignment.MakerId, assignment.CheckerId);
+        Assert.NotNull(assignment.ApprovedAt);
 
-        using var update = new HttpRequestMessage(
+        // An approved assignment is no longer a draft, so the draft editor refuses it.
+        using var staleDraftEdit = new HttpRequestMessage(
             HttpMethod.Patch,
             $"/api/v1/admin/authorizations/{assignment.Id}/direct-draft")
+        {
+            Content = JsonContent.Create(new DirectUserAuthorizationDraftRequest(
+                assignment.SubjectId,
+                assignment.RoleCode,
+                assignment.LocationId,
+                assignment.EffectiveFrom,
+                assignment.EffectiveUntil))
+        };
+        staleDraftEdit.Headers.TryAddWithoutValidation("If-Match", assignment.ETag);
+        using var staleDraftEditResponse = await maker.SendAsync(staleDraftEdit);
+        Assert.Equal(HttpStatusCode.Conflict, staleDraftEditResponse.StatusCode);
+        Assert.Equal("authorization.invalid_transition", await ProblemCodeAsync(staleDraftEditResponse));
+
+        using var revise = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1/admin/authorizations/{assignment.Id}/revise-direct")
         {
             Content = JsonContent.Create(new
             {
@@ -85,42 +108,86 @@ public sealed class UserAuthorizationApiTests(PtwApiFactory factory)
                 ActionCodes = MaliciousActions
             })
         };
-        update.Headers.TryAddWithoutValidation("If-Match", assignment.ETag);
-        using var updateResponse = await maker.SendAsync(update);
-        updateResponse.EnsureSuccessStatusCode();
-        var updated = Required(
-            await updateResponse.Content.ReadFromJsonAsync<UserAuthorizationResponse>());
-
-        Assert.Equal("area.manager.updated." + suffix, updated.SubjectId);
-        Assert.Equal("AreaOwnerManager", updated.RoleCode);
-        Assert.Equal(location.Id, updated.LocationId);
-        Assert.DoesNotContain("admin.manage", updated.ActionCodes);
-        Assert.Contains("permit.approve-and-issue", updated.ActionCodes);
-
-        var pending = await SubmitAsync(maker, updated);
-        var approved = await ApproveAsync(maker, pending);
-        using var revise = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/api/v1/admin/authorizations/{approved.Id}/revise-direct")
-        {
-            Content = JsonContent.Create(new DirectUserAuthorizationDraftRequest(
-                approved.SubjectId,
-                approved.RoleCode,
-                approved.LocationId,
-                approved.EffectiveFrom,
-                approved.EffectiveUntil))
-        };
-        revise.Headers.TryAddWithoutValidation("If-Match", approved.ETag);
+        revise.Headers.TryAddWithoutValidation("If-Match", assignment.ETag);
         revise.Headers.TryAddWithoutValidation("Idempotency-Key", Guid.NewGuid().ToString("N"));
         using var reviseResponse = await maker.SendAsync(revise);
         reviseResponse.EnsureSuccessStatusCode();
         var revised = Required(
             await reviseResponse.Content.ReadFromJsonAsync<UserAuthorizationResponse>());
 
-        Assert.Equal("DRAFT", revised.Status);
-        Assert.Null(revised.CheckerId);
-        Assert.Null(revised.ApprovedAt);
-        Assert.False(revised.IsEffective);
+        Assert.Equal("area.manager.updated." + suffix, revised.SubjectId);
+        Assert.Equal("AreaOwnerManager", revised.RoleCode);
+        Assert.Equal(location.Id, revised.LocationId);
+        Assert.DoesNotContain("admin.manage", revised.ActionCodes);
+        Assert.Contains("permit.approve-and-issue", revised.ActionCodes);
+        Assert.Equal("APPROVED", revised.Status);
+        Assert.True(revised.IsEffective);
+        Assert.Equal(revised.MakerId, revised.CheckerId);
+        Assert.True(revised.Version > assignment.Version);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+            var versions = await db.UserAuthorizationVersions.AsNoTracking()
+                .Where(item => item.UserAuthorizationId == assignment.Id)
+                .Select(item => item.Version)
+                .ToListAsync(CancellationToken.None);
+            Assert.Contains(assignment.Version, versions);
+            Assert.Contains(revised.Version, versions);
+            var eventTypes = await db.ConfigurationAuditEvents.AsNoTracking()
+                .Where(item => item.AggregateId == assignment.Id)
+                .Select(item => item.EventType)
+                .ToListAsync(CancellationToken.None);
+            Assert.Contains("authorization_draft_created", eventTypes);
+            Assert.Contains("authorization_revision_started", eventTypes);
+            Assert.Equal(2, eventTypes.Count(item => item == "authorization_approved"));
+
+            var resolver = scope.ServiceProvider.GetRequiredService<IAuthorizationAssignmentResolver>();
+            var resolution = await resolver.ResolveAsync(
+                revised.SubjectId,
+                "permit.approve-and-issue",
+                location.Id,
+                DateTimeOffset.UtcNow,
+                CancellationToken.None);
+            Assert.True(resolution.IsResolved);
+            var previousSubject = await resolver.ResolveAsync(
+                assignment.SubjectId,
+                "permit.approve-and-issue",
+                location.Id,
+                DateTimeOffset.UtcNow,
+                CancellationToken.None);
+            Assert.False(previousSubject.IsResolved);
+        }
+
+        // A draft left by the earlier maker-checker flow is activated when saved through the form.
+        var legacyDraft = await CreateAsync(
+            maker,
+            Draft($"area.manager.legacy.{suffix}", "AreaOwnerManager", ManagerActions) with
+            {
+                LocationId = location.Id,
+                EffectiveFrom = DateTimeOffset.UtcNow,
+                EffectiveUntil = null
+            });
+        Assert.Equal("DRAFT", legacyDraft.Status);
+        using var update = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/api/v1/admin/authorizations/{legacyDraft.Id}/direct-draft")
+        {
+            Content = JsonContent.Create(new DirectUserAuthorizationDraftRequest(
+                legacyDraft.SubjectId,
+                "AreaOwnerManager",
+                location.Id,
+                DateTimeOffset.UtcNow,
+                null))
+        };
+        update.Headers.TryAddWithoutValidation("If-Match", legacyDraft.ETag);
+        using var updateResponse = await maker.SendAsync(update);
+        updateResponse.EnsureSuccessStatusCode();
+        var updated = Required(
+            await updateResponse.Content.ReadFromJsonAsync<UserAuthorizationResponse>());
+        Assert.Equal("APPROVED", updated.Status);
+        Assert.True(updated.IsEffective);
+        Assert.Equal(updated.MakerId, updated.CheckerId);
 
         using var missingLocation = await maker.PostAsJsonAsync(
             "/api/v1/admin/authorizations/direct",

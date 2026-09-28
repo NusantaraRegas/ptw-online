@@ -69,6 +69,15 @@ export class UserDirectoryApi {
     );
   }
 
+  /** Sets a new local password; the server validates the policy and ends the user's live sessions. */
+  resetPassword(user: UserAccount, password: string): Observable<UserAccount> {
+    return this.http.post<UserAccount>(
+      `/api/v1/admin/users/${encodeURIComponent(user.subjectId)}/password`,
+      { password },
+      { headers: new HttpHeaders({ 'If-Match': user.eTag }) },
+    );
+  }
+
   setActive(user: UserAccount, isActive: boolean): Observable<UserAccount> {
     return this.http.post<UserAccount>(
       `/api/v1/admin/users/${encodeURIComponent(user.subjectId)}/active`,

@@ -74,9 +74,13 @@ public sealed class ReferenceDataSeedMigrationTests(PtwApiFactory factory)
             });
             Assert.Empty(await db.UserCredentials.ToListAsync());
 
+            // 10 role assignments from the user seed plus 6 global Sponsor grants from
+            // SeedSponsorAssignmentsForAreaAndHsseStaff; only the ORF-scoped rows are checked here.
             var assignments = await db.UserAuthorizations.ToListAsync();
-            Assert.Equal(10, assignments.Count);
-            var areaScoped = assignments.Where(x => AreaScopedSubjects.Contains(x.SubjectId)).ToList();
+            Assert.Equal(16, assignments.Count);
+            var areaScoped = assignments
+                .Where(x => AreaScopedSubjects.Contains(x.SubjectId) && x.LocationId != null)
+                .ToList();
             Assert.Equal(4, areaScoped.Count);
             Assert.All(areaScoped, assignment =>
             {
@@ -85,7 +89,7 @@ public sealed class ReferenceDataSeedMigrationTests(PtwApiFactory factory)
                 Assert.Equal(3, assignment.Version);
             });
             var versions = await db.UserAuthorizationVersions.ToListAsync();
-            Assert.Equal(30, versions.Count);
+            Assert.Equal(48, versions.Count);
             var areaVersions = versions.Where(v => areaScoped.Any(x => x.Id == v.UserAuthorizationId)).ToList();
             Assert.Equal(12, areaVersions.Count);
             Assert.All(areaVersions, version =>
@@ -157,7 +161,7 @@ public sealed class ReferenceDataSeedMigrationTests(PtwApiFactory factory)
             Assert.DoesNotContain(locationEvents, x => x.AggregateId == existingOrfId);
 
             var areaScoped = await db.UserAuthorizations
-                .Where(x => AreaScopedSubjects.Contains(x.SubjectId))
+                .Where(x => AreaScopedSubjects.Contains(x.SubjectId) && x.LocationId != null)
                 .ToListAsync();
             Assert.Equal(4, areaScoped.Count);
             Assert.All(areaScoped, assignment => Assert.Equal(existingOrfId, assignment.LocationId));

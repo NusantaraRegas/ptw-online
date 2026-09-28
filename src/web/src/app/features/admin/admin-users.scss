@@ -124,6 +124,61 @@
   border: 1px solid #cddadd;
   border-radius: 8px;
 }
+.form-grid .wide {
+  grid-column: 1 / -1;
+}
+.password-field {
+  display: grid;
+  gap: 7px;
+}
+.password-field label {
+  display: block;
+}
+.password-field input {
+  width: 100%;
+  max-width: 480px;
+  box-sizing: border-box;
+}
+.password-field input[aria-invalid='true'] {
+  border-color: var(--nr-red-dark);
+}
+.field-help {
+  margin: 0;
+  color: var(--nr-muted);
+  font-size: 10px;
+}
+.password-requirements {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  color: #4c676e;
+  font-size: 10px;
+}
+.password-requirements li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.password-requirements li[data-met='true'] {
+  color: #1d6b3a;
+}
+.password-requirements .mark {
+  min-width: 10px;
+  font-weight: 800;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 .user-form footer {
   padding: 14px 20px;
   display: flex;

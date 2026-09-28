@@ -37,7 +37,7 @@
             {{
               editingUser()
                 ? 'Subject ID dan username adalah identitas tetap dan tidak dapat diubah.'
-                : 'Role diberikan terpisah melalui assignment yang disetujui Administrator.'
+                : 'Role diberikan terpisah melalui assignment yang ditetapkan Administrator.'
             }}
           </p>
         </div>
@@ -60,12 +60,55 @@
         <label
           ><span>Departemen</span><input formControlName="department" autocomplete="organization"
         /></label>
-        @if (!editingUser()) {
-          <label
-            ><span>Password awal</span
-            ><input type="password" formControlName="password" autocomplete="new-password"
-          /></label>
-        }
+        <div class="password-field wide">
+          <label for="user-password"
+            ><span>{{ editingUser() ? 'Password lokal baru' : 'Password awal' }}</span></label
+          >
+          <input
+            id="user-password"
+            type="password"
+            formControlName="password"
+            autocomplete="new-password"
+            [attr.aria-invalid]="passwordInvalid()"
+            aria-describedby="user-password-help user-password-requirements user-password-error"
+          />
+          <p id="user-password-help" class="field-help">
+            @if (editingUser()) {
+              Kosongkan bila password tidak diubah. Password baru mengakhiri semua sesi aktif
+              pengguna dan tidak memengaruhi login lewat Portal.
+            } @else {
+              Password lokal dipakai bila Portal tidak tersedia atau untuk akun break-glass.
+            }
+          </p>
+          <ul
+            id="user-password-requirements"
+            class="password-requirements"
+            aria-label="Syarat password"
+          >
+            @for (item of passwordRequirements(); track item.key) {
+              <li [attr.data-met]="item.met">
+                <span class="mark" aria-hidden="true">{{ item.met ? '✓' : '•' }}</span>
+                <span>{{ item.label }}</span>
+                <span class="visually-hidden">{{ item.met ? ' (terpenuhi)' : ' (belum)' }}</span>
+              </li>
+            }
+            <li>
+              <span class="mark" aria-hidden="true">•</span>
+              <span
+                >Tidak ada pada daftar kebocoran data publik (diperiksa server saat simpan)</span
+              >
+            </li>
+          </ul>
+          @if (passwordInvalid()) {
+            <span id="user-password-error" class="field-error" role="alert">
+              {{
+                form.controls.password.hasError('required')
+                  ? 'Password awal wajib diisi.'
+                  : 'Password belum memenuhi syarat di atas.'
+              }}
+            </span>
+          }
+        </div>
       </div>
       <footer>
         <button type="button" class="secondary-action" (click)="closeForm()">Batal</button

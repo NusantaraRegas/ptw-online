@@ -1,14 +1,31 @@
 import { DatePipe } from '@angular/common';
-import { Component, DestroyRef, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import {
+  AbstractControl,
+  FormBuilder,
+  ReactiveFormsModule,
+  ValidationErrors,
+  Validators,
+} from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { Observable, switchMap } from 'rxjs';
 import {
   CreateUser,
   UpdateUser,
   UserAccount,
   UserDirectoryApi,
 } from '../../core/user-directory-api';
+
+/** Mirrors the server policy so the form can explain requirements; the server remains the authority. */
+export interface PasswordRequirement {
+  key: 'length' | 'upper' | 'lower' | 'digit' | 'username';
+  label: string;
+  met: boolean;
+}
+
+const PASSWORD_MIN_LENGTH = 12;
+const PASSWORD_MAX_LENGTH = 128;
 
 @Component({
   selector: 'app-admin-users',
@@ -35,8 +52,21 @@ export class AdminUsers {
     displayName: ['', [Validators.required, Validators.maxLength(200)]],
     position: ['', Validators.maxLength(200)],
     department: ['', Validators.maxLength(200)],
-    password: ['', [Validators.required, Validators.minLength(12), Validators.maxLength(128)]],
+    password: [
+      '',
+      [Validators.required, (control: AbstractControl) => this.passwordPolicy(control)],
+    ],
   });
+
+  private readonly passwordValue = toSignal(this.form.controls.password.valueChanges, {
+    initialValue: '',
+  });
+  private readonly userNameValue = toSignal(this.form.controls.userName.valueChanges, {
+    initialValue: '',
+  });
+  protected readonly passwordRequirements = computed<PasswordRequirement[]>(() =>
+    evaluatePassword(this.passwordValue() ?? '', this.userNameValue() ?? ''),
+  );
 
   constructor() {
     this.load();
@@ -49,10 +79,10 @@ export class AdminUsers {
     }
     this.editingUser.set(null);
     this.form.reset();
+    // A new account always needs an initial local password.
     this.form.controls.password.setValidators([
       Validators.required,
-      Validators.minLength(12),
-      Validators.maxLength(128),
+      (control) => this.passwordPolicy(control),
     ]);
     this.form.controls.password.updateValueAndValidity();
     this.formOpen.set(true);
@@ -69,7 +99,9 @@ export class AdminUsers {
       department: user.department ?? '',
       password: '',
     });
-    this.form.controls.password.clearValidators();
+    // Editing keeps the current password unless a new one is typed; a typed value must still
+    // satisfy the same policy the server enforces.
+    this.form.controls.password.setValidators([(control) => this.passwordPolicy(control)]);
     this.form.controls.password.updateValueAndValidity();
     this.formOpen.set(true);
     this.error.set('');
@@ -85,16 +117,30 @@ export class AdminUsers {
   protected create(): void {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
-      this.error.set('Lengkapi identitas dan password pengguna.');
+      this.error.set(
+        this.form.controls.password.invalid && this.editingUser()
+          ? 'Password lokal baru belum memenuhi syarat.'
+          : 'Lengkapi identitas dan password pengguna.',
+      );
       return;
     }
 
     this.saving.set(true);
     this.error.set('');
     const editing = this.editingUser();
-    const request = editing
-      ? this.api.update(editing, this.toUpdateRequest())
-      : this.api.create(this.toRequest());
+    const newPassword = this.form.controls.password.value;
+    let request: Observable<UserAccount>;
+    if (editing) {
+      request = this.api.update(editing, this.toUpdateRequest());
+      if (newPassword) {
+        // The profile update returns a fresh ETag, which the password change must carry.
+        request = request.pipe(
+          switchMap((updated) => this.api.resetPassword(updated, newPassword)),
+        );
+      }
+    } else {
+      request = this.api.create(this.toRequest());
+    }
     request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (user) => {
         if (editing) {
@@ -108,7 +154,11 @@ export class AdminUsers {
       error: (response) =>
         this.handleError(
           response,
-          editing ? 'Profil pengguna gagal diperbarui.' : 'Pengguna gagal dibuat.',
+          editing
+            ? newPassword
+              ? 'Profil atau password pengguna gagal diperbarui.'
+              : 'Profil pengguna gagal diperbarui.'
+            : 'Pengguna gagal dibuat.',
         ),
     });
   }
@@ -148,6 +198,20 @@ export class AdminUsers {
 
   protected signatureUrl(user: UserAccount): string {
     return this.api.signatureUrl(user);
+  }
+
+  protected passwordInvalid(): boolean {
+    const control = this.form.controls.password;
+    return control.invalid && (control.touched || control.dirty);
+  }
+
+  private passwordPolicy(control: AbstractControl): ValidationErrors | null {
+    const value = String(control.value ?? '');
+    if (!value) return null;
+    const userName = String(this.form?.controls.userName.value ?? '');
+    return evaluatePassword(value, userName).every((item) => item.met)
+      ? null
+      : { passwordPolicy: true };
   }
 
   private load(): void {
@@ -200,4 +264,27 @@ export class AdminUsers {
     this.actingId.set('');
     this.error.set(response?.error?.detail ?? fallback);
   }
+}
+
+export function evaluatePassword(password: string, userName: string): PasswordRequirement[] {
+  const normalizedUserName = userName.trim();
+  const containsUserName =
+    normalizedUserName.length >= 4 &&
+    password.toLowerCase().includes(normalizedUserName.toLowerCase());
+  return [
+    {
+      key: 'length',
+      label: `${PASSWORD_MIN_LENGTH}-${PASSWORD_MAX_LENGTH} karakter`,
+      met: password.length >= PASSWORD_MIN_LENGTH && password.length <= PASSWORD_MAX_LENGTH,
+    },
+    // Unicode classes match the server's char.IsUpper/IsLower/IsDigit checks.
+    { key: 'upper', label: 'Memuat huruf besar', met: /\p{Lu}/u.test(password) },
+    { key: 'lower', label: 'Memuat huruf kecil', met: /\p{Ll}/u.test(password) },
+    { key: 'digit', label: 'Memuat angka', met: /\p{Nd}/u.test(password) },
+    {
+      key: 'username',
+      label: 'Tidak memuat username',
+      met: password.length > 0 && !containsUserName,
+    },
+  ];
 }

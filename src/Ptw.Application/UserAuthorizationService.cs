@@ -10,8 +10,7 @@ public sealed class UserAuthorizationService(
     ILocationMasterStore locationStore,
     IActorContext actorContext,
     IClock clock,
-    UserAuthorizationRoleProfileSettings roleProfiles,
-    UserAuthorizationApprovalSettings approvalSettings)
+    UserAuthorizationRoleProfileSettings roleProfiles)
 {
     public async Task<PagedResponse<UserAuthorizationResponse>> ListAsync(CancellationToken cancellationToken)
     {
@@ -47,17 +46,31 @@ public sealed class UserAuthorizationService(
         string correlationId,
         CancellationToken cancellationToken)
     {
-        EnsureAdministrator();
+        var actor = EnsureAdministrator();
         var controlled = ToControlledDirectDraft(request);
         await EnsureReferencesAsync(
             controlled,
             AuthorizationAssignmentKind.Direct,
             true,
             cancellationToken);
-        return await CreateAsync(
-            controlled,
-            correlationId,
-            cancellationToken);
+        // Controlled direct assignments are set and approved by the Administrator in one save
+        // (OPN-007 Amendment 2); the draft and approval events are still both recorded.
+        var now = clock.UtcNow;
+        var entry = UserAuthorizationAssignment.CreateDraft(
+            controlled.SubjectId,
+            controlled.RoleCode,
+            controlled.ActionCodes,
+            controlled.LocationId,
+            controlled.IncludeDescendants,
+            controlled.RequiredCompetencyCodes,
+            AuthorizationAssignmentKind.Direct,
+            null,
+            controlled.EffectiveFrom,
+            controlled.EffectiveUntil,
+            actor.Id,
+            now);
+        entry.Approve(actor.Id, now);
+        return ToResponse(await store.AddAsync(entry, actor, correlationId, cancellationToken));
     }
 
     public async Task<UserAuthorizationResponse> CreateAsync(
@@ -182,8 +195,9 @@ public sealed class UserAuthorizationService(
         await EnsureReferencesAsync(
             controlled,
             AuthorizationAssignmentKind.Direct,
-            false,
+            true,
             cancellationToken);
+        var now = clock.UtcNow;
         stored.Entry.UpdateDraft(
             controlled.SubjectId,
             controlled.RoleCode,
@@ -196,7 +210,9 @@ public sealed class UserAuthorizationService(
             controlled.EffectiveFrom,
             controlled.EffectiveUntil,
             actor.Id,
-            clock.UtcNow);
+            now);
+        // Saving a legacy draft through the controlled form activates it immediately.
+        stored.Entry.Approve(actor.Id, now);
         return ToResponse(await store.UpdateAsync(
             stored.Entry,
             expectedETag,
@@ -233,7 +249,7 @@ public sealed class UserAuthorizationService(
                 await EnsureReferencesAsync(
                     controlled,
                     AuthorizationAssignmentKind.Direct,
-                    false,
+                    true,
                     token);
                 entry.ReviseApproved(
                     controlled.SubjectId,
@@ -248,6 +264,9 @@ public sealed class UserAuthorizationService(
                     controlled.EffectiveUntil,
                     actor.Id,
                     now);
+                // The revision replaces the approved version atomically; the previous approval
+                // snapshot stays in the version history.
+                entry.Approve(actor.Id, now);
             },
             cancellationToken);
 
@@ -287,7 +306,7 @@ public sealed class UserAuthorizationService(
             async (entry, actor, now, token) =>
             {
                 await EnsureApprovalReferencesAsync(entry, token);
-                entry.Approve(actor.Id, now, approvalSettings.AllowAdministratorSelfApproval);
+                entry.Approve(actor.Id, now);
             },
             cancellationToken);
 
