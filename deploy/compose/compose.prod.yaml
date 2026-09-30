@@ -127,6 +127,8 @@ services:
       # Optional online breached-password check (k-anonymity range API); https only.
       PasswordPolicy__BreachCheck__Enabled: ${PTW_PASSWORD_BREACH_CHECK_ENABLED:-false}
       PortalAuth__BaseUrl: ${PTW_PORTAL_API_BASE_URL:?set the Portal API base URL}
+      PortalAuth__ServiceUserName: ${PTW_PORTAL_API_SERVICE_USERNAME:?set the Portal API service username in .env}
+      PortalAuth__ServicePassword: ${PTW_PORTAL_API_SERVICE_PASSWORD:?set the Portal API service password in .env}
       # Literal `true` only when the OPN-007 amendment applies (internal-network portal without TLS);
       # any other value keeps the https-only startup check.
       PortalAuth__AllowInsecureHttp: ${PTW_PORTAL_API_ALLOW_INSECURE_HTTP:-false}

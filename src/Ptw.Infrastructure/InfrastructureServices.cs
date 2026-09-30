@@ -49,7 +49,11 @@ public static class InfrastructureServices
             {
                 client.BaseAddress = portalAuthenticationSettings.BaseUrl;
                 client.Timeout = TimeSpan.FromSeconds(portalAuthenticationSettings.TimeoutSeconds);
-            });
+            })
+                // ADAuth's fixed upstream contract puts the employee password in its query string.
+                // Remove the framework HTTP logger so request URLs can never disclose credentials.
+                // PortalApiDirectoryAuthenticator emits bounded status-only diagnostics itself.
+                .RemoveAllLoggers();
             services.AddTransient<IDirectoryAuthenticator>(provider =>
                 provider.GetRequiredService<PortalApiDirectoryAuthenticator>());
         }

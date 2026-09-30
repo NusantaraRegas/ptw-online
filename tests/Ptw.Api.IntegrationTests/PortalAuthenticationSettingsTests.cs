@@ -6,15 +6,18 @@ namespace Ptw.Api.IntegrationTests;
 public sealed class PortalAuthenticationSettingsTests
 {
     [Fact]
-    public void BaseUrlAloneEnablesThePortal()
+    public void CompleteConfigurationEnablesThePortal()
     {
         var settings = PortalAuthenticationSettings.FromConfiguration(
-            Build(new Dictionary<string, string?> { ["PortalAuth:BaseUrl"] = "https://portal.example.com" }),
+            Build(EnabledValues(("PortalAuth:BaseUrl", "https://portal.example.com"))),
             isDevelopment: false);
 
         Assert.True(settings.Enabled);
         Assert.Equal(new Uri("https://portal.example.com/"), settings.BaseUrl);
         Assert.Equal(new Uri("https://portal.example.com/api/v1/User/SecureAuth"), settings.AuthenticateEndpoint);
+        Assert.Equal(new Uri("https://portal.example.com/api/v1/User/ADAuth"), settings.DirectoryAuthenticateEndpoint);
+        Assert.Equal("portal-service", settings.ServiceUserName);
+        Assert.Equal("service-secret", settings.ServicePassword);
         Assert.Equal(10, settings.TimeoutSeconds);
     }
 
@@ -43,26 +46,45 @@ public sealed class PortalAuthenticationSettingsTests
         Assert.False(settings.Enabled);
     }
 
+    [Theory]
+    [InlineData(null, "service-secret")]
+    [InlineData("", "service-secret")]
+    [InlineData("portal-service", null)]
+    [InlineData("portal-service", "")]
+    public void EnabledPortalRequiresServiceCredential(string? userName, string? password)
+    {
+        Assert.Throws<InvalidOperationException>(() => PortalAuthenticationSettings.FromConfiguration(
+            Build(new Dictionary<string, string?>
+            {
+                ["PortalAuth:BaseUrl"] = "https://portal.example.com",
+                ["PortalAuth:ServiceUserName"] = userName,
+                ["PortalAuth:ServicePassword"] = password
+            }),
+            isDevelopment: false));
+    }
+
     [Fact]
     public void BasePathAndCustomAuthenticatePathAreComposed()
     {
         var settings = PortalAuthenticationSettings.FromConfiguration(
-            Build(new Dictionary<string, string?>
-            {
-                ["PortalAuth:BaseUrl"] = "https://portal.example.com/portal",
-                ["PortalAuth:AuthenticatePath"] = "/api/v2/User/SecureAuth",
-                ["PortalAuth:TimeoutSeconds"] = "3"
-            }),
+            Build(EnabledValues(
+                ("PortalAuth:BaseUrl", "https://portal.example.com/portal"),
+                ("PortalAuth:AuthenticatePath", "/api/v2/User/SecureAuth"),
+                ("PortalAuth:DirectoryAuthenticatePath", "/api/v2/User/ADAuth"),
+                ("PortalAuth:TimeoutSeconds", "3"))),
             isDevelopment: false);
 
         Assert.Equal(new Uri("https://portal.example.com/portal/api/v2/User/SecureAuth"), settings.AuthenticateEndpoint);
+        Assert.Equal(
+            new Uri("https://portal.example.com/portal/api/v2/User/ADAuth"),
+            settings.DirectoryAuthenticateEndpoint);
         Assert.Equal(3, settings.TimeoutSeconds);
     }
 
     [Fact]
     public void ClearTextBaseUrlIsOnlyAcceptedInDevelopment()
     {
-        var values = new Dictionary<string, string?> { ["PortalAuth:BaseUrl"] = "http://local.api.portal.com/" };
+        var values = EnabledValues(("PortalAuth:BaseUrl", "http://local.api.portal.com/"));
 
         var development = PortalAuthenticationSettings.FromConfiguration(Build(values), isDevelopment: true);
         Assert.True(development.Enabled);
@@ -79,11 +101,9 @@ public sealed class PortalAuthenticationSettingsTests
         // OPN-007 amendment: production may reach an internal-network portal over http only when the
         // operator sets the literal opt-in; anything else keeps the fail-closed default.
         var accepted = PortalAuthenticationSettings.FromConfiguration(
-            Build(new Dictionary<string, string?>
-            {
-                ["PortalAuth:BaseUrl"] = "http://10.10.10.12:7100",
-                ["PortalAuth:AllowInsecureHttp"] = "true"
-            }),
+            Build(EnabledValues(
+                ("PortalAuth:BaseUrl", "http://10.10.10.12:7100"),
+                ("PortalAuth:AllowInsecureHttp", "true"))),
             isDevelopment: false);
 
         Assert.True(accepted.Enabled);
@@ -91,11 +111,9 @@ public sealed class PortalAuthenticationSettingsTests
         Assert.Equal(new Uri("http://10.10.10.12:7100/api/v1/User/SecureAuth"), accepted.AuthenticateEndpoint);
 
         var httpsWithOptIn = PortalAuthenticationSettings.FromConfiguration(
-            Build(new Dictionary<string, string?>
-            {
-                ["PortalAuth:BaseUrl"] = "https://portal.example.com",
-                ["PortalAuth:AllowInsecureHttp"] = "true"
-            }),
+            Build(EnabledValues(
+                ("PortalAuth:BaseUrl", "https://portal.example.com"),
+                ("PortalAuth:AllowInsecureHttp", "true"))),
             isDevelopment: false);
         Assert.False(httpsWithOptIn.InsecureHttpAccepted);
     }
@@ -108,11 +126,9 @@ public sealed class PortalAuthenticationSettingsTests
     public void ClearTextBaseUrlOutsideDevelopmentRejectsNonLiteralOptIn(string allowInsecureHttp)
     {
         Assert.Throws<InvalidOperationException>(() => PortalAuthenticationSettings.FromConfiguration(
-            Build(new Dictionary<string, string?>
-            {
-                ["PortalAuth:BaseUrl"] = "http://10.10.10.12:7100",
-                ["PortalAuth:AllowInsecureHttp"] = allowInsecureHttp
-            }),
+            Build(EnabledValues(
+                ("PortalAuth:BaseUrl", "http://10.10.10.12:7100"),
+                ("PortalAuth:AllowInsecureHttp", allowInsecureHttp))),
             isDevelopment: false));
     }
 
@@ -123,7 +139,7 @@ public sealed class PortalAuthenticationSettingsTests
     public void InvalidBaseUrlIsRejected(string baseUrl)
     {
         Assert.Throws<InvalidOperationException>(() => PortalAuthenticationSettings.FromConfiguration(
-            Build(new Dictionary<string, string?> { ["PortalAuth:BaseUrl"] = baseUrl }),
+            Build(EnabledValues(("PortalAuth:BaseUrl", baseUrl))),
             isDevelopment: true));
     }
 
@@ -131,19 +147,27 @@ public sealed class PortalAuthenticationSettingsTests
     public void AbsoluteAuthenticatePathIsRejected()
     {
         Assert.Throws<InvalidOperationException>(() => PortalAuthenticationSettings.FromConfiguration(
-            Build(new Dictionary<string, string?>
-            {
-                ["PortalAuth:BaseUrl"] = "https://portal.example.com",
-                ["PortalAuth:AuthenticatePath"] = "https://elsewhere.example.com/SecureAuth"
-            }),
+            Build(EnabledValues(
+                ("PortalAuth:BaseUrl", "https://portal.example.com"),
+                ("PortalAuth:AuthenticatePath", "https://elsewhere.example.com/SecureAuth"))),
             isDevelopment: true));
     }
 
     [Fact]
-    public void ShippedDevelopmentConfigurationEnablesThePortal()
+    public void AbsoluteDirectoryAuthenticatePathIsRejected()
     {
-        // Regression: a base appsettings.json that pins PortalAuth:Enabled=false would silently override
-        // a Development file that only fills BaseUrl, so the layered result is asserted here.
+        Assert.Throws<InvalidOperationException>(() => PortalAuthenticationSettings.FromConfiguration(
+            Build(EnabledValues(
+                ("PortalAuth:BaseUrl", "https://portal.example.com"),
+                ("PortalAuth:DirectoryAuthenticatePath", "https://elsewhere.example.com/ADAuth"))),
+            isDevelopment: true));
+    }
+
+    [Fact]
+    public void ShippedDevelopmentConfigurationKeepsPortalDisabledUntilSecretsAreInjected()
+    {
+        // No service credential belongs in a tracked appsettings file. Compose/user-secrets inject the
+        // complete PortalAuth configuration when directory login is wanted in Development.
         var configuration = new ConfigurationBuilder()
             .SetBasePath(FindApiProjectDirectory())
             .AddJsonFile("appsettings.json", optional: false)
@@ -152,9 +176,7 @@ public sealed class PortalAuthenticationSettingsTests
 
         var settings = PortalAuthenticationSettings.FromConfiguration(configuration, isDevelopment: true);
 
-        Assert.True(settings.Enabled);
-        Assert.NotNull(settings.AuthenticateEndpoint);
-        Assert.EndsWith("/api/v1/User/SecureAuth", settings.AuthenticateEndpoint.AbsoluteUri, StringComparison.Ordinal);
+        Assert.False(settings.Enabled);
     }
 
     [Fact]
@@ -170,6 +192,22 @@ public sealed class PortalAuthenticationSettingsTests
 
     private static IConfiguration Build(Dictionary<string, string?> values) =>
         new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+
+    private static Dictionary<string, string?> EnabledValues(
+        params (string Key, string? Value)[] additionalValues)
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["PortalAuth:ServiceUserName"] = "portal-service",
+            ["PortalAuth:ServicePassword"] = "service-secret"
+        };
+        foreach (var (key, value) in additionalValues)
+        {
+            values[key] = value;
+        }
+
+        return values;
+    }
 
     private static string FindApiProjectDirectory()
     {

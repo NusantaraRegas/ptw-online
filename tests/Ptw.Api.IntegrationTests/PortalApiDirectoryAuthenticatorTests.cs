@@ -12,52 +12,91 @@ public sealed class PortalApiDirectoryAuthenticatorTests
     {
         Enabled = true,
         BaseUrl = new Uri("http://local.api.portal.com/"),
+        ServiceUserName = "portal-service",
+        ServicePassword = "Service-Secret",
         TimeoutSeconds = 5
     };
 
     [Fact]
-    public async Task PostsPortalContractAndSucceedsOnToken()
+    public async Task ObtainsServiceTokenThenPostsBearerProtectedDirectoryContract()
     {
-        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, """{"token":"eyJhbGciOiJIUzI1NiJ9.x.y"}"""));
+        var handler = new StubHandler(request => request.Uri?.AbsolutePath switch
+        {
+            "/api/v1/User/SecureAuth" => Json(HttpStatusCode.OK, """{"token":"service.jwt.token"}"""),
+            "/api/v1/User/ADAuth" => Json(HttpStatusCode.OK, "true"),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
 
-        var result = await Create(handler).AuthenticateAsync(" john.doe ", "Secret-1", CancellationToken.None);
+        var result = await Create(handler).AuthenticateAsync(
+            " john.doe ",
+            "Secret@1\\value",
+            CancellationToken.None);
 
         Assert.Equal(DirectoryAuthenticationResult.Succeeded, result);
-        var request = Assert.Single(handler.Requests);
-        Assert.Equal(HttpMethod.Post, request.Method);
-        Assert.Equal(new Uri("http://local.api.portal.com/api/v1/User/SecureAuth"), request.Uri);
-        Assert.Equal("application/json", request.MediaType);
-        using var body = JsonDocument.Parse(request.Body);
-        Assert.Equal("john.doe", body.RootElement.GetProperty("UserName").GetString());
-        Assert.Equal("Secret-1", body.RootElement.GetProperty("Password").GetString());
-        Assert.Equal(2, body.RootElement.EnumerateObject().Count());
+        Assert.Equal(2, handler.Requests.Count);
+
+        var serviceRequest = handler.Requests[0];
+        Assert.Equal(HttpMethod.Post, serviceRequest.Method);
+        Assert.Equal(new Uri("http://local.api.portal.com/api/v1/User/SecureAuth"), serviceRequest.Uri);
+        Assert.Equal("application/json", serviceRequest.MediaType);
+        Assert.Null(serviceRequest.AuthorizationScheme);
+        using (var body = JsonDocument.Parse(serviceRequest.Body))
+        {
+            Assert.Equal("portal-service", body.RootElement.GetProperty("UserName").GetString());
+            Assert.Equal("Service-Secret", body.RootElement.GetProperty("Password").GetString());
+            Assert.Equal(2, body.RootElement.EnumerateObject().Count());
+        }
+
+        var directoryRequest = handler.Requests[1];
+        Assert.Equal(HttpMethod.Post, directoryRequest.Method);
+        Assert.Equal("/api/v1/User/ADAuth", directoryRequest.Uri?.AbsolutePath);
+        Assert.Equal("?userName=john.doe&password=Secret%401%5Cvalue", directoryRequest.Uri?.Query);
+        Assert.Equal("Bearer", directoryRequest.AuthorizationScheme);
+        Assert.Equal("service.jwt.token", directoryRequest.AuthorizationParameter);
+        Assert.Equal(0, directoryRequest.ContentLength);
+        Assert.Equal(string.Empty, directoryRequest.Body);
     }
 
     [Fact]
-    public async Task UnauthorizedMeansInvalidCredentials()
+    public async Task DirectoryFalseMeansInvalidCredentials()
     {
-        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)
-        {
-            Content = new StringContent("Invalid credentials")
-        });
+        var handler = TokenThen(Json(HttpStatusCode.OK, "false"));
 
         var result = await Create(handler).AuthenticateAsync("john.doe", "wrong", CancellationToken.None);
 
         Assert.Equal(DirectoryAuthenticationResult.InvalidCredentials, result);
+        Assert.Equal(2, handler.Requests.Count);
     }
 
     [Theory]
     [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.Unauthorized)]
     [InlineData(HttpStatusCode.InternalServerError)]
     [InlineData(HttpStatusCode.BadGateway)]
-    [InlineData(HttpStatusCode.NotFound)]
-    public async Task OtherStatusCodesMeanUnavailable(HttpStatusCode statusCode)
+    public async Task ServiceAuthenticationFailureMeansUnavailable(HttpStatusCode statusCode)
     {
         var handler = new StubHandler(_ => new HttpResponseMessage(statusCode));
 
         var result = await Create(handler).AuthenticateAsync("john.doe", "Secret-1", CancellationToken.None);
 
         Assert.Equal(DirectoryAuthenticationResult.Unavailable, result);
+        Assert.Single(handler.Requests);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task DirectoryUnexpectedStatusMeansUnavailable(HttpStatusCode statusCode)
+    {
+        var handler = TokenThen(new HttpResponseMessage(statusCode));
+
+        var result = await Create(handler).AuthenticateAsync("john.doe", "Secret-1", CancellationToken.None);
+
+        Assert.Equal(DirectoryAuthenticationResult.Unavailable, result);
+        Assert.Equal(2, handler.Requests.Count);
     }
 
     [Theory]
@@ -65,9 +104,23 @@ public sealed class PortalApiDirectoryAuthenticatorTests
     [InlineData("""{"other":"value"}""")]
     [InlineData("")]
     [InlineData("not json")]
-    public async Task SuccessWithoutTokenMeansUnavailable(string body)
+    public async Task ServiceSuccessWithoutTokenMeansUnavailable(string body)
     {
         var handler = new StubHandler(_ => Json(HttpStatusCode.OK, body));
+
+        var result = await Create(handler).AuthenticateAsync("john.doe", "Secret-1", CancellationToken.None);
+
+        Assert.Equal(DirectoryAuthenticationResult.Unavailable, result);
+        Assert.Single(handler.Requests);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not json")]
+    [InlineData("{}")]
+    public async Task InvalidDirectoryResponseMeansUnavailable(string body)
+    {
+        var handler = TokenThen(Json(HttpStatusCode.OK, body));
 
         var result = await Create(handler).AuthenticateAsync("john.doe", "Secret-1", CancellationToken.None);
 
@@ -137,13 +190,28 @@ public sealed class PortalApiDirectoryAuthenticatorTests
         Assert.Empty(handler.Requests);
     }
 
+    private static StubHandler TokenThen(HttpResponseMessage directoryResponse)
+    {
+        var requestNumber = 0;
+        return new StubHandler(_ => ++requestNumber == 1
+            ? Json(HttpStatusCode.OK, """{"token":"service.jwt.token"}""")
+            : directoryResponse);
+    }
+
     private static PortalApiDirectoryAuthenticator Create(StubHandler handler) =>
         new(new HttpClient(handler), Settings, NullLogger<PortalApiDirectoryAuthenticator>.Instance);
 
     private static HttpResponseMessage Json(HttpStatusCode statusCode, string body) =>
         new(statusCode) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
 
-    private sealed record CapturedRequest(HttpMethod Method, Uri? Uri, string? MediaType, string Body);
+    private sealed record CapturedRequest(
+        HttpMethod Method,
+        Uri? Uri,
+        string? MediaType,
+        string Body,
+        string? AuthorizationScheme,
+        string? AuthorizationParameter,
+        long? ContentLength);
 
     private sealed class StubHandler(Func<CapturedRequest, HttpResponseMessage> respond) : HttpMessageHandler
     {
@@ -160,7 +228,10 @@ public sealed class PortalApiDirectoryAuthenticatorTests
                 request.Method,
                 request.RequestUri,
                 request.Content?.Headers.ContentType?.MediaType,
-                body);
+                body,
+                request.Headers.Authorization?.Scheme,
+                request.Headers.Authorization?.Parameter,
+                request.Content?.Headers.ContentLength);
             Requests.Add(captured);
             return respond(captured);
         }

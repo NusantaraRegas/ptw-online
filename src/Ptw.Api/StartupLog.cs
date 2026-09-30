@@ -12,7 +12,7 @@ internal static class StartupLog
         LoggerMessage.Define<string>(
             LogLevel.Warning,
             new EventId(1100, "InsecurePortalHttpAccepted"),
-            "PortalAuth:AllowInsecureHttp=true: kredensial login diteruskan ke Portal API tanpa TLS ({Endpoint}). "
+            "PortalAuth:AllowInsecureHttp=true: kredensial service dan pengguna diteruskan ke Portal API tanpa TLS ({Endpoint}). "
             + "Risiko diterima melalui amendemen OPN-007; hanya untuk portal di jaringan internal.");
 
     public static void WarnOnAcceptedRisks(ILogger logger, PortalAuthenticationSettings portal)
