@@ -51,9 +51,9 @@ describe('PermitList', () => {
     const http = TestBed.inject(HttpTestingController);
 
     http.expectOne('/api/v1/me').flush({
-      userId: 'contractor.demo',
+      userId: 'requester.demo',
       displayName: 'Kontraktor Demo',
-      roles: ['Contractor'],
+      roles: ['Requester'],
       locationScopes: ['*'],
       competencyCodes: [],
       isDevelopmentIdentity: true,

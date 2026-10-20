@@ -50,27 +50,27 @@ public sealed class Permit
         var permit = new Permit(Guid.CreateVersion7(), draft, now);
         if (initiation is not null)
         {
-            if (string.IsNullOrWhiteSpace(initiation.ContractorId))
+            if (string.IsNullOrWhiteSpace(initiation.RequesterId))
             {
                 throw new DomainRuleViolationException(
-                    "permit.initiation.contractor_required",
-                    "Identitas Kontraktor pengisi PTW awal wajib tersedia.");
+                    "permit.initiation.requester_required",
+                    "Identitas Pemohon pengisi PTW awal wajib tersedia.");
             }
 
             permit.Initiation = initiation with
             {
-                ContractorId = initiation.ContractorId.Trim(),
+                RequesterId = initiation.RequesterId.Trim(),
                 Status = PermitInitiationStatus.Drafting,
                 CreatedAt = now.ToUniversalTime(),
-                ContractorName = NormalizeOptional(initiation.ContractorName)
+                RequesterName = NormalizeOptional(initiation.RequesterName)
             };
         }
 
         permit.Raise("permit_draft_created", new
         {
             permit.Version,
-            InitiatedBy = permit.Initiation?.ContractorId,
-            InitiatedByName = permit.Initiation?.ContractorName
+            InitiatedBy = permit.Initiation?.RequesterId,
+            InitiatedByName = permit.Initiation?.RequesterName
         });
         return permit;
     }
@@ -101,7 +101,7 @@ public sealed class Permit
         Touch(now);
         Raise("permit_initial_submitted", new
         {
-            ContractorId = Initiation.ContractorId,
+            RequesterId = Initiation.RequesterId,
             SponsorId = Draft.SponsorId,
             PermitVersion = Version
         });
@@ -124,7 +124,7 @@ public sealed class Permit
         {
             ApprovedBy = actorId.Trim(),
             Statement = statement.Trim(),
-            ContractorId = Initiation.ContractorId,
+            RequesterId = Initiation.RequesterId,
             PermitVersion = Version
         });
     }
@@ -146,7 +146,7 @@ public sealed class Permit
         {
             ReturnedBy = actorId.Trim(),
             Reason = reason.Trim(),
-            ContractorId = Initiation.ContractorId,
+            RequesterId = Initiation.RequesterId,
             PermitVersion = Version
         });
     }
@@ -167,7 +167,7 @@ public sealed class Permit
         {
             RejectedBy = actorId.Trim(),
             Reason = reason.Trim(),
-            ContractorId = Initiation.ContractorId,
+            RequesterId = Initiation.RequesterId,
             PermitVersion = Version
         });
     }
@@ -538,7 +538,7 @@ public sealed class Permit
         {
             throw new DomainRuleViolationException(
                 "permit.submit.initial_approval_required",
-                "PTW awal dari Kontraktor harus disetujui Sponsor sebelum diajukan kepada PIC HSE.");
+                "PTW awal dari Pemohon harus disetujui Sponsor sebelum diajukan kepada PIC HSE.");
         }
 
         if (isResubmission && !readiness.RevisionSelfCheckConfirmed)
@@ -1396,14 +1396,14 @@ public sealed class Permit
         {
             throw new DomainRuleViolationException(
                 "permit.initiation.not_contractor_initiated",
-                "PTW ini tidak diinisiasi oleh Kontraktor.");
+                "PTW ini tidak diinisiasi oleh Pemohon.");
         }
 
-        if (!string.Equals(Initiation.ContractorId, actorId?.Trim(), StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(Initiation.RequesterId, actorId?.Trim(), StringComparison.OrdinalIgnoreCase))
         {
             throw new DomainRuleViolationException(
-                "permit.initiation.contractor_mismatch",
-                "Hanya Kontraktor pengisi PTW awal yang dapat mengajukannya kepada Sponsor.");
+                "permit.initiation.requester_mismatch",
+                "Hanya Pemohon pengisi PTW awal yang dapat mengajukannya kepada Sponsor.");
         }
 
         return Initiation;
@@ -1415,7 +1415,7 @@ public sealed class Permit
         {
             throw new DomainRuleViolationException(
                 "permit.initiation.not_contractor_initiated",
-                "PTW ini tidak diinisiasi oleh Kontraktor.");
+                "PTW ini tidak diinisiasi oleh Pemohon.");
         }
 
         if (Initiation.Status != PermitInitiationStatus.AwaitingSponsorApproval)
@@ -1429,7 +1429,7 @@ public sealed class Permit
         {
             throw new DomainRuleViolationException(
                 "permit.initiation.sponsor_mismatch",
-                "Hanya Sponsor yang dipilih Kontraktor yang dapat memutuskan PTW awal ini.");
+                "Hanya Sponsor yang dipilih Pemohon yang dapat memutuskan PTW awal ini.");
         }
 
         return Initiation;

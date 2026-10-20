@@ -36,9 +36,9 @@ public sealed class UserDirectoryService(
     public async Task<PagedResponse<SponsorOptionResponse>> ListSponsorOptionsAsync(CancellationToken cancellationToken)
     {
         var actor = actorContext.Current;
-        if (!actor.Roles.Overlaps(["Contractor", "Sponsor", "Administrator"]))
+        if (!actor.Roles.Overlaps(["Requester", "Sponsor", "Administrator"]))
         {
-            throw new UnauthorizedAccessException("Daftar Sponsor hanya tersedia untuk Kontraktor, Sponsor, dan Administrator.");
+            throw new UnauthorizedAccessException("Daftar Sponsor hanya tersedia untuk Pemohon, Sponsor, dan Administrator.");
         }
 
         var sponsors = await store.ListActiveWithRoleAsync("Sponsor", clock.UtcNow, cancellationToken);

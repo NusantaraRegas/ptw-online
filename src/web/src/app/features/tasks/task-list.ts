@@ -43,7 +43,7 @@ export class TaskList {
         AREA_CLOSE_VERIFICATION: 'TUTUP',
         SPONSOR_REVISION: 'REVISI',
         SPONSOR_INITIAL_APPROVAL: 'INISIAL',
-        CONTRACTOR_INITIAL_REVISION: 'INISIAL',
+        REQUESTER_INITIAL_REVISION: 'INISIAL',
       }[type] ?? 'PTW'
     );
   }

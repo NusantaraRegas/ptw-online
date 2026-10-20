@@ -26,15 +26,30 @@ export interface CurrentIdentity {
 const ROLE_LABELS: Readonly<Record<string, string>> = {
   Administrator: 'Administrator',
   Sponsor: 'Sponsor',
-  Contractor: 'Kontraktor',
+  Requester: 'Pemohon PTW',
   HSEValidator: 'PIC HSE',
   AreaOwnerSeniorOfficer: 'SO / Officer Pemilik Wilayah',
   AreaOwnerManager: 'Manager Pemilik Wilayah',
 };
 
-export function isContractorOnly(roles: readonly string[]): boolean {
+/** Any account may hold the Requester role; Contractor accounts hold only it. */
+export function isRequester(roles: readonly string[]): boolean {
+  return roles.includes('Requester');
+}
+
+export function isRequesterOnly(roles: readonly string[]): boolean {
   return (
-    roles.includes('Contractor') && !roles.includes('Sponsor') && !roles.includes('Administrator')
+    isRequester(roles) &&
+    !roles.some((role) =>
+      [
+        'Sponsor',
+        'Administrator',
+        'HSEValidator',
+        'AreaOwnerSeniorOfficer',
+        'AreaOwnerManager',
+        'Auditor',
+      ].includes(role),
+    )
   );
 }
 
@@ -105,10 +120,18 @@ export const DEVELOPMENT_IDENTITIES: DevelopmentIdentityProfile[] = [
     competencyCodes: [],
   },
   {
-    key: 'contractor',
-    userId: 'contractor.demo',
-    displayName: 'Kontraktor Demo',
-    roles: ['Contractor'],
+    key: 'requester',
+    userId: 'requester.demo',
+    displayName: 'Pemohon (Kontraktor) Demo',
+    roles: ['Requester'],
+    locationScopes: ['*'],
+    competencyCodes: [],
+  },
+  {
+    key: 'sponsor-requester',
+    userId: 'sponsor.requester.demo',
+    displayName: 'Sponsor dan Pemohon Demo',
+    roles: ['Sponsor', 'Requester'],
     locationScopes: ['*'],
     competencyCodes: [],
   },

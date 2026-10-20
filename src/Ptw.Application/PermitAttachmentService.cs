@@ -307,13 +307,13 @@ public sealed class PermitAttachmentService(
         var stored = await permitStore.FindAsync(permitId, cancellationToken)
             ?? throw new ResourceNotFoundException("Permit", permitId);
         var actor = actorContext.Current;
-        if (PermitAccess.IsContractorOnly(actor))
+        if (PermitAccess.IsRequester(actor) && PermitAccess.IsInitiator(actor, stored.Permit))
         {
             // A Contractor manages attachments only on its own initial PTW and only while the
             // draft is still in its hands (not while the Sponsor is reviewing it).
-            if (!PermitAccess.ContractorMayEditDraft(actor, stored.Permit))
+            if (!PermitAccess.RequesterMayEditDraft(actor, stored.Permit))
             {
-                throw new UnauthorizedAccessException("Lampiran PTW berada di luar kewenangan Kontraktor.");
+                throw new UnauthorizedAccessException("Lampiran PTW berada di luar kewenangan Pemohon.");
             }
 
             EnsureLocationScope(actor, stored.Permit.Draft.LocationId);
@@ -360,14 +360,15 @@ public sealed class PermitAttachmentService(
         {
             throw new UnauthorizedAccessException("PTW berada di luar cakupan pemantauan pengguna.");
         }
-        if (PermitAccess.IsContractorOnly(actor) && !PermitAccess.IsInitiator(actor, stored.Permit))
+        if (PermitAccess.IsRequesterOnly(actor) && !PermitAccess.IsInitiator(actor, stored.Permit))
         {
-            throw new UnauthorizedAccessException("Lampiran PTW berada di luar kewenangan Kontraktor.");
+            throw new UnauthorizedAccessException("Lampiran PTW berada di luar kewenangan Pemohon.");
         }
         if (actor.Roles.Contains("Sponsor")
             && !actor.Roles.Overlaps(
                 ["HSEValidator", "AreaOwnerSeniorOfficer", "AreaOwnerManager", "Administrator"])
-            && !string.Equals(actor.Id, stored.Permit.Draft.SponsorId, StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(actor.Id, stored.Permit.Draft.SponsorId, StringComparison.OrdinalIgnoreCase)
+            && !PermitAccess.IsInitiator(actor, stored.Permit))
         {
             throw new UnauthorizedAccessException("Lampiran PTW berada di luar kepemilikan Sponsor.");
         }

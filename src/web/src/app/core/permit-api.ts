@@ -135,8 +135,8 @@ export type PermitInitiationStatus =
 /** Contractor-initiated draft awaiting or holding the Sponsor's initial approval. */
 export interface PermitInitiation {
   initiated: boolean;
-  contractorId: string | null;
-  contractorName: string | null;
+  requesterId: string | null;
+  requesterName: string | null;
   status: PermitInitiationStatus | null;
   submittedToSponsorAt: string | null;
   sponsorStatement: string | null;

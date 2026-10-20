@@ -2,7 +2,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { IdentityApi, isContractorOnly } from '../../core/development-identity';
+import { IdentityApi, isRequester } from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
 import {
   PermitApi,
@@ -29,7 +29,7 @@ function localDate(hoursFromNow: number): string {
         <p class="eyebrow">Permit Management</p>
         <h1>Buat draft PTW</h1>
         <p class="subtitle">
-          @if (isContractor()) {
+          @if (isRequester()) {
             PTW awal akan ditinjau dan disetujui Sponsor NR; persetujuan itu sekaligus mengajukan
             PTW ke PIC HSE.
           } @else {
@@ -79,7 +79,7 @@ function localDate(hoursFromNow: number): string {
             }
           </small></label
         >
-        @if (isContractor()) {
+        @if (isRequester()) {
           <label class="wide"
             >Sponsor NR yang menyetujui<select
               formControlName="sponsorId"
@@ -458,7 +458,7 @@ export class PermitCreate {
   protected readonly mandatoryDocumentOptions = signal<PermitMandatoryDocumentOption[]>([]);
   protected readonly loadingMandatoryDocuments = signal(true);
   protected readonly mandatoryDocumentError = signal('');
-  protected readonly isContractor = signal(false);
+  protected readonly isRequester = signal(false);
   protected readonly sponsors = signal<SponsorOption[]>([]);
   protected readonly loadingSponsors = signal(false);
   protected readonly sponsorError = signal('');
@@ -500,10 +500,10 @@ export class PermitCreate {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (identity) => {
-          if (isContractorOnly(identity.roles)) {
+          if (isRequester(identity.roles)) {
             // A Contractor names the Sponsor who approves the initial PTW; the draft is never
             // sponsored by the Contractor itself.
-            this.isContractor.set(true);
+            this.isRequester.set(true);
             this.form.controls.sponsorId.setValue('');
             this.form.controls.submitterType.setValue('CONTRACTOR');
             this.loadSponsors();

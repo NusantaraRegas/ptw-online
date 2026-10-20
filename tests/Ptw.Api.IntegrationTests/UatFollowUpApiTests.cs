@@ -285,35 +285,35 @@ public sealed class UatFollowUpApiTests(PtwApiFactory factory)
     [Fact]
     public async Task ContractorInitialPermitNeedsSponsorApprovalBeforeHseSubmissionAndStaysScoped()
     {
-        var contractorId = Unique("contractor");
+        var requesterId = Unique("requester");
         var sponsorId = Unique("sponsor");
-        using var contractor = Client(contractorId, "Contractor", "*", "Kontraktor Uji");
+        using var requester = Client(requesterId, "Requester", "*", "Kontraktor Uji");
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
-        using var otherContractor = Client(Unique("contractor"), "Contractor", "*");
+        using var otherRequester = Client(Unique("requester"), "Requester", "*");
 
         // Sponsors never author a PTW: only the Contractor fills the initial PTW.
         using var sponsorCreate = await sponsor.PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, "ORF"));
         Assert.Equal(HttpStatusCode.Forbidden, sponsorCreate.StatusCode);
 
-        using var createResponse = await contractor.PostAsJsonAsync(
+        using var createResponse = await requester.PostAsJsonAsync(
             "/api/v1/permits",
             Draft(sponsorId, "ORF") with { SubmitterType = "CONTRACTOR" });
         Assert.True(createResponse.IsSuccessStatusCode, await createResponse.Content.ReadAsStringAsync());
         var draft = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
         Assert.True(draft.Workflow.Initiation.Initiated);
         Assert.Equal("DRAFTING", draft.Workflow.Initiation.Status);
-        Assert.Equal(contractorId, draft.Workflow.Initiation.ContractorId);
+        Assert.Equal(requesterId, draft.Workflow.Initiation.RequesterId);
 
         // The initiator sees its own draft; other Contractors do not.
-        var mine = Required(await contractor.GetFromJsonAsync<PagedResponse<PermitResponse>>("/api/v1/permits"));
+        var mine = Required(await requester.GetFromJsonAsync<PagedResponse<PermitResponse>>("/api/v1/permits"));
         Assert.Contains(mine.Items, x => x.Id == draft.Id);
         var theirs = Required(
-            await otherContractor.GetFromJsonAsync<PagedResponse<PermitResponse>>("/api/v1/permits"));
+            await otherRequester.GetFromJsonAsync<PagedResponse<PermitResponse>>("/api/v1/permits"));
         Assert.DoesNotContain(theirs.Items, x => x.Id == draft.Id);
-        using var foreignDetail = await otherContractor.GetAsync($"/api/v1/permits/{draft.Id}");
+        using var foreignDetail = await otherRequester.GetAsync($"/api/v1/permits/{draft.Id}");
         Assert.Equal(HttpStatusCode.Forbidden, foreignDetail.StatusCode);
 
-        draft = await UploadMandatoryDocumentsAsync(contractor, draft);
+        draft = await UploadMandatoryDocumentsAsync(requester, draft);
 
         using var sponsorSubmitEarly = await sponsor.SendAsync(Command(
             HttpMethod.Post,
@@ -323,7 +323,7 @@ public sealed class UatFollowUpApiTests(PtwApiFactory factory)
         Assert.Equal(HttpStatusCode.Conflict, sponsorSubmitEarly.StatusCode);
         Assert.Equal("permit.submit.initial_approval_required", await ProblemCodeAsync(sponsorSubmitEarly));
 
-        using var handOver = await contractor.SendAsync(Command(
+        using var handOver = await requester.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/permits/{draft.Id}/initial-submit",
             draft.ETag,
@@ -339,7 +339,7 @@ public sealed class UatFollowUpApiTests(PtwApiFactory factory)
             x => x.PermitId == draft.Id && x.Type == "SPONSOR_INITIAL_APPROVAL");
 
         // While the Sponsor reviews, the Contractor can no longer edit.
-        using var lockedEdit = await contractor.SendAsync(Command(
+        using var lockedEdit = await requester.SendAsync(Command(
             HttpMethod.Patch,
             $"/api/v1/permits/{draft.Id}/draft",
             awaiting.ETag,
@@ -356,10 +356,10 @@ public sealed class UatFollowUpApiTests(PtwApiFactory factory)
         var returnedPermit = Required(await returned.Content.ReadFromJsonAsync<PermitResponse>());
         Assert.Equal("RETURNED", returnedPermit.Workflow.Initiation.Status);
         var contractorTasks = Required(
-            await contractor.GetFromJsonAsync<PagedResponse<PermitTaskResponse>>("/api/v1/tasks"));
-        Assert.Contains(contractorTasks.Items, x => x.PermitId == draft.Id && x.Type == "CONTRACTOR_INITIAL_REVISION");
+            await requester.GetFromJsonAsync<PagedResponse<PermitTaskResponse>>("/api/v1/tasks"));
+        Assert.Contains(contractorTasks.Items, x => x.PermitId == draft.Id && x.Type == "REQUESTER_INITIAL_REVISION");
 
-        using var handOverAgain = await contractor.SendAsync(Command(
+        using var handOverAgain = await requester.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/permits/{draft.Id}/initial-submit",
             returnedPermit.ETag,
@@ -402,17 +402,41 @@ public sealed class UatFollowUpApiTests(PtwApiFactory factory)
     }
 
     [Fact]
+    public async Task AnyAccountWithTheRequesterRoleCanAuthorForAnotherSponsor()
+    {
+        var authorId = Unique("staff");
+        var sponsorId = Unique("sponsor");
+        using var author = Client(authorId, "Sponsor,Requester", "ORF");
+        using var sponsor = Client(sponsorId, "Sponsor", "ORF");
+
+        using var selfSponsored = await author.PostAsJsonAsync("/api/v1/permits", Draft(authorId, "ORF"));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, selfSponsored.StatusCode);
+        Assert.Equal("permit.initiation.sponsor_required", await ProblemCodeAsync(selfSponsored));
+
+        using var created = await author.PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, "ORF"));
+        Assert.True(created.IsSuccessStatusCode, await created.Content.ReadAsStringAsync());
+        var draft = Required(await created.Content.ReadFromJsonAsync<PermitResponse>());
+        Assert.Equal(authorId, draft.Workflow.Initiation.RequesterId);
+
+        // The author sees the PTW it initiated even though it is not the Sponsor.
+        var mine = Required(await author.GetFromJsonAsync<PagedResponse<PermitResponse>>("/api/v1/permits"));
+        Assert.Contains(mine.Items, x => x.Id == draft.Id);
+        using var detail = await author.GetAsync($"/api/v1/permits/{draft.Id}");
+        detail.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
     public async Task SponsorCanRejectTheContractorInitialPermit()
     {
-        var contractorId = Unique("contractor");
+        var requesterId = Unique("requester");
         var sponsorId = Unique("sponsor");
-        using var contractor = Client(contractorId, "Contractor", "*");
+        using var requester = Client(requesterId, "Requester", "*");
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
-        using var createResponse = await contractor.PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, "ORF"));
+        using var createResponse = await requester.PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, "ORF"));
         createResponse.EnsureSuccessStatusCode();
         var draft = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        draft = await UploadMandatoryDocumentsAsync(contractor, draft);
-        using var handOver = await contractor.SendAsync(Command(
+        draft = await UploadMandatoryDocumentsAsync(requester, draft);
+        using var handOver = await requester.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/permits/{draft.Id}/initial-submit",
             draft.ETag,
@@ -421,12 +445,12 @@ public sealed class UatFollowUpApiTests(PtwApiFactory factory)
         var awaiting = Required(await handOver.Content.ReadFromJsonAsync<PermitResponse>());
         var task = await PendingTaskAsync(draft.Id, "SPONSOR_INITIAL_APPROVAL");
 
-        using var contractorReject = await contractor.SendAsync(Command(
+        using var requesterReject = await requester.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/tasks/{task.Id}/reject-initial",
             awaiting.ETag,
             new PermitReasonRequest("Coba tolak sendiri.")));
-        Assert.Equal(HttpStatusCode.Forbidden, contractorReject.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, requesterReject.StatusCode);
 
         using var reject = await sponsor.SendAsync(Command(
             HttpMethod.Post,
@@ -447,21 +471,21 @@ public sealed class UatFollowUpApiTests(PtwApiFactory factory)
     [Fact]
     public async Task AttachmentPolicyAndSponsorListAreScopedReferenceData()
     {
-        using var contractor = Client(Unique("contractor"), "Contractor", "*");
+        using var requester = Client(Unique("requester"), "Requester", "*");
         using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
 
-        var policy = Required(await contractor.GetFromJsonAsync<AttachmentPolicyResponse>(
+        var policy = Required(await requester.GetFromJsonAsync<AttachmentPolicyResponse>(
             "/api/v1/reference-data/attachment-policy"));
         Assert.True(policy.MaxFileBytes > 0);
         Assert.Equal(20, policy.MaxFilesPerPermit);
         Assert.Contains("application/pdf", policy.AcceptedMediaTypes);
 
-        using var sponsors = await contractor.GetAsync("/api/v1/sponsors");
+        using var sponsors = await requester.GetAsync("/api/v1/sponsors");
         sponsors.EnsureSuccessStatusCode();
         using var forbidden = await validator.GetAsync("/api/v1/sponsors");
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
 
-        var mandatory = Required(await contractor.GetFromJsonAsync<PermitMandatoryDocumentOptionResponse[]>(
+        var mandatory = Required(await requester.GetFromJsonAsync<PermitMandatoryDocumentOptionResponse[]>(
             "/api/v1/reference-data/mandatory-documents"));
         Assert.DoesNotContain(mandatory, x => x.Code == "ESIMI");
     }
@@ -496,18 +520,18 @@ public sealed class UatFollowUpApiTests(PtwApiFactory factory)
         return Required(await review.Content.ReadFromJsonAsync<PermitResponse>());
     }
 
-    private HttpClient ContractorFor(string sponsorId) =>
-        Client($"{sponsorId}.contractor", "Contractor", "*", "Kontraktor Uji");
+    private HttpClient RequesterFor(string sponsorId) =>
+        Client($"{sponsorId}.requester", "Requester", "*", "Kontraktor Uji");
 
     /// <summary>Contractor fills and hands over; the Sponsor's approval submits to the PIC HSE.</summary>
     private async Task<PermitResponse> CreateAndSubmitAsync(HttpClient sponsor, string sponsorId)
     {
-        var contractor = ContractorFor(sponsorId);
-        using var createResponse = await contractor.PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, "ORF"));
+        var requester = RequesterFor(sponsorId);
+        using var createResponse = await requester.PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, "ORF"));
         Assert.True(createResponse.IsSuccessStatusCode, await createResponse.Content.ReadAsStringAsync());
         var draft = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
-        draft = await UploadMandatoryDocumentsAsync(contractor, draft);
-        using var handOver = await contractor.SendAsync(Command(
+        draft = await UploadMandatoryDocumentsAsync(requester, draft);
+        using var handOver = await requester.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/permits/{draft.Id}/initial-submit",
             draft.ETag,

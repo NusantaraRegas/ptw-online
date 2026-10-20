@@ -189,7 +189,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
 
         var draft = await CreateAsync(sponsor, sponsorId, "ORF");
         draft = await UploadMandatoryDocumentsAsync(sponsor, draft);
-        using var handOver = await ContractorFor(sponsor).SendAsync(Command(
+        using var handOver = await RequesterFor(sponsor).SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/permits/{draft.Id}/initial-submit",
             draft.ETag,
@@ -336,15 +336,15 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         return permit with { ETag = mutation.ETag, Version = mutation.PermitVersion };
     }
 
-    private HttpClient ContractorFor(HttpClient sponsor)
+    private HttpClient RequesterFor(HttpClient sponsor)
     {
         var sponsorId = sponsor.DefaultRequestHeaders.GetValues("X-Dev-User").Single();
-        return Client($"{sponsorId}.contractor", "Contractor", "*");
+        return Client($"{sponsorId}.requester", "Requester", "*");
     }
 
     private async Task<PermitResponse> CreateAsync(HttpClient client, string sponsorId, string location)
     {
-        using var response = await ContractorFor(client).PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, location));
+        using var response = await RequesterFor(client).PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, location));
         response.EnsureSuccessStatusCode();
         return Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
     }

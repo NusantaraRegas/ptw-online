@@ -181,8 +181,8 @@ public sealed record HseSafetyEquipmentSelectionResponse(
 
 public sealed record PermitInitiationResponse(
     bool Initiated,
-    string? ContractorId,
-    string? ContractorName,
+    string? RequesterId,
+    string? RequesterName,
     string? Status,
     DateTimeOffset? SubmittedToSponsorAt,
     string? SponsorStatement,

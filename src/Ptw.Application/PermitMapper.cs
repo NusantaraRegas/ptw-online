@@ -155,8 +155,8 @@ internal static class PermitMapper
                     permit.SafetyEquipmentSelection?.SavedAt),
                 new PermitInitiationResponse(
                     permit.Initiation is not null,
-                    permit.Initiation?.ContractorId,
-                    permit.Initiation?.ContractorName,
+                    permit.Initiation?.RequesterId,
+                    permit.Initiation?.RequesterName,
                     permit.Initiation is null ? null : ToUpperSnakeCase(permit.Initiation.Status.ToString()),
                     permit.Initiation?.SubmittedToSponsorAt,
                     permit.Initiation?.SponsorStatement,

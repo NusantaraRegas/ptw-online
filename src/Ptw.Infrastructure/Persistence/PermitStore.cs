@@ -36,12 +36,15 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         CancellationToken cancellationToken)
     {
         var query = dbContext.Permits.AsNoTracking();
-        if (!string.IsNullOrWhiteSpace(sponsorId))
+        if (!string.IsNullOrWhiteSpace(sponsorId) && !string.IsNullOrWhiteSpace(initiatorId))
+        {
+            query = query.Where(x => x.SponsorId == sponsorId || x.InitiatedBy == initiatorId);
+        }
+        else if (!string.IsNullOrWhiteSpace(sponsorId))
         {
             query = query.Where(x => x.SponsorId == sponsorId);
         }
-
-        if (!string.IsNullOrWhiteSpace(initiatorId))
+        else if (!string.IsNullOrWhiteSpace(initiatorId))
         {
             query = query.Where(x => x.InitiatedBy == initiatorId);
         }
@@ -577,13 +580,13 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                         permit.Id,
                         permit.ChangeSequence,
                         permit.Version,
-                        "CONTRACTOR_INITIAL_REVISION",
+                        "REQUESTER_INITIAL_REVISION",
                         cancellationToken);
                     break;
                 case "permit_initial_submitted":
                     await CompletePendingTaskIfExistsAsync(
                         permit.Id,
-                        "CONTRACTOR_INITIAL_REVISION",
+                        "REQUESTER_INITIAL_REVISION",
                         actorId,
                         domainEvent.OccurredAt,
                         cancellationToken);
@@ -627,11 +630,11 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                         cancellationToken);
                     AddTask(
                         permit,
-                        "CONTRACTOR_INITIAL_REVISION",
+                        "REQUESTER_INITIAL_REVISION",
                         "Perbaiki PTW awal sesuai catatan Sponsor",
-                        "Contractor",
+                        "Requester",
                         domainEvent.OccurredAt,
-                        permit.Initiation?.ContractorId);
+                        permit.Initiation?.RequesterId);
                     break;
                 case "hse_validation_completed":
                     await CompleteTaskAsync(
@@ -1117,7 +1120,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         UpdatedAt = permit.UpdatedAt,
         RenewedFromPermitId = permit.RenewedFromPermitId,
         SuspensionReason = permit.SuspensionReason,
-        InitiatedBy = permit.Initiation?.ContractorId,
+        InitiatedBy = permit.Initiation?.RequesterId,
         WorkflowEvidenceJson = JsonSerializer.Serialize(
             new PermitWorkflowSnapshot(
                 permit.HseValidation,

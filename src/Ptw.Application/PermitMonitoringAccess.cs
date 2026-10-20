@@ -5,18 +5,27 @@ namespace Ptw.Application;
 /// <summary>Ownership rules shared by the permit and attachment services.</summary>
 public static class PermitAccess
 {
-    public const string ContractorRole = "Contractor";
+    /// <summary>
+    /// Role that authors PTWs. Any account may hold it alongside other roles; Contractor accounts
+    /// hold only this role (UAT-2026-10-12 no. 14, clarified 20 Oct 2026).
+    /// </summary>
+    public const string RequesterRole = "Requester";
 
-    /// <summary>A Contractor account that holds no Sponsor or Administrator role.</summary>
-    public static bool IsContractorOnly(Actor actor) =>
-        actor.Roles.Contains(ContractorRole) && !actor.Roles.Overlaps(["Sponsor", "Administrator"]);
+    private static readonly string[] WiderRoles =
+        ["Sponsor", "Administrator", "HSEValidator", "AreaOwnerSeniorOfficer", "AreaOwnerManager", "Auditor"];
+
+    public static bool IsRequester(Actor actor) => actor.Roles.Contains(RequesterRole);
+
+    /// <summary>A Requester account with no other role; it only ever sees the PTWs it initiated.</summary>
+    public static bool IsRequesterOnly(Actor actor) =>
+        IsRequester(actor) && !actor.Roles.Overlaps(WiderRoles);
 
     public static bool IsInitiator(Actor actor, Permit permit) =>
         permit.Initiation is not null
-        && string.Equals(permit.Initiation.ContractorId, actor.Id, StringComparison.OrdinalIgnoreCase);
+        && string.Equals(permit.Initiation.RequesterId, actor.Id, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The Contractor may change the initial draft until it hands it to the Sponsor.</summary>
-    public static bool ContractorMayEditDraft(Actor actor, Permit permit) =>
+    /// <summary>The initiating Requester may change the draft until it hands it to the Sponsor.</summary>
+    public static bool RequesterMayEditDraft(Actor actor, Permit permit) =>
         IsInitiator(actor, permit)
         && permit.Status == PermitStatus.Draft
         && permit.Initiation!.Status is PermitInitiationStatus.Drafting or PermitInitiationStatus.Returned;

@@ -47,13 +47,13 @@ public enum PermitInitiationStatus
 /// PIC HSE (UAT-2026-10-12 no. 14). The lifecycle status stays DRAFT throughout.
 /// </summary>
 public sealed record PermitInitiation(
-    string ContractorId,
+    string RequesterId,
     PermitInitiationStatus Status,
     DateTimeOffset CreatedAt,
     DateTimeOffset? SubmittedToSponsorAt = null,
     string? SponsorStatement = null,
     DateTimeOffset? DecidedAt = null,
-    string? ContractorName = null);
+    string? RequesterName = null);
 
 public sealed record AreaOperationsReviewEvidence(
     string ActorId,

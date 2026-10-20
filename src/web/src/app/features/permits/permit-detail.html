@@ -308,10 +308,10 @@
 
         @if (initiation(); as initiation) {
           <section class="card workflow-action evidence-card initiation-card">
-            <span class="workflow-action-kicker">PTW awal Kontraktor</span>
+            <span class="workflow-action-kicker">PTW awal Pemohon</span>
             <h2>{{ initiationTitle() }}</h2>
             <p>
-              Diisi oleh {{ initiation.contractorName || 'Nama tidak tersedia' }}.
+              Diisi oleh {{ initiation.requesterName || 'Nama tidak tersedia' }}.
               @if (initiation.status === 'AWAITING_SPONSOR_APPROVAL') {
                 Sponsor meninjau isi dan lampiran sebelum menyetujui.
               } @else if (initiation.status === 'APPROVED') {
@@ -706,11 +706,11 @@
           <section class="card workflow-action" [class.closure-workflow-action]="canClose()">
             @if (canDecideInitiation()) {
               <header class="workflow-action-header">
-                <span class="workflow-action-kicker">PTW awal Kontraktor</span>
+                <span class="workflow-action-kicker">PTW awal Pemohon</span>
                 <h2>Persetujuan Sponsor</h2>
                 <p>
                   Periksa isi dan lampiran PTW awal dari
-                  {{ initiation()?.contractorName || 'Kontraktor' }}; gunakan
+                  {{ initiation()?.requesterName || 'Pemohon' }}; gunakan
                   <strong>Edit draft</strong>
                   bila ada yang perlu diperbaiki. Persetujuan Anda sekaligus mengajukan PTW ke PIC
                   HSE dan menerbitkan nomor resmi.
@@ -1234,7 +1234,7 @@
                     [disabled]="saving() || decisionStatement.invalid"
                     (click)="returnInitiation()"
                   >
-                    Minta revisi Kontraktor
+                    Minta revisi Pemohon
                   </button>
                   <button
                     class="danger-button"
@@ -1453,7 +1453,7 @@
             }
           </small></label
         >
-        @if (isContractor()) {
+        @if (isInitiator()) {
           <label class="wide"
             >Sponsor NR yang menyetujui<select formControlName="sponsorId">
               <option value="" disabled>Pilih Sponsor</option>

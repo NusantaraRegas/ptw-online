@@ -924,7 +924,7 @@ public sealed class PermitStateMachineTests
         var permit = Permit.CreateDraft(
             ValidDraft() with { SubmitterType = "CONTRACTOR" },
             Now,
-            new PermitInitiation("contractor.demo", PermitInitiationStatus.Approved, Now, ContractorName: "Kontraktor"));
+            new PermitInitiation("requester.demo", PermitInitiationStatus.Approved, Now, RequesterName: "Kontraktor"));
         Assert.Equal(PermitInitiationStatus.Drafting, permit.Initiation?.Status);
 
         var early = Assert.Throws<DomainRuleViolationException>(() =>
@@ -932,10 +932,10 @@ public sealed class PermitStateMachineTests
         Assert.Equal("permit.submit.initial_approval_required", early.Code);
 
         var wrongContractor = Assert.Throws<DomainRuleViolationException>(() =>
-            permit.SubmitInitiationToSponsor("other.contractor", Now.AddMinutes(1)));
-        Assert.Equal("permit.initiation.contractor_mismatch", wrongContractor.Code);
+            permit.SubmitInitiationToSponsor("other.requester", Now.AddMinutes(1)));
+        Assert.Equal("permit.initiation.requester_mismatch", wrongContractor.Code);
 
-        permit.SubmitInitiationToSponsor("contractor.demo", Now.AddMinutes(1));
+        permit.SubmitInitiationToSponsor("requester.demo", Now.AddMinutes(1));
         Assert.Equal(PermitInitiationStatus.AwaitingSponsorApproval, permit.Initiation?.Status);
         Assert.Equal(PermitStatus.Draft, permit.Status);
 
@@ -948,7 +948,7 @@ public sealed class PermitStateMachineTests
 
         permit.ReturnInitiation("sponsor.demo", "Lengkapi pelaksana.", Now.AddMinutes(2));
         Assert.Equal(PermitInitiationStatus.Returned, permit.Initiation?.Status);
-        permit.SubmitInitiationToSponsor("contractor.demo", Now.AddMinutes(3));
+        permit.SubmitInitiationToSponsor("requester.demo", Now.AddMinutes(3));
         permit.ApproveInitiation("sponsor.demo", "PTW awal lengkap.", Now.AddMinutes(4));
         Assert.Equal(PermitInitiationStatus.Approved, permit.Initiation?.Status);
 
@@ -963,19 +963,19 @@ public sealed class PermitStateMachineTests
         var permit = Permit.CreateDraft(
             ValidDraft() with { SubmitterType = "CONTRACTOR" },
             Now,
-            new PermitInitiation("contractor.demo", PermitInitiationStatus.Drafting, Now));
+            new PermitInitiation("requester.demo", PermitInitiationStatus.Drafting, Now));
         var early = Assert.Throws<DomainRuleViolationException>(() =>
             permit.RejectInitiation("sponsor.demo", "Tidak disetujui.", Now.AddMinutes(1)));
         Assert.Equal("permit.initiation.invalid_state", early.Code);
 
-        permit.SubmitInitiationToSponsor("contractor.demo", Now.AddMinutes(1));
+        permit.SubmitInitiationToSponsor("requester.demo", Now.AddMinutes(1));
         permit.RejectInitiation("sponsor.demo", "Pekerjaan tidak sesuai rencana.", Now.AddMinutes(2));
 
         Assert.Equal(PermitStatus.Rejected, permit.Status);
         Assert.Equal(PermitInitiationStatus.Rejected, permit.Initiation?.Status);
         Assert.Contains(permit.Events, x => x.Type == "permit_initial_rejected");
         var reopen = Assert.Throws<DomainRuleViolationException>(() =>
-            permit.SubmitInitiationToSponsor("contractor.demo", Now.AddMinutes(3)));
+            permit.SubmitInitiationToSponsor("requester.demo", Now.AddMinutes(3)));
         Assert.Equal("permit.invalid_transition", reopen.Code);
     }
 

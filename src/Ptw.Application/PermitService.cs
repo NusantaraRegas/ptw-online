@@ -19,7 +19,7 @@ public sealed class PermitService(
     ILocationMasterStore locationMasterStore)
 {
     private const string HseValidatorRole = "HSEValidator";
-    private const string ContractorRole = PermitAccess.ContractorRole;
+    private const string RequesterRole = PermitAccess.RequesterRole;
     // Retain the persisted code for compatibility. This role is the single Bagian 7
     // reviewer pool and may be assigned to an SO or Officer Pemilik Wilayah.
     private const string AreaOperationsReviewerRole = "AreaOwnerSeniorOfficer";
@@ -31,18 +31,18 @@ public sealed class PermitService(
         CancellationToken cancellationToken)
     {
         var actor = actorContext.Current;
-        if (PermitAccess.IsContractorOnly(actor))
+        // Every PTW is authored through the Requester role (UAT-2026-10-12 no. 14, clarified
+        // 20 Oct 2026): any account may hold it, Contractor accounts hold only it. The Sponsor named on
+        // the draft approves and may edit it. Administrators keep the direct path for maintenance only.
+        if (PermitAccess.IsRequester(actor))
         {
             return await CreateInitialDraftAsync(actor, request, correlationId, cancellationToken);
         }
 
-        // Every PTW is filled by a Contractor (UAT-2026-10-12 no. 14, clarified 20 Oct 2026): the
-        // Sponsor approves and may edit the initial PTW but never authors one. Administrators keep
-        // the direct path for operational maintenance only.
         if (!actor.Roles.Contains("Administrator"))
         {
             throw new UnauthorizedAccessException(
-                "PTW diisi oleh Kontraktor; Sponsor hanya menyetujui dan mengedit PTW awal yang diajukan Kontraktor.");
+                "Membuat PTW memerlukan role Pemohon (Requester); Sponsor hanya menyetujui dan mengedit PTW awal yang diajukan.");
         }
 
         EnsureSponsorOrAdmin(actor);
@@ -90,7 +90,7 @@ public sealed class PermitService(
                 actor.Id,
                 PermitInitiationStatus.Drafting,
                 now,
-                ContractorName: DisplayNameUnlessIdentifier(actor)));
+                RequesterName: DisplayNameUnlessIdentifier(actor)));
         var created = await store.AddAsync(permit, actor, correlationId, authorization, cancellationToken);
         return await ToResponseAsync(created, cancellationToken);
     }
@@ -105,7 +105,7 @@ public sealed class PermitService(
         {
             throw new InvalidRequestException(
                 "permit.initiation.sponsor_required",
-                "Kontraktor wajib memilih Sponsor NR yang akan menyetujui PTW awal.");
+                "Pemohon wajib memilih Sponsor NR yang akan menyetujui PTW awal.");
         }
 
         var sponsor = await userDirectoryStore.ResolveIdentityAsync(sponsorId.Trim(), clock.UtcNow, cancellationToken);
@@ -142,15 +142,20 @@ public sealed class PermitService(
         EnsureValidPage(offset, limit);
         var actor = actorContext.Current;
         search = NormalizeSearch(search);
-        var contractorOnly = PermitAccess.IsContractorOnly(actor);
-        var sponsorFilter = contractorOnly
-            || actor.Roles.Overlaps(
-                ["Auditor", "Administrator", HseValidatorRole, AreaOperationsReviewerRole, AreaOwnerManagerRole])
-            ? null
-            : actor.Id;
+        // Monitoring roles see every PTW in scope; otherwise an account sees the PTWs it sponsors
+        // and/or initiated (an account may hold both Sponsor and Requester).
+        var monitors = actor.Roles.Overlaps(
+            ["Auditor", "Administrator", HseValidatorRole, AreaOperationsReviewerRole, AreaOwnerManagerRole]);
+        var sponsorFilter = !monitors && actor.Roles.Contains("Sponsor") ? actor.Id : null;
+        var initiatorFilter = !monitors && PermitAccess.IsRequester(actor) ? actor.Id : null;
+        if (!monitors && sponsorFilter is null && initiatorFilter is null)
+        {
+            sponsorFilter = actor.Id;
+        }
+
         var storedPage = await store.ListAsync(
             sponsorFilter,
-            contractorOnly ? actor.Id : null,
+            initiatorFilter,
             PermitMonitoringAccess.ReadLocationScopes(actor),
             search,
             offset,
@@ -254,13 +259,13 @@ public sealed class PermitService(
     {
         var stored = await GetStoredAsync(id, cancellationToken);
         var actor = actorContext.Current;
-        var contractorEdit = PermitAccess.IsContractorOnly(actor);
-        if (contractorEdit)
+        var requesterEdit = PermitAccess.IsRequester(actor) && PermitAccess.IsInitiator(actor, stored.Permit);
+        if (requesterEdit)
         {
-            if (!PermitAccess.ContractorMayEditDraft(actor, stored.Permit))
+            if (!PermitAccess.RequesterMayEditDraft(actor, stored.Permit))
             {
                 throw new UnauthorizedAccessException(
-                    "PTW awal berada di luar kewenangan Kontraktor atau sedang ditinjau Sponsor.");
+                    "PTW awal berada di luar kewenangan Pemohon atau sedang ditinjau Sponsor.");
             }
 
             EnsureLocationScope(actor, stored.Permit.Draft.LocationId);
@@ -274,7 +279,7 @@ public sealed class PermitService(
             {
                 throw new InvalidRequestException(
                     "permit.initiation.sponsor_locked",
-                    "Sponsor PTW awal Kontraktor hanya dapat diubah oleh Kontraktor sebelum persetujuan.");
+                    "Sponsor PTW awal Pemohon hanya dapat diubah oleh Pemohon sebelum persetujuan.");
             }
         }
 
@@ -294,7 +299,7 @@ public sealed class PermitService(
         EnsureLocationScope(actor, request.LocationId);
         var authorization = await operationalPolicyGate.AuthorizePermitCommandAsync(
             actor,
-            contractorEdit ? PermitPolicyOperations.CreateInitialDraft : PermitPolicyOperations.UpdateDraft,
+            requesterEdit ? PermitPolicyOperations.CreateInitialDraft : PermitPolicyOperations.UpdateDraft,
             request.LocationId,
             cancellationToken);
         stored.Permit.UpdateDraft(request.ToDomain(), clock.UtcNow);
@@ -557,7 +562,7 @@ public sealed class PermitService(
     {
         EnsureIdempotencyKey(idempotencyKey);
         var actor = actorContext.Current;
-        EnsureAnyRole(actor, [ContractorRole]);
+        EnsureAnyRole(actor, [RequesterRole]);
         var requestHash = Hash(new { PermitId = id, Operation = PermitPolicyOperations.SubmitInitiation });
         var prior = await store.FindIdempotentResultAsync(
             actor.Id,
@@ -573,7 +578,7 @@ public sealed class PermitService(
         var stored = await GetStoredAsync(id, cancellationToken);
         if (!PermitAccess.IsInitiator(actor, stored.Permit))
         {
-            throw new UnauthorizedAccessException("PTW awal berada di luar kewenangan Kontraktor.");
+            throw new UnauthorizedAccessException("PTW awal berada di luar kewenangan Pemohon.");
         }
 
         EnsureLocationScope(actor, stored.Permit.Draft.LocationId);
@@ -1669,9 +1674,9 @@ public sealed class PermitService(
             workflow.SafetyEquipmentSelection.ActorName,
             accountCache,
             cancellationToken);
-        var contractorName = await ResolveActorNameAsync(
-            workflow.Initiation.ContractorId,
-            workflow.Initiation.ContractorName,
+        var requesterName = await ResolveActorNameAsync(
+            workflow.Initiation.RequesterId,
+            workflow.Initiation.RequesterName,
             accountCache,
             cancellationToken);
 
@@ -1684,7 +1689,7 @@ public sealed class PermitService(
                 AreaOperations = workflow.AreaOperations with { ActorName = areaOperationsName },
                 Approval = workflow.Approval with { ActorName = approvalName },
                 SafetyEquipmentSelection = workflow.SafetyEquipmentSelection with { ActorName = selectionName },
-                Initiation = workflow.Initiation with { ContractorName = contractorName }
+                Initiation = workflow.Initiation with { RequesterName = requesterName }
             }
         };
     }
@@ -1804,9 +1809,9 @@ public sealed class PermitService(
             throw new UnauthorizedAccessException("Lokasi PTW berada di luar cakupan pemantauan pengguna.");
         }
 
-        if (PermitAccess.IsContractorOnly(actor) && !PermitAccess.IsInitiator(actor, permit))
+        if (PermitAccess.IsRequesterOnly(actor) && !PermitAccess.IsInitiator(actor, permit))
         {
-            throw new UnauthorizedAccessException("PTW berada di luar kewenangan Kontraktor.");
+            throw new UnauthorizedAccessException("PTW berada di luar kewenangan Pemohon.");
         }
     }
 

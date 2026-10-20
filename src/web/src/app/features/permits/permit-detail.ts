@@ -4,7 +4,12 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Observable } from 'rxjs';
-import { CurrentIdentity, IdentityApi, isContractorOnly } from '../../core/development-identity';
+import {
+  CurrentIdentity,
+  IdentityApi,
+  isRequester,
+  isRequesterOnly,
+} from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
 import { PermitAttachment, PermitAttachmentApi } from '../../core/permit-attachment-api';
 import {
@@ -104,7 +109,8 @@ export class PermitDetail {
   protected readonly roles = computed(() => this.identity()?.roles ?? []);
   protected readonly actorId = computed(() => this.identity()?.userId ?? '');
   protected readonly actorDisplayName = computed(() => this.identity()?.displayName ?? '');
-  protected readonly isContractor = computed(() => isContractorOnly(this.roles()));
+  protected readonly isRequester = computed(() => isRequester(this.roles()));
+  protected readonly isRequesterOnly = computed(() => isRequesterOnly(this.roles()));
   protected readonly isActingManager = computed(() =>
     (this.identity()?.actingRoles ?? []).includes('AreaOwnerManager'),
   );
@@ -113,10 +119,10 @@ export class PermitDetail {
     return initiation?.initiated ? initiation : null;
   });
   protected readonly isInitiator = computed(
-    () => !!this.initiation() && this.initiation()!.contractorId === this.actorId(),
+    () => !!this.initiation() && this.initiation()!.requesterId === this.actorId(),
   );
   /** The Contractor keeps the initial draft until it hands it to the Sponsor. */
-  protected readonly contractorMayEdit = computed(
+  protected readonly requesterMayEdit = computed(
     () =>
       this.isInitiator() &&
       this.permit()?.status === 'DRAFT' &&
@@ -124,11 +130,12 @@ export class PermitDetail {
   );
   protected readonly canEdit = computed(() => {
     const status = this.permit()?.status;
-    if (this.isContractor()) return this.contractorMayEdit();
+    if (this.isInitiator()) return this.requesterMayEdit();
+    if (this.isRequesterOnly()) return false;
     return status === 'DRAFT' || status === 'REVISION_REQUIRED';
   });
   protected readonly canSubmitInitiation = computed(
-    () => this.isContractor() && this.contractorMayEdit() && !this.editing(),
+    () => this.requesterMayEdit() && !this.editing(),
   );
   protected readonly canDecideInitiation = computed(
     () =>
@@ -141,13 +148,13 @@ export class PermitDetail {
       case 'AWAITING_SPONSOR_APPROVAL':
         return 'Menunggu persetujuan Sponsor';
       case 'RETURNED':
-        return 'Dikembalikan kepada Kontraktor';
+        return 'Dikembalikan kepada Pemohon';
       case 'APPROVED':
         return 'Disetujui Sponsor dan diajukan ke PIC HSE';
       case 'REJECTED':
         return 'Ditolak Sponsor';
       default:
-        return 'Sedang diisi Kontraktor';
+        return 'Sedang diisi Pemohon';
     }
   });
   protected readonly resubmitting = computed(() => this.permit()?.status === 'REVISION_REQUIRED');
@@ -177,7 +184,7 @@ export class PermitDetail {
       this.canEdit() &&
       (this.roles().includes('Administrator') ||
         (this.roles().includes('Sponsor') && this.permit()?.draft.sponsorId === this.actorId()) ||
-        this.contractorMayEdit()),
+        this.requesterMayEdit()),
   );
   protected readonly closureReplacementPending = computed(
     () =>
@@ -518,7 +525,7 @@ export class PermitDetail {
       validUntil: toLocalInput(permit.draft.validUntil),
       sponsorId: permit.draft.sponsorId,
     });
-    if (this.isContractor() && this.sponsors().length === 0) {
+    if (this.isInitiator() && this.sponsors().length === 0) {
       this.loadSponsors();
     }
     this.reconcileHeaderClassificationSelection();
@@ -548,7 +555,7 @@ export class PermitDetail {
     const value = this.form.getRawValue();
     const draft: PermitDraft = {
       ...value,
-      sponsorId: this.isContractor() && value.sponsorId ? value.sponsorId : permit.draft.sponsorId,
+      sponsorId: this.isInitiator() && value.sponsorId ? value.sponsorId : permit.draft.sponsorId,
       validFrom: new Date(value.validFrom).toISOString(),
       validUntil: new Date(value.validUntil).toISOString(),
       hazards: [],
@@ -1059,7 +1066,7 @@ export class PermitDetail {
   protected returnInitiation(): void {
     this.runTaskDecision(
       (task, permit, reason) => this.api.returnInitiation(task.id, permit.eTag, reason),
-      'PTW awal dikembalikan kepada Kontraktor dengan catatan revisi.',
+      'PTW awal dikembalikan kepada Pemohon dengan catatan revisi.',
     );
   }
 
@@ -1071,7 +1078,7 @@ export class PermitDetail {
     }
     this.runTaskDecision(
       (task, permit, reason) => this.api.rejectInitiation(task.id, permit.eTag, reason),
-      'PTW awal ditolak; Kontraktor dapat mengajukan PTW baru bila diperlukan.',
+      'PTW awal ditolak; Pemohon dapat mengajukan PTW baru bila diperlukan.',
     );
   }
 
