@@ -111,7 +111,11 @@ public sealed class PtwApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
                     }
                 }
             });
-            services.AddDbContext<PtwDbContext>(options => options.UseSqlServer(_connectionString));
+            // Mirror the production execution strategy: the retrying strategy rejects user-initiated
+            // transactions, and a plain registration here would hide that from the submit tests.
+            services.AddDbContext<PtwDbContext>(options => options.UseSqlServer(
+                _connectionString,
+                sql => sql.EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null)));
         });
     }
 

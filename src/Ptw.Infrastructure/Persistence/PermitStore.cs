@@ -319,6 +319,45 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         PolicyAuthorizationEvidence? authorizationEvidence,
         CancellationToken cancellationToken)
     {
+        // The configured SqlServerRetryingExecutionStrategy rejects a user-initiated transaction unless
+        // the whole unit runs through the strategy. The unit mutates the aggregate and the change
+        // tracker, so it cannot be replayed after a transient failure: a second attempt surfaces as a
+        // conflict and the client retries with the same Idempotency-Key against the rolled-back state.
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        var attempts = 0;
+        return await strategy.ExecuteAsync(
+            async ct =>
+            {
+                if (++attempts > 1)
+                {
+                    throw new ConcurrencyConflictException();
+                }
+
+                return await SubmitWithAllocatedNumberAsync(
+                    permit,
+                    submitWithNumber,
+                    submittedAt,
+                    expectedETag,
+                    actor,
+                    correlationId,
+                    idempotency,
+                    authorizationEvidence,
+                    ct);
+            },
+            cancellationToken);
+    }
+
+    private async Task<StoredPermit> SubmitWithAllocatedNumberAsync(
+        Permit permit,
+        Action<string> submitWithNumber,
+        DateTimeOffset submittedAt,
+        string expectedETag,
+        Actor actor,
+        string correlationId,
+        IdempotencyContext idempotency,
+        PolicyAuthorizationEvidence? authorizationEvidence,
+        CancellationToken cancellationToken)
+    {
         // The sequence row is locked and incremented in the same transaction as the permit update, so
         // a concurrency conflict or domain rejection rolls the number back instead of leaving a gap.
         var ownsTransaction = dbContext.Database.CurrentTransaction is null;
