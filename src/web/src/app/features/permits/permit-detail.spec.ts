@@ -51,6 +51,7 @@ class PermitHistoryStub {
 @Component({ selector: 'app-permit-validation-progress', template: '' })
 class PermitValidationProgressStub {
   readonly workflow = input.required<Permit['workflow']>();
+  readonly sponsorName = input<string | null>(null);
 }
 
 const validation = (code: string, label: string) => ({

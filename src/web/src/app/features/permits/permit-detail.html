@@ -286,7 +286,10 @@
             }
           </dl>
         </section>
-        <app-permit-validation-progress [workflow]="permit()!.workflow" />
+        <app-permit-validation-progress
+          [workflow]="permit()!.workflow"
+          [sponsorName]="permit()!.sponsorName ?? null"
+        />
 
         <app-permit-print-packages
           [permitId]="permit()!.id"
