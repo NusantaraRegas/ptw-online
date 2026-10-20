@@ -21,6 +21,41 @@ function localDate(hoursFromNow: number): string {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
+function randomInt(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function pickOne<T>(items: readonly T[]): T {
+  return items[randomInt(0, items.length - 1)]!;
+}
+
+/** Random subset in catalog order, with at least `minimum` items when the catalog allows it. */
+function pickSome<T>(items: readonly T[], minimum: number): T[] {
+  const picked = new Set(items.filter(() => Math.random() < 0.5));
+  const shuffled = [...items].sort(() => Math.random() - 0.5);
+  for (const item of shuffled) {
+    if (picked.size >= minimum) break;
+    picked.add(item);
+  }
+  return items.filter((item) => picked.has(item));
+}
+
+/** Plausible Indonesian sample values; chosen so the random draft reads like a real PTW. */
+const DEMO_WORDS = {
+  activity: ['Pengelasan', 'Penggantian', 'Inspeksi', 'Pembersihan', 'Perbaikan', 'Pengecatan'],
+  asset: ['support pipa', 'valve manual', 'flange header', 'pompa transfer', 'tangki harian'],
+  area: ['Area Metering', 'Area Kompresor', 'Area Utilitas', 'Area Jetty', 'Area Pipe Rack'],
+  company: ['PT Mitra Kerja Teknik', 'PT Andalan Fabrikasi', 'PT Sarana Maintenance Nusantara'],
+  person: ['Budi Santoso', 'Rina Wulandari', 'Agus Prasetyo', 'Dewi Lestari', 'Fajar Nugroho'],
+  tagPrefix: ['P', 'V', 'E', 'T', 'HX'],
+  hazard: [
+    'Referensi: kebisingan tinggi dari kompresor di sekitar lokasi kerja.',
+    'Referensi: lalu lintas kendaraan proyek pada jalur akses.',
+    'Referensi: potensi panas berlebih pada permukaan pipa.',
+  ],
+  otherWorkType: ['Pemasangan scaffolding', 'Pengujian tekanan', 'Pembongkaran insulasi'],
+} as const;
+
 @Component({
   selector: 'app-permit-create',
   imports: [ReactiveFormsModule, RouterLink],
@@ -37,7 +72,23 @@ function localDate(hoursFromNow: number): string {
           }
         </p>
       </div>
-      <a class="back" routerLink="/permits">← Kembali</a>
+      <div class="title-actions">
+        @if (demoFillAvailable()) {
+          <button
+            class="demo-fill-button"
+            type="button"
+            (click)="fillWithDemoValues()"
+            aria-describedby="demo-fill-help"
+          >
+            Isi otomatis (demo)
+          </button>
+          <small id="demo-fill-help" class="sr-only">
+            Mengisi seluruh field formulir dengan nilai acak untuk mempercepat pengujian. Hanya
+            tersedia pada mode demo.
+          </small>
+        }
+        <a class="back" routerLink="/permits">← Kembali</a>
+      </div>
     </div>
     <form class="card" [formGroup]="form" (ngSubmit)="save()">
       <div class="form-head">
@@ -319,6 +370,33 @@ function localDate(hoursFromNow: number): string {
     </form>`,
   styles: [
     `
+      .title-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .demo-fill-button {
+        padding: 8px 12px;
+        border: 1px dashed var(--nr-blue-dark);
+        border-radius: 7px;
+        color: var(--nr-blue-dark);
+        background: white;
+        font-size: 10px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .demo-fill-button:hover,
+      .demo-fill-button:focus-visible {
+        background: #eef5fa;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
       .back {
         color: var(--nr-blue-dark);
         font-size: 11px;
@@ -459,6 +537,8 @@ export class PermitCreate {
   protected readonly loadingMandatoryDocuments = signal(true);
   protected readonly mandatoryDocumentError = signal('');
   protected readonly isRequester = signal(false);
+  /** Server-asserted demo identity (Development + demo mode); never derived from client state. */
+  protected readonly demoFillAvailable = signal(false);
   protected readonly sponsors = signal<SponsorOption[]>([]);
   protected readonly loadingSponsors = signal(false);
   protected readonly sponsorError = signal('');
@@ -500,6 +580,7 @@ export class PermitCreate {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (identity) => {
+          this.demoFillAvailable.set(identity.isDevelopmentIdentity);
           if (isRequester(identity.roles)) {
             // A Contractor names the Sponsor who approves the initial PTW; the draft is never
             // sponsored by the Contractor itself.
@@ -694,6 +775,83 @@ export class PermitCreate {
         ? [...new Set([...current, option.code])]
         : current.filter((code) => code !== option.code),
     );
+  }
+
+  /**
+   * Demo-only shortcut: fills every field with random but valid values so testers can reach the
+   * submit flow quickly. Selections are drawn from the loaded catalogs so the server accepts them.
+   */
+  protected fillWithDemoValues(): void {
+    const permitClass = pickOne(['HotWork', 'ColdWork', 'ConfinedSpaceEntry']);
+    // Setting the class first lets the existing valueChanges handler reset dependent selections.
+    this.form.controls.permitClass.setValue(permitClass);
+
+    const headerMode = this.headerClassificationSelectionMode();
+    const headerOptions = this.headerClassificationOptions().map((option) => option.code);
+    let headerCodes: string[] = [];
+    if (headerMode === 'SINGLE' && headerOptions.length > 0) {
+      headerCodes = [pickOne(headerOptions)];
+    } else if (headerMode === 'MULTIPLE') {
+      headerCodes = pickSome(headerOptions, 1);
+    }
+    this.form.controls.headerClassificationCodes.setValue(headerCodes);
+    this.syncLegacyRiskLevel(headerCodes);
+
+    const workTypeCodes = this.workTypeOptions().map((option) => option.code);
+    this.form.controls.workTypeCodes.setValue(pickSome(workTypeCodes, 1));
+    this.syncOtherWorkTypeValidation();
+    if (this.hasOtherWorkTypeSelected()) {
+      this.form.controls.otherWorkTypeDescription.setValue(
+        `${pickOne(DEMO_WORDS.otherWorkType)} ${randomInt(10, 99)}`,
+      );
+    }
+
+    const requiredCodes = this.supportingDocumentOptions()
+      .filter((option) => option.required)
+      .map((option) => option.code);
+    const optionalCodes = this.additionalSupportingDocumentOptions().map((option) => option.code);
+    this.form.controls.requiredDocumentCodes.setValue([
+      ...new Set(['JSA', 'WORK_PROCEDURE', ...requiredCodes, ...pickSome(optionalCodes, 0)]),
+    ]);
+
+    const locations = this.locations();
+    if (locations.length > 0) {
+      this.form.controls.locationId.setValue(pickOne(locations).code);
+    }
+    if (this.isRequester()) {
+      const sponsors = this.sponsors();
+      if (sponsors.length > 0) {
+        this.form.controls.sponsorId.setValue(pickOne(sponsors).subjectId);
+      }
+    } else {
+      this.form.controls.submitterType.setValue(pickOne(['USER_SPONSOR', 'CONTRACTOR']));
+    }
+
+    const serial = randomInt(100, 999);
+    const startHours = randomInt(1, 48);
+    // Keep the window under the seven-day validity maximum enforced by the domain.
+    const durationHours = randomInt(8, 6 * 24);
+    const jsaDaysAgo = randomInt(0, 20);
+    this.form.patchValue({
+      title: `${pickOne(DEMO_WORDS.activity)} ${pickOne(DEMO_WORDS.asset)} ${serial}`,
+      description: `${pickOne(DEMO_WORDS.activity)} ${pickOne(DEMO_WORDS.asset)} di ${pickOne(
+        DEMO_WORDS.area,
+      )} sesuai JSA terlampir. Data uji coba otomatis mode demo.`,
+      company: pickOne(DEMO_WORDS.company),
+      performingAuthority: pickOne(DEMO_WORDS.person),
+      equipmentTag: `${pickOne(DEMO_WORDS.tagPrefix)}-${randomInt(1000, 9999)}`,
+      equipmentName: `${pickOne(DEMO_WORDS.asset)} ${pickOne(DEMO_WORDS.area)}`,
+      workOrderNumber: `WO-${new Date().getFullYear()}-${randomInt(10000, 99999)}`,
+      additionalHazardReference: pickOne(DEMO_WORDS.hazard),
+      plantArea: pickOne(DEMO_WORDS.area),
+      jsaDocumentNumber: `JSA/${randomInt(100, 999)}/${new Date().getFullYear()}`,
+      jsaRevision: `${randomInt(0, 3)}`,
+      jsaDate: localDate(-jsaDaysAgo * 24).slice(0, 10),
+      validFrom: localDate(startHours),
+      validUntil: localDate(startHours + durationHours),
+    });
+    this.form.markAllAsTouched();
+    this.form.markAsDirty();
   }
 
   protected save(): void {

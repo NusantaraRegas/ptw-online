@@ -392,6 +392,141 @@ describe('PermitCreate', () => {
     expect(request.request.body.requiredDocumentCodes).toEqual(['JSA', 'WORK_PROCEDURE']);
   });
 
+  function flushCatalogs(httpTesting: HttpTestingController, isDevelopmentIdentity: boolean) {
+    httpTesting.expectOne('/api/v1/me').flush({
+      userId: 'sponsor.only.demo',
+      displayName: 'Sponsor Only Demo',
+      roles: ['Sponsor'],
+      locationScopes: ['*'],
+      competencyCodes: [],
+      isDevelopmentIdentity,
+    });
+    httpTesting.expectOne('/api/v1/locations').flush({
+      items: [
+        { id: 'location-ho', code: 'HO', name: 'Wisma Nusantara' },
+        { id: 'location-orf', code: 'ORF', name: 'Onshore Receiving Facility' },
+      ],
+      count: 2,
+    });
+    httpTesting.expectOne('/api/v1/reference-data/work-types').flush([
+      {
+        permitClass: 'HotWork',
+        options: [
+          { code: 'HOT_WELDING', label: 'Mengelas', requiresDetail: false },
+          { code: 'HOT_OTHER', label: 'Lain-lain', requiresDetail: true },
+        ],
+      },
+      {
+        permitClass: 'ColdWork',
+        options: [{ code: 'COLD_PAINTING', label: 'Pengecatan', requiresDetail: false }],
+      },
+      {
+        permitClass: 'ConfinedSpaceEntry',
+        options: [{ code: 'CSE_INSPECTION', label: 'Inspeksi', requiresDetail: false }],
+      },
+    ]);
+    httpTesting.expectOne('/api/v1/reference-data/header-classifications').flush([
+      {
+        permitClass: 'HotWork',
+        selectionMode: 'MULTIPLE',
+        options: [
+          { code: 'HOT_OPEN_FLAME', label: 'Api Terbuka' },
+          { code: 'HOT_SPARK', label: 'Percikan Api' },
+        ],
+      },
+      {
+        permitClass: 'ColdWork',
+        selectionMode: 'SINGLE',
+        options: [
+          { code: 'COLD_LOW_RISK', label: 'Low Risk' },
+          { code: 'COLD_HIGH_RISK', label: 'High Risk' },
+        ],
+      },
+      { permitClass: 'ConfinedSpaceEntry', selectionMode: 'NONE', options: [] },
+    ]);
+    httpTesting.expectOne('/api/v1/reference-data/mandatory-documents').flush([]);
+    httpTesting.expectOne('/api/v1/reference-data/supporting-documents').flush([
+      {
+        code: 'JSA',
+        label: 'Job Safety Analisis (JSA)',
+        templateColumn: 0,
+        templateIndex: 0,
+        required: true,
+        requiresMetadata: true,
+      },
+      {
+        code: 'MSDS',
+        label: 'MSDS',
+        templateColumn: 1,
+        templateIndex: 3,
+        required: false,
+        requiresMetadata: false,
+      },
+    ]);
+  }
+
+  it('hides the demo auto-fill button outside a server-asserted demo identity', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PermitCreate],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PermitCreate);
+    fixture.detectChanges();
+    flushCatalogs(TestBed.inject(HttpTestingController), false);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.demo-fill-button')).toBeNull();
+  });
+
+  it('fills every field with catalog-valid random values in demo mode', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PermitCreate],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PermitCreate);
+    fixture.detectChanges();
+    flushCatalogs(TestBed.inject(HttpTestingController), true);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('.demo-fill-button') as HTMLButtonElement;
+    expect(button?.textContent).toContain('Isi otomatis (demo)');
+    const form = (fixture.componentInstance as unknown as { form: FormGroup }).form;
+    expect(form.valid).toBe(false);
+
+    for (let attempt = 0; attempt < 25; attempt++) {
+      button.click();
+      fixture.detectChanges();
+      const value = form.getRawValue();
+
+      expect(form.valid).toBe(true);
+      expect(['HO', 'ORF']).toContain(value.locationId);
+      expect(value.sponsorId).toBe('sponsor.only.demo');
+      expect(value.requiredDocumentCodes.slice(0, 2)).toEqual(['JSA', 'WORK_PROCEDURE']);
+      expect(value.workTypeCodes.length).toBeGreaterThan(0);
+      if (value.permitClass === 'HotWork') {
+        expect(value.headerClassificationCodes.length).toBeGreaterThan(0);
+        expect(value.workTypeCodes.every((code: string) => code.startsWith('HOT_'))).toBe(true);
+        if (value.workTypeCodes.includes('HOT_OTHER')) {
+          expect(value.otherWorkTypeDescription.trim().length).toBeGreaterThan(0);
+        }
+      } else if (value.permitClass === 'ColdWork') {
+        expect(value.headerClassificationCodes.length).toBe(1);
+        expect(value.workTypeCodes).toEqual(['COLD_PAINTING']);
+        expect(value.riskLevel).toBe(
+          value.headerClassificationCodes[0] === 'COLD_LOW_RISK' ? 'Low' : 'High',
+        );
+      } else {
+        expect(value.permitClass).toBe('ConfinedSpaceEntry');
+        expect(value.headerClassificationCodes).toEqual([]);
+        expect(value.workTypeCodes).toEqual(['CSE_INSPECTION']);
+      }
+      const validityHours =
+        (new Date(value.validUntil).getTime() - new Date(value.validFrom).getTime()) / 3_600_000;
+      expect(validityHours).toBeGreaterThan(0);
+      expect(validityHours).toBeLessThan(7 * 24);
+    }
+  });
+
   it('does not expose CLSR or isolation precaution fields to the Sponsor', async () => {
     await TestBed.configureTestingModule({
       imports: [PermitCreate],
