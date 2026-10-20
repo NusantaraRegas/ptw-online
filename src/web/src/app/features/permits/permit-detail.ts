@@ -229,6 +229,66 @@ export class PermitDetail {
         !items.some((candidate) => candidate.supersedesAttachmentId === item.id),
     );
   });
+  /** Sidebar hint that follows the lifecycle instead of always describing HSE validation. */
+  protected readonly nextStep = computed<{ title: string; hint: string }>(() => {
+    const status = this.permit()?.status ?? '';
+    switch (status) {
+      case 'DRAFT':
+        return this.initiation() && this.initiation()?.status !== 'APPROVED'
+          ? {
+              title: 'Lengkapi PTW awal',
+              hint: 'Pemohon melengkapi data dan lampiran wajib, lalu Sponsor menyetujui dan mengajukannya ke PIC HSE.',
+            }
+          : {
+              title: 'Lengkapi dan verifikasi draft',
+              hint: 'Lengkapi data dan lampiran wajib, lalu ajukan ke PIC HSE.',
+            };
+      case 'REVISION_REQUIRED':
+        return {
+          title: 'Perbaiki draft sesuai catatan',
+          hint: 'Sponsor memperbaiki draft atau lampiran, mengonfirmasi self check, lalu mengajukan ulang.',
+        };
+      case 'UNDER_VALIDATION':
+        return {
+          title: 'Menunggu validasi PIC HSE',
+          hint: 'Validasi HSE wajib selesai sebelum review Bagian 7 dan penerbitan pemilik wilayah tersedia.',
+        };
+      case 'AWAITING_AREA_APPROVAL':
+        return {
+          title: 'Menunggu pemilik wilayah',
+          hint: 'SO/Officer mengesahkan kondisi operasi Bagian 7, lalu Manager menyetujui dan menerbitkan PTW.',
+        };
+      case 'ISSUED':
+        return {
+          title: 'Kendalikan pekerjaan di hardcopy',
+          hint: 'Gas test, readiness, dan revalidasi dicatat pada paket cetak. Sponsor mengajukan perpanjangan atau penutupan dari halaman ini bila diperlukan.',
+        };
+      case 'SUSPENDED':
+        return {
+          title: 'Pekerjaan dihentikan',
+          hint: 'Manager pemilik wilayah menyelesaikan penangguhan agar PTW kembali Diterbitkan, atau Sponsor mengajukan penutupan.',
+        };
+      case 'CLOSURE_REQUESTED':
+        return {
+          title: 'Menunggu verifikasi penutupan',
+          hint: 'Pemilik wilayah memverifikasi hardcopy, mengisi Bagian 10, dan menutup PTW.',
+        };
+      case 'EXPIRED':
+        return {
+          title: 'Masa berlaku berakhir',
+          hint: 'Pekerjaan tidak boleh dilanjutkan. Sponsor mengajukan perpanjangan untuk PTW penerus atau penutupan.',
+        };
+      case 'CLOSED':
+      case 'REJECTED':
+      case 'CANCELLED':
+        return {
+          title: 'PTW selesai',
+          hint: 'Status ini terminal. Buat PTW baru bila pekerjaan masih diperlukan.',
+        };
+      default:
+        return { title: 'Pantau status workflow', hint: 'Status PTW diperbarui otomatis.' };
+    }
+  });
   protected readonly statusLabel = computed(() => {
     const labels: Record<string, string> = {
       DRAFT: 'Draft',
@@ -852,6 +912,23 @@ export class PermitDetail {
     );
   }
 
+  /**
+   * The signed-copy list depends on the chosen package, so with a single READY package and a
+   * single matching copy the forms open fully pre-filled instead of looking empty.
+   */
+  private defaultFieldCopySelection(printPackageId = ''): {
+    printPackageId: string;
+    signedFieldCopyAttachmentId: string;
+  } {
+    const packages = this.readyPrintPackages();
+    const packageId = printPackageId || (packages.length === 1 ? packages[0]!.id : '');
+    const copies = packageId ? this.closureFieldCopiesForPackage(packageId) : [];
+    return {
+      printPackageId: packageId,
+      signedFieldCopyAttachmentId: copies.length === 1 ? copies[0]!.id : '',
+    };
+  }
+
   protected printPackageLabel(printPackageId: string): string {
     const item = this.readyPrintPackages().find((option) => option.id === printPackageId);
     return item ? `Versi ${item.permitVersion}` : 'Paket cetak penutupan saat ini';
@@ -863,8 +940,7 @@ export class PermitDetail {
     this.renewalForm.reset({
       validFrom: toLocalInput(permit.draft.validUntil),
       validUntil: '',
-      printPackageId: '',
-      signedFieldCopyAttachmentId: '',
+      ...this.defaultFieldCopySelection(),
       continuationStatement: '',
       allPagesReviewed: false,
       readableAndCompleteAcknowledged: false,
@@ -930,8 +1006,9 @@ export class PermitDetail {
     const resubmitting = this.canResubmitClosure();
     const previous = permit.workflow.closure.completion ?? null;
     this.closureForm.reset({
-      printPackageId: resubmitting ? (permit.workflow.closure.printPackageId ?? '') : '',
-      signedFieldCopyAttachmentId: '',
+      ...this.defaultFieldCopySelection(
+        resubmitting ? (permit.workflow.closure.printPackageId ?? '') : '',
+      ),
       completionStatement: resubmitting ? (permit.workflow.closure.completionStatement ?? '') : '',
       allPagesReviewed: false,
       readableAndCompleteAcknowledged: false,

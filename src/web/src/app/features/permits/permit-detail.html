@@ -1417,10 +1417,8 @@
 
         <section class="card next-step">
           <span>Langkah berikutnya</span>
-          <strong>{{
-            canEdit() ? 'Lengkapi dan verifikasi draft' : 'Pantau status workflow'
-          }}</strong>
-          <p>Validasi HSE wajib selesai sebelum approval dan penerbitan pemilik area tersedia.</p>
+          <strong>{{ nextStep().title }}</strong>
+          <p>{{ nextStep().hint }}</p>
         </section>
       </aside>
     </section>
