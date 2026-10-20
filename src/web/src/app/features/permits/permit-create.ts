@@ -2,7 +2,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { IdentityApi } from '../../core/development-identity';
+import { IdentityApi, isContractorOnly } from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
 import {
   PermitApi,
@@ -12,6 +12,7 @@ import {
   PermitMandatoryDocumentOption,
   PermitSupportingDocumentOption,
   PermitWorkTypeOption,
+  SponsorOption,
 } from '../../core/permit-api';
 
 function localDate(hoursFromNow: number): string {
@@ -28,7 +29,11 @@ function localDate(hoursFromNow: number): string {
         <p class="eyebrow">Permit Management</p>
         <h1>Buat draft PTW</h1>
         <p class="subtitle">
-          Draft belum memiliki nomor resmi dan belum mengizinkan pekerjaan dimulai.
+          @if (isContractor()) {
+            PTW awal akan ditinjau dan disetujui Sponsor NR sebelum diajukan ke PIC HSE.
+          } @else {
+            Draft belum memiliki nomor resmi dan belum mengizinkan pekerjaan dimulai.
+          }
         </p>
       </div>
       <a class="back" routerLink="/permits">← Kembali</a>
@@ -73,6 +78,30 @@ function localDate(hoursFromNow: number): string {
             }
           </small></label
         >
+        @if (isContractor()) {
+          <label class="wide"
+            >Sponsor NR yang menyetujui<select
+              formControlName="sponsorId"
+              aria-describedby="sponsor-help"
+            >
+              <option value="" disabled>
+                {{ loadingSponsors() ? 'Memuat Sponsor...' : 'Pilih Sponsor' }}
+              </option>
+              @for (sponsor of sponsors(); track sponsor.subjectId) {
+                <option [value]="sponsor.subjectId">
+                  {{ sponsor.displayName }}{{ sponsor.position ? ' · ' + sponsor.position : '' }}
+                </option>
+              }
+            </select>
+            <small id="sponsor-help">
+              @if (sponsorError()) {
+                {{ sponsorError() }}
+              } @else {
+                Sponsor yang dipilih meninjau dan menyetujui PTW awal sebelum pengajuan ke PIC HSE.
+              }
+            </small></label
+          >
+        }
         <label
           >Perusahaan pelaksana<input formControlName="company" placeholder="PT Mitra Kerja"
         /></label>
@@ -272,9 +301,6 @@ function localDate(hoursFromNow: number): string {
             </div>
           }
         </fieldset>
-        <label
-          >Nomor E-SIMI<input formControlName="eSimiNumber" placeholder="Akan divalidasi adapter"
-        /></label>
         <label>Mulai<input type="datetime-local" formControlName="validFrom" /></label>
         <label
           >Selesai (maks. 7 hari)<input type="datetime-local" formControlName="validUntil"
@@ -431,6 +457,10 @@ export class PermitCreate {
   protected readonly mandatoryDocumentOptions = signal<PermitMandatoryDocumentOption[]>([]);
   protected readonly loadingMandatoryDocuments = signal(true);
   protected readonly mandatoryDocumentError = signal('');
+  protected readonly isContractor = signal(false);
+  protected readonly sponsors = signal<SponsorOption[]>([]);
+  protected readonly loadingSponsors = signal(false);
+  protected readonly sponsorError = signal('');
   protected readonly form = this.fb.nonNullable.group({
     title: ['', Validators.required],
     description: ['', Validators.required],
@@ -461,7 +491,6 @@ export class PermitCreate {
     jsaDate: ['', Validators.required],
     validFrom: [localDate(1), Validators.required],
     validUntil: [localDate(9), Validators.required],
-    eSimiNumber: [''],
   });
 
   constructor() {
@@ -469,7 +498,18 @@ export class PermitCreate {
       .me()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (identity) => this.form.controls.sponsorId.setValue(identity.userId),
+        next: (identity) => {
+          if (isContractorOnly(identity.roles)) {
+            // A Contractor names the Sponsor who approves the initial PTW; the draft is never
+            // sponsored by the Contractor itself.
+            this.isContractor.set(true);
+            this.form.controls.sponsorId.setValue('');
+            this.form.controls.submitterType.setValue('CONTRACTOR');
+            this.loadSponsors();
+            return;
+          }
+          this.form.controls.sponsorId.setValue(identity.userId);
+        },
         error: (response) => {
           this.error.set(
             response?.error?.detail ??
@@ -664,8 +704,6 @@ export class PermitCreate {
       ...value,
       validFrom: new Date(value.validFrom).toISOString(),
       validUntil: new Date(value.validUntil).toISOString(),
-      eSimiExternalId: value.eSimiNumber || null,
-      eSimiNumber: value.eSimiNumber || null,
       hazards: [],
       controls: [],
       workTypeCode: null,
@@ -690,6 +728,25 @@ export class PermitCreate {
         );
       },
     });
+  }
+
+  private loadSponsors(): void {
+    this.loadingSponsors.set(true);
+    this.api
+      .listSponsors()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (page) => {
+          this.sponsors.set(page.items);
+          this.loadingSponsors.set(false);
+        },
+        error: (response) => {
+          this.loadingSponsors.set(false);
+          this.sponsorError.set(
+            response?.error?.detail ?? 'Daftar Sponsor gagal dimuat. Coba muat ulang halaman.',
+          );
+        },
+      });
   }
 
   private reconcileWorkTypeSelection(): void {

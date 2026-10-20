@@ -28,6 +28,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
 
     public async Task<StorePage<StoredPermit>> ListAsync(
         string? sponsorId,
+        string? initiatorId,
         IReadOnlySet<string> locationScopes,
         string? search,
         int offset,
@@ -38,6 +39,11 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         if (!string.IsNullOrWhiteSpace(sponsorId))
         {
             query = query.Where(x => x.SponsorId == sponsorId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(initiatorId))
+        {
+            query = query.Where(x => x.InitiatedBy == initiatorId);
         }
 
         if (!locationScopes.Contains("*"))
@@ -299,6 +305,74 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         return ToStored(record);
     }
 
+    public async Task<StoredPermit> UpdateWithPermitNumberAsync(
+        Permit permit,
+        Action<string> submitWithNumber,
+        DateTimeOffset submittedAt,
+        string expectedETag,
+        Actor actor,
+        string correlationId,
+        IdempotencyContext idempotency,
+        PolicyAuthorizationEvidence? authorizationEvidence,
+        CancellationToken cancellationToken)
+    {
+        // The sequence row is locked and incremented in the same transaction as the permit update, so
+        // a concurrency conflict or domain rejection rolls the number back instead of leaving a gap.
+        var ownsTransaction = dbContext.Database.CurrentTransaction is null;
+        await using var transaction = ownsTransaction
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        var number = permit.PermitNumber;
+        if (string.IsNullOrWhiteSpace(number))
+        {
+            var sequence = await AllocateSequenceAsync(PermitNumberFormat.SequenceYear(submittedAt), cancellationToken);
+            number = PermitNumberFormat.Compose(submittedAt, sequence);
+        }
+
+        submitWithNumber(number);
+        StoredPermit stored;
+        try
+        {
+            stored = await UpdateAsync(
+                permit,
+                expectedETag,
+                actor,
+                correlationId,
+                idempotency,
+                authorizationEvidence,
+                cancellationToken);
+        }
+        catch (DbUpdateException exception) when (exception is not DbUpdateConcurrencyException)
+        {
+            // Two first submissions of a new year raced on the sequence row; the caller retries.
+            throw new ConcurrencyConflictException() { Source = exception.Source };
+        }
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        return stored;
+    }
+
+    private async Task<int> AllocateSequenceAsync(int year, CancellationToken cancellationToken)
+    {
+        var row = await dbContext.PermitNumberSequences
+            .FromSqlRaw(
+                "SELECT [Year], [LastValue] FROM [ptw].[PermitNumberSequence] WITH (UPDLOCK, HOLDLOCK) WHERE [Year] = {0}",
+                year)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (row is null)
+        {
+            row = new PermitNumberSequenceRecord { Year = year, LastValue = 0 };
+            dbContext.PermitNumberSequences.Add(row);
+        }
+
+        row.LastValue++;
+        return row.LastValue;
+    }
+
     public async Task<StoredPermit?> FindIdempotentResultAsync(
         string actorId,
         string operation,
@@ -493,6 +567,58 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                         permit.Version,
                         "SPONSOR_REVISION",
                         cancellationToken);
+                    await RefreshPendingTaskVersionIfExistsAsync(
+                        permit.Id,
+                        permit.ChangeSequence,
+                        permit.Version,
+                        "SPONSOR_INITIAL_APPROVAL",
+                        cancellationToken);
+                    await RefreshPendingTaskVersionIfExistsAsync(
+                        permit.Id,
+                        permit.ChangeSequence,
+                        permit.Version,
+                        "CONTRACTOR_INITIAL_REVISION",
+                        cancellationToken);
+                    break;
+                case "permit_initial_submitted":
+                    await CompletePendingTaskIfExistsAsync(
+                        permit.Id,
+                        "CONTRACTOR_INITIAL_REVISION",
+                        actorId,
+                        domainEvent.OccurredAt,
+                        cancellationToken);
+                    AddTask(
+                        permit,
+                        "SPONSOR_INITIAL_APPROVAL",
+                        "Setujui PTW awal dari Kontraktor",
+                        "Sponsor",
+                        domainEvent.OccurredAt,
+                        permit.Draft.SponsorId);
+                    break;
+                case "permit_initial_approved":
+                    await CompleteTaskAsync(
+                        permit.Id,
+                        permit.Version,
+                        "SPONSOR_INITIAL_APPROVAL",
+                        actorId,
+                        domainEvent.OccurredAt,
+                        cancellationToken);
+                    break;
+                case "permit_initial_returned":
+                    await CompleteTaskAsync(
+                        permit.Id,
+                        permit.Version,
+                        "SPONSOR_INITIAL_APPROVAL",
+                        actorId,
+                        domainEvent.OccurredAt,
+                        cancellationToken);
+                    AddTask(
+                        permit,
+                        "CONTRACTOR_INITIAL_REVISION",
+                        "Perbaiki PTW awal sesuai catatan Sponsor",
+                        "Contractor",
+                        domainEvent.OccurredAt,
+                        permit.Initiation?.ContractorId);
                     break;
                 case "hse_validation_completed":
                     await CompleteTaskAsync(
@@ -978,6 +1104,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         UpdatedAt = permit.UpdatedAt,
         RenewedFromPermitId = permit.RenewedFromPermitId,
         SuspensionReason = permit.SuspensionReason,
+        InitiatedBy = permit.Initiation?.ContractorId,
         WorkflowEvidenceJson = JsonSerializer.Serialize(
             new PermitWorkflowSnapshot(
                 permit.HseValidation,
@@ -986,7 +1113,9 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                 permit.Suspension,
                 permit.ClosureRequest,
                 permit.ClosureDecision,
-                permit.RenewalRequest),
+                permit.RenewalRequest,
+                permit.SafetyEquipmentSelection,
+                permit.Initiation),
             JsonOptions)
     };
 
@@ -1016,7 +1145,9 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             record.RenewedFromPermitId,
             renewalPermitId,
             workflow.AreaOperationsReview,
-            record.Version);
+            record.Version,
+            workflow.SafetyEquipmentSelection,
+            workflow.Initiation);
         return new StoredPermit(permit, EncodeETag(record.RowVersion));
     }
 
@@ -1027,7 +1158,9 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
         PermitSuspensionEvidence? Suspension = null,
         PermitClosureEvidence? ClosureRequest = null,
         PermitClosureDecisionEvidence? ClosureDecision = null,
-        PermitRenewalRequestEvidence? RenewalRequest = null);
+        PermitRenewalRequestEvidence? RenewalRequest = null,
+        HseSafetyEquipmentSelection? SafetyEquipmentSelection = null,
+        PermitInitiation? Initiation = null);
 
     private static string EncodeETag(byte[] rowVersion) => $"\"{Convert.ToBase64String(rowVersion)}\"";
 

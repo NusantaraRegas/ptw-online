@@ -9,6 +9,7 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         throw new NotSupportedException("Only available in translated database queries.");
 
     public DbSet<PermitRecord> Permits => Set<PermitRecord>();
+    public DbSet<PermitNumberSequenceRecord> PermitNumberSequences => Set<PermitNumberSequenceRecord>();
     public DbSet<PermitVersionRecord> PermitVersions => Set<PermitVersionRecord>();
     public DbSet<PermitRevisionRecord> PermitRevisions => Set<PermitRevisionRecord>();
     public DbSet<AuditEventRecord> AuditEvents => Set<AuditEventRecord>();
@@ -56,6 +57,14 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         permit.Property(x => x.RowVersion).IsRowVersion();
         permit.HasIndex(x => new { x.Status, x.LocationId });
         permit.HasIndex(x => new { x.SponsorId, x.UpdatedAt });
+        permit.Property(x => x.InitiatedBy).HasMaxLength(200);
+        permit.HasIndex(x => new { x.InitiatedBy, x.UpdatedAt }).HasFilter("[InitiatedBy] IS NOT NULL");
+
+        var permitNumberSequence = modelBuilder.Entity<PermitNumberSequenceRecord>();
+        permitNumberSequence.ToTable("PermitNumberSequence", "ptw", table =>
+            table.HasCheckConstraint("CK_PermitNumberSequence_LastValue", "[LastValue] >= 0"));
+        permitNumberSequence.HasKey(x => x.Year);
+        permitNumberSequence.Property(x => x.Year).ValueGeneratedNever();
         permit.HasIndex(x => x.RenewedFromPermitId)
             .IsUnique()
             .HasFilter("[RenewedFromPermitId] IS NOT NULL");
@@ -121,7 +130,12 @@ public sealed class PtwDbContext(DbContextOptions<PtwDbContext> options) : DbCon
         permitTask.Property(x => x.Status).HasMaxLength(20);
         permitTask.Property(x => x.CompletedBy).HasMaxLength(200);
         permitTask.HasIndex(x => new { x.PermitId, x.PermitVersion, x.Type }).IsUnique();
-        permitTask.HasIndex(x => new { x.PermitId, x.BusinessPermitVersion, x.Type }).IsUnique();
+        // One pending task per type and business version. Completed or cancelled rows stay as
+        // history, so the Contractor return-and-resubmit cycle (UAT-2026-10-12 no. 14) can create a
+        // fresh SPONSOR_INITIAL_APPROVAL task within the same draft version.
+        permitTask.HasIndex(x => new { x.PermitId, x.BusinessPermitVersion, x.Type })
+            .IsUnique()
+            .HasFilter("[Status] = N'PENDING'");
         permitTask.HasIndex(x => new { x.Status, x.RequiredRole, x.AssignedActorId, x.CreatedAt });
         permitTask.HasOne<PermitRecord>()
             .WithMany()

@@ -46,7 +46,9 @@ export class Dashboard {
   );
   protected readonly displayName = computed(() => this.identity()?.displayName ?? 'Pengguna PTW');
   protected readonly canCreatePermit = computed(() =>
-    (this.identity()?.roles ?? []).some((role) => ['Sponsor', 'Administrator'].includes(role)),
+    (this.identity()?.roles ?? []).some((role) =>
+      ['Sponsor', 'Administrator', 'Contractor'].includes(role),
+    ),
   );
   protected readonly canOpenOperationsBoard = computed(() =>
     canAccessOperationsBoard(this.identity()?.roles ?? []),

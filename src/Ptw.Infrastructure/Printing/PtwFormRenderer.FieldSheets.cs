@@ -1,8 +1,9 @@
 namespace Ptw.Infrastructure.Printing;
 
 /// <summary>
-/// Bagian 8, 9 and 10 of the controlled form. These are completed by hand in the field under the v1.6
-/// hybrid model, so the renderer prints only the grid and enough writing space, never data.
+/// Bagian 8 (daily revalidation) of the controlled form, completed by hand in the field under the
+/// hybrid model, so the renderer prints only the grid and enough writing space, never data. Bagian 9
+/// and 10 moved into the application workflow (UAT-2026-10-12) and are no longer drawn.
 /// </summary>
 internal sealed partial class PtwFormRenderer
 {
@@ -98,152 +99,6 @@ internal sealed partial class PtwFormRenderer
             var rowY = headerBottom + (row * dataRowHeight);
             canvas.Line(RightX, rowY, RightX + RightWidth, rowY);
         }
-    }
-
-    private static void DrawSections910(FormCanvas canvas)
-    {
-        const double bandY = 174.5;
-        const double contentY = bandY + BandHeight;
-        const double contentHeight = 105.5;
-        const double section9Width = 68;
-        const double section10X = RightX + section9Width;
-        var section10Width = RightX + RightWidth - section10X;
-
-        canvas.Band(RightX, bandY, section9Width, BandHeight, "BAGIAN - 9   PEKERJAAN SELESAI");
-        canvas.Band(
-            section10X,
-            bandY,
-            section10Width,
-            BandHeight,
-            "BAGIAN - 10   INSPEKSI, PERSETUJUAN & PENGEMBALIAN");
-        canvas.Box(RightX, contentY, section9Width, contentHeight);
-        canvas.Box(section10X, contentY, section10Width, contentHeight);
-
-        DrawSection9(canvas, RightX, contentY, section9Width);
-        DrawSection10(canvas, section10X, contentY, section10Width);
-    }
-
-    private static void DrawSection9(FormCanvas canvas, double x, double y, double width)
-    {
-        canvas.Text(
-            x,
-            y,
-            width,
-            3.6,
-            "(Diisi oleh Pelaksana Pekerjaan dan Sponsor Pekerjaan)",
-            3.9,
-            align: TextAlign.Center);
-
-        var cursor = y + 4.5;
-        canvas.CheckItem(x + 1.5, cursor, width - 3, 5, "Pekerjaan telah selesai", size: 4.4);
-        cursor += 5.5;
-        canvas.CheckItem(
-            x + 1.5,
-            cursor,
-            width - 3,
-            5,
-            "Pekerjaan belum diselesaikan dalam waktu 7 hari",
-            size: 4.4);
-        cursor += 5.5;
-        canvas.CheckItem(
-            x + 5,
-            cursor,
-            width - 6.5,
-            5,
-            "Semua Peralatan dan material sudah dikeluarkan dari lapangan",
-            size: 4.0);
-        cursor += 5.5;
-        canvas.CheckItem(
-            x + 5,
-            cursor,
-            width - 6.5,
-            5,
-            "Semua Peralatan dan material belum dikeluarkan dari lapangan",
-            size: 4.0);
-        cursor += 7;
-
-        canvas.Text(x + 1.5, cursor, width - 3, 4.4, "Penjelasan :", 4.4);
-        for (var line = 0; line < 3; line++)
-        {
-            canvas.WritingRule(x + 1.5, cursor + 5.5 + (line * 5), width - 3);
-        }
-
-        cursor += 22;
-        canvas.Field(x + 1.5, cursor, width - 3, 4.4, "Pelaksana Pekerjaan :", null, 34);
-        cursor += 5;
-        canvas.Field(x + 1.5, cursor, width - 3, 4.4, "No ID Badge :", null, 34);
-        cursor += 5;
-        canvas.Text(x + 1.5, cursor, width - 3, 4.4, "Tanda Tangan", 4.4);
-        cursor += 11;
-
-        canvas.Field(x + 1.5, cursor, width - 3, 4.4, "Sponsor Pekerjaan :", null, 34);
-        cursor += 5;
-        canvas.Field(x + 1.5, cursor, width - 3, 4.4, "No. ID Badge :", null, 34);
-        cursor += 5;
-        canvas.Text(x + 1.5, cursor, width - 3, 4.4, "Tanda Tangan", 4.4);
-    }
-
-    private static void DrawSection10(FormCanvas canvas, double x, double y, double width)
-    {
-        canvas.Text(x, y, width, 3.6, "(Diisi oleh Pemilik Wilayah)", 3.9, align: TextAlign.Center);
-
-        var cursor = y + 4.5;
-        cursor = DrawWrappedCheckItem(
-            canvas,
-            x,
-            cursor,
-            width,
-            "Kami telah melakukan inspeksi terhadap area kerja, peralatan milik pelaksana kerja sudah tidak ada dan area kerja sudah bersih");
-        cursor = DrawWrappedCheckItem(
-            canvas,
-            x,
-            cursor,
-            width,
-            "Pekerjaan belum selesai dan statusnya adalah :");
-        for (var line = 0; line < 2; line++)
-        {
-            canvas.WritingRule(x + 6, cursor + (line * 5), width - 8);
-        }
-
-        cursor += 12;
-        canvas.Field(x + 1.5, cursor, width * 0.55, 4.4, "Officer :", null, 24);
-        canvas.Text(x + (width * 0.6), cursor, width * 0.38, 4.4, "Tanda Tangan", 4.2);
-        cursor += 8;
-
-        cursor = DrawWrappedCheckItem(
-            canvas,
-            x,
-            cursor,
-            width,
-            "Saya setuju pekerjaan telah selesai atas rincian Officer. Tempat kerja dan peralatan telah kembali normal.");
-        cursor = DrawWrappedCheckItem(
-            canvas,
-            x,
-            cursor,
-            width,
-            "Semua sistem inhibited telah dikembalikan ke normal.");
-        cursor = DrawWrappedCheckItem(
-            canvas,
-            x,
-            cursor,
-            width,
-            "Peralatan / area kerja telah diserahkan kepada kami dari Pelaksana kerja, kami berupaya membuat peralatan / daerah bekerja ke kondisi operasional setelah mencabut semua rambu - rambu yang sudah tidak diperlukan, barikade, penggembokan dll, dan setelah semua langkah tindakan pencegahan operasional yang diperlukan / langkah prosedural.");
-
-        cursor += 4;
-        canvas.Field(x + 1.5, cursor, width * 0.55, 4.4, "Manager Pemilik Wilayah :", null, 26);
-        canvas.Text(x + (width * 0.6), cursor, width * 0.38, 4.4, "Tanda Tangan", 4.2);
-    }
-
-    private static double DrawWrappedCheckItem(
-        FormCanvas canvas,
-        double x,
-        double y,
-        double width,
-        string label)
-    {
-        canvas.CheckBox(x + 1.5, y + 0.6, size: 2.4);
-        var used = canvas.Paragraph(x + 5, y, width - 6.5, label, 4.0, 3.2, 5);
-        return y + Math.Max(used, 3.2) + 1.6;
     }
 
     private static double[] BuildOffsets(double[] widths)

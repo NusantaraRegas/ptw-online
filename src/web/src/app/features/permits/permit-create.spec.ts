@@ -36,12 +36,6 @@ describe('PermitCreate', () => {
         requiresMetadata: false,
       },
       { code: 'FTW', label: 'FTW', uploadCategory: 'SUPPORTING', requiresMetadata: false },
-      {
-        code: 'ESIMI',
-        label: 'E-SIMI',
-        uploadCategory: 'SUPPORTING',
-        requiresMetadata: false,
-      },
     ]);
     httpTesting.expectOne('/api/v1/reference-data/supporting-documents').flush([
       {
@@ -72,10 +66,10 @@ describe('PermitCreate', () => {
     fixture.detectChanges();
 
     const mandatoryCards = fixture.nativeElement.querySelectorAll('.mandatory-document-option');
-    expect(mandatoryCards.length).toBe(6);
+    expect(mandatoryCards.length).toBe(5);
     expect(fixture.nativeElement.textContent).toContain('Prosedur Pekerjaan');
     expect(fixture.nativeElement.textContent).toContain('BPJS TK');
-    expect(fixture.nativeElement.textContent).toContain('E-SIMI');
+    expect(fixture.nativeElement.textContent).not.toContain('E-SIMI');
     expect(fixture.nativeElement.textContent).not.toContain('Deklarasi SIMOPS');
     expect(fixture.nativeElement.querySelector('[formControlName="simopsDeclaration"]')).toBeNull();
 

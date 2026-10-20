@@ -107,6 +107,18 @@ alur yang disahkan di atas, tetapi jalur yang memerlukannya tetap fail-closed sa
   keputusan yang masih memuat `TBD` pada record tersebut adalah lembar kerja untuk perluasan
   di masa depan, bukan prasyarat baseline.
 
+## Amendemen 3 (20 Oktober 2026): tindak lanjut UAT 12 Oktober 2026
+
+- Status: ACCEPTED, 12 Oktober 2026 (temuan) dan 20 Oktober 2026 (parameter), Product Owner bersama peserta UAT.
+- Keputusan: 18 temuan UAT pada [UAT-2026-10-12](UAT-2026-10-12.md) mengubah baseline sebagai berikut:
+  butir 6 closure kini memuat Bagian 9 digital dari Sponsor dan Bagian 10 Pemilik Wilayah; butir 8
+  tidak lagi memuat E-SIMI; butir 9 paket cetak memotong halaman 2 setelah Bagian 8 dan menambahkan
+  blok pengingat HSSE di bawah halaman 1; penomoran PTW memakai `PTW/NNNN/DD/MM/YYYY` dengan nomor
+  urut tahunan; alur inisial Kontraktor dan persetujuan awal Sponsor berjalan di dalam `DRAFT`;
+  approver berbasis assignment delegasi dilabeli PJS Manager; submit ulang dan validasi ulang
+  memerlukan self check; pilihan APD PIC HSE disimpan terpisah dan bertahan melewati revisi.
+- Yang tetap backlog: scope perusahaan Kontraktor, SLA/eskalasi, retensi, RPO/RTO, klasifikasi data, QR.
+
 ## Bukti pengesahan
 
 - Referensi: pernyataan pengguna 25 September 2026 bahwa sistem dan alur saat ini telah disetujui,

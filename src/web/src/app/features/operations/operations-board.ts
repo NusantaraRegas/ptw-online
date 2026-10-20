@@ -86,6 +86,10 @@ export class OperationsBoard {
   protected readonly rangeEnd = computed(() =>
     Math.min(this.offset() + this.pageSize(), this.count()),
   );
+  protected readonly pageNumber = computed(() => Math.floor(this.offset() / this.pageSize()) + 1);
+  protected readonly pageCount = computed(() =>
+    Math.max(1, Math.ceil(this.count() / this.pageSize())),
+  );
   protected readonly canGoBack = computed(() => this.offset() > 0);
   protected readonly canGoForward = computed(() => this.offset() + this.pageSize() < this.count());
   protected readonly availableLocations = computed(() => {

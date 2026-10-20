@@ -473,3 +473,39 @@ button:disabled {
     justify-self: start;
   }
 }
+
+.delegation-form {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 14px 16px;
+  border: 1px dashed var(--nr-border);
+  border-radius: 12px;
+  background: #fffbf2;
+}
+
+.delegation-form p {
+  margin: 0;
+  font-size: 11px;
+}
+
+.delegation-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.delegation-form select,
+.delegation-form input {
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid #cedade;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.delegation-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

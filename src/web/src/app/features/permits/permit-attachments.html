@@ -22,6 +22,16 @@
     </div>
 
     @if (canManage()) {
+      <input
+        #documentPicker
+        type="file"
+        class="visually-hidden-input"
+        accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
+        multiple
+        tabindex="-1"
+        aria-hidden="true"
+        (change)="selectFiles($event)"
+      />
       <label class="upload-button" [class.disabled]="busy()">
         <input
           type="file"
@@ -48,6 +58,20 @@
     }
   </header>
 
+  @if (canManage()) {
+    <p class="upload-policy" id="upload-policy-note">
+      @if (maxFileLabel()) {
+        Maksimum {{ maxFileLabel() }} per file, format PDF, JPEG, atau PNG
+        @if (policy()?.maxFilesPerPermit) {
+          , maksimum {{ policy()!.maxFilesPerPermit }} file per PTW
+        }
+        .
+      } @else {
+        Format PDF, JPEG, atau PNG.
+      }
+    </p>
+  }
+
   @if (!fieldCopyOnly()) {
     <section class="document-readiness jsa-readiness" aria-labelledby="jsa-readiness-title">
       <div class="document-readiness-head">
@@ -73,6 +97,17 @@
             <span class="document-status" [class.complete]="documentComplete(document.code)">
               {{ documentStatus(document.code) }}
             </span>
+            @if (canManage()) {
+              <button
+                type="button"
+                class="document-upload"
+                [disabled]="busy()"
+                [attr.aria-label]="'Unggah ' + document.label"
+                (click)="uploadFor(document.code)"
+              >
+                Unggah
+              </button>
+            }
           </li>
         </ul>
       }
@@ -84,7 +119,7 @@
           <h4 id="mandatory-document-readiness-title">Dokumen wajib pengajuan</h4>
           <p>
             Bukti berikut wajib tersedia. Prosedur Pekerjaan otomatis menjadi checklist Bagian 4;
-            ID, BPJS TK, FTW, dan E-SIMI tetap hanya menjadi evidence pengajuan.
+            ID, BPJS TK, dan FTW tetap hanya menjadi evidence pengajuan.
           </p>
         </div>
         <span>{{ mandatoryEvidenceDocuments().length }} wajib</span>
@@ -108,6 +143,17 @@
               <span class="document-status" [class.complete]="documentComplete(document.code)">
                 {{ documentStatus(document.code) }}
               </span>
+              @if (canManage()) {
+                <button
+                  type="button"
+                  class="document-upload"
+                  [disabled]="busy()"
+                  [attr.aria-label]="'Unggah ' + document.label"
+                  (click)="uploadFor(document.code)"
+                >
+                  Unggah
+                </button>
+              }
             </li>
           }
         </ul>
@@ -145,6 +191,17 @@
               <span class="document-status" [class.complete]="documentComplete(document.code)">
                 {{ documentStatus(document.code) }}
               </span>
+              @if (canManage()) {
+                <button
+                  type="button"
+                  class="document-upload"
+                  [disabled]="busy()"
+                  [attr.aria-label]="'Unggah ' + document.label"
+                  (click)="uploadFor(document.code)"
+                >
+                  Unggah
+                </button>
+              }
             </li>
           }
         </ul>
@@ -251,8 +308,8 @@
         } @else if (category() === 'JSA') {
           Nomor, revisi, dan tanggal JSA mengikuti data draft untuk menjaga keterlacakan.
         } @else {
-          Pilih dokumen wajib atau dokumen Bagian 4 yang sesuai. Lampiran umum hanya untuk foto,
-          drawing, atau evidence tambahan.
+          Tombol <strong>Unggah</strong> pada daftar di atas langsung memilih jenis dokumennya.
+          Lampiran umum hanya untuk foto, drawing, atau evidence tambahan.
         }
       </p>
     </fieldset>
@@ -301,7 +358,7 @@
             canManage()
               ? fieldCopyOnly()
                 ? 'Gunakan tombol “Unggah salinan bertanda tangan” setelah hardcopy resmi ditandatangani di lapangan.'
-                : 'Pilih jenis dokumen, lalu gunakan tombol “Tambah lampiran”.'
+                : 'Gunakan tombol “Unggah” pada setiap dokumen di atas, atau “Tambah lampiran” untuk lampiran umum.'
               : 'Dokumen pendukung untuk PTW ini belum tersedia.'
           }}
         </p>
@@ -347,6 +404,21 @@
           <div class="file-actions">
             <button
               type="button"
+              class="preview"
+              [disabled]="attachment.scanStatus !== 'CLEAN'"
+              [attr.aria-describedby]="
+                attachment.scanStatus !== 'CLEAN' ? 'scan-download-note' : null
+              "
+              (click)="preview(attachment)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              Pratinjau
+            </button>
+            <button
+              type="button"
               class="download"
               [class.primary-download]="isPrimaryDocument(attachment)"
               [disabled]="attachment.scanStatus !== 'CLEAN'"
@@ -375,4 +447,30 @@
       </p>
     }
   }
+
+  <dialog
+    #previewDialog
+    class="preview-dialog"
+    aria-labelledby="preview-title"
+    (close)="closePreview()"
+  >
+    <header class="preview-header">
+      <h4 id="preview-title">{{ previewAttachment()?.fileName || 'Pratinjau lampiran' }}</h4>
+      <button type="button" class="preview-close" (click)="closePreview()">Tutup</button>
+    </header>
+    <div class="preview-body">
+      @if (previewError()) {
+        <p class="attachment-error" role="alert">{{ previewError() }}</p>
+      } @else if (previewImageUrl(); as imageUrl) {
+        <img [src]="imageUrl" [alt]="'Pratinjau ' + (previewAttachment()?.fileName ?? '')" />
+      } @else if (previewFrameUrl(); as frameUrl) {
+        <iframe
+          [src]="frameUrl"
+          [title]="'Pratinjau ' + (previewAttachment()?.fileName ?? '')"
+        ></iframe>
+      } @else {
+        <p class="loading-state" role="status">Memuat pratinjau…</p>
+      }
+    </div>
+  </dialog>
 </section>

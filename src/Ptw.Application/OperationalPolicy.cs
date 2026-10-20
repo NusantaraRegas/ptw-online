@@ -23,6 +23,11 @@ public static class PermitPolicyOperations
     public const string Close = "ClosePermit";
     public const string Cancel = "CancelPermit";
     public const string Expire = "ExpirePermit";
+    public const string SaveSafetyEquipment = "SaveSafetyEquipment";
+    public const string CreateInitialDraft = "CreateInitialDraft";
+    public const string SubmitInitiation = "SubmitInitiation";
+    public const string ApproveInitiation = "ApproveInitiation";
+    public const string ReturnInitiation = "ReturnInitiation";
 
     public static readonly IReadOnlyList<string> Required =
     [
@@ -46,7 +51,12 @@ public static class PermitPolicyOperations
         ResubmitClosure,
         Close,
         Cancel,
-        Expire
+        Expire,
+        SaveSafetyEquipment,
+        CreateInitialDraft,
+        SubmitInitiation,
+        ApproveInitiation,
+        ReturnInitiation
     ];
 }
 

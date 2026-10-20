@@ -173,6 +173,10 @@ builder.Services
             {
                 identity.RemoveClaim(claim);
             }
+            foreach (var claim in identity.FindAll("acting_role").ToArray())
+            {
+                identity.RemoveClaim(claim);
+            }
             var currentName = identity.FindFirst(System.Security.Claims.ClaimTypes.Name);
             if (currentName is not null)
             {
@@ -182,6 +186,7 @@ builder.Services
             identity.AddClaims(resolved.Roles.Select(role => new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role)));
             identity.AddClaims(resolved.LocationScopes.Select(scope => new System.Security.Claims.Claim("location_scope", scope)));
             identity.AddClaims(resolved.CompetencyCodes.Select(code => new System.Security.Claims.Claim("competency", code)));
+            identity.AddClaims((resolved.ActingRoles ?? new HashSet<string>()).Select(role => new System.Security.Claims.Claim("acting_role", role)));
         };
     })
     .AddScheme<AuthenticationSchemeOptions, DevelopmentAuthenticationHandler>(

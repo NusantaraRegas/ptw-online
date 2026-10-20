@@ -52,7 +52,9 @@ export class App {
       .join('')
       .toUpperCase(),
   );
-  protected readonly roleLabel = computed(() => roleDisplayLabel(this.identity().roles));
+  protected readonly roleLabel = computed(() =>
+    roleDisplayLabel(this.identity().roles, this.identity().actingRoles ?? []),
+  );
   protected readonly isAdministrator = computed(() =>
     this.identity().roles.includes('Administrator'),
   );

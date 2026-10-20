@@ -142,34 +142,15 @@ internal sealed partial class PtwFormRenderer
             canvas.Line(Pt(rule.Start.X), Pt(rule.Start.Y), Pt(rule.End.X), Pt(rule.End.Y));
         }
 
+        // UAT-2026-10-12 no. 2: the controlled sheet still prints "Sertifikat Pekerjaan"; the agreed
+        // term is "Sertifikat Pekerja" and the catalog label is rewritten over the template text.
         ReplaceTemplateLabel(
             canvas,
-            layout.Section10OwnerLabel,
-            "(Diisi oleh Pemilik Wilayah)",
-            4.0,
-            3.2,
-            TextAlign.Center);
-        ReplaceTemplateLabel(
-            canvas,
-            layout.Section10OfficerLabel,
-            "Officer : ....................................",
-            3.8,
-            3.0);
-        ReplaceTemplateLabel(canvas, layout.Section10OfficerReference, " Officer.", 3.8, 3.0);
-        ReplaceTemplateLabel(
-            canvas,
-            layout.Section10ManagerLabel,
-            "Manager Pemilik Wilayah : ................",
-            3.8,
-            2.8);
-
-        var reference = snapshotHash.Length >= 12 ? snapshotHash[..12] : snapshotHash;
-        OverlayText(
-            canvas,
-            layout.ReconciliationReference,
-            $"Ref: {snapshot.PermitNumber ?? "-"} | v{snapshot.PermitVersion} | {reference} | Bukti persetujuan elektronik, bukan tanda tangan tersertifikasi",
-            4.0,
-            align: TextAlign.Right);
+            layout.WorkCertificateLabel,
+            PermitSupportingDocumentCatalog.Resolve(PermitSupportingDocumentCatalog.WorkCertificateCode).Label,
+            4.4,
+            3.4);
+        _ = snapshotHash;
     }
 
     private static void DrawSelection(
@@ -309,7 +290,10 @@ internal sealed partial class PtwFormRenderer
                 canvas,
                 layout.ApprovalRows[1],
                 approval.ActorName ?? approval.ActorId,
-                approval.ActorPosition,
+                // An acting approver (PJS) signs the Manager row on behalf of the principal position.
+                approval.Capacity == ApprovalCapacity.ActingForManager
+                    ? $"PJS {approval.PrincipalPosition}"
+                    : approval.ActorPosition,
                 approval.ApprovedAt,
                 "Disetujui elektronik",
                 approval.Signature);
@@ -564,11 +548,7 @@ internal sealed record TemplateOverlayLayout(
     PdfRect ValidUntilDate,
     PdfRect ValidUntilTime,
     IReadOnlyList<ApprovalOverlayRow> ApprovalRows,
-    PdfRect Section10OwnerLabel,
-    PdfRect Section10OfficerLabel,
-    PdfRect Section10OfficerReference,
-    PdfRect Section10ManagerLabel,
-    PdfRect ReconciliationReference);
+    PdfRect WorkCertificateLabel);
 
 internal sealed record TemplatePageSplitLayout(PdfRect PageOne, PdfRect PageTwo);
 
@@ -625,11 +605,7 @@ internal static class TemplateOverlayCatalog
             new(new(373, 628, 78, 14), new(453, 628, 81, 14), new(543, 628, 89, 14), new(634, 628, 138, 14)),
             new(new(373, 643, 78, 14), new(453, 643, 81, 14), new(543, 643, 89, 14), new(634, 643, 138, 14))
         ],
-        new(954, 479, 220, 8),
-        new(978.5, 541.5, 94, 8),
-        new(1076.5, 550.8, 33, 8),
-        new(978.5, 630.5, 94, 8),
-        new(782, 672, 393, 8));
+        new(479.4, 353.2, 58, 8.6));
 
     private static readonly TemplateOverlayLayout ColdWork = new(
         2,
@@ -677,11 +653,7 @@ internal static class TemplateOverlayCatalog
             new(new(367, 630, 84, 14), new(463, 630, 78, 14), new(544, 630, 88, 14), new(634, 630, 110, 14)),
             new(new(367, 645, 84, 14), new(463, 645, 78, 14), new(544, 645, 88, 14), new(634, 645, 110, 14))
         ],
-        new(944, 478.5, 210, 8),
-        new(961, 534.8, 94, 8),
-        new(1059, 544.2, 33, 8),
-        new(961, 648.3, 94, 8),
-        new(764, 674, 394, 8));
+        new(492.4, 350.8, 55, 8.6));
 
     private static readonly TemplateOverlayLayout ConfinedSpaceEntry = new(
         3,
@@ -729,26 +701,24 @@ internal static class TemplateOverlayCatalog
             new(new(329, 634, 86, 14), new(422, 634, 87, 14), new(527, 634, 88, 14), new(618, 634, 141, 14)),
             new(new(329, 648, 86, 14), new(422, 648, 87, 14), new(527, 648, 88, 14), new(618, 648, 141, 14))
         ],
-        new(937, 467.5, 205, 8),
-        new(959.2, 527.9, 89, 8),
-        new(1047, 536.8, 30, 8),
-        new(959.2, 625.9, 89, 8),
-        new(774, 674, 371, 8));
+        new(456.7, 345.5, 58, 8.6));
 
     // Tight vector crops measured from the controlled source pages. Page one ends after Bagian 7;
-    // page two starts at the left rule of Bagian 8. A small two-point padding keeps the outer rules
-    // intact without carrying fragments from the neighbouring half of the original A3 sheet.
+    // page two starts at the left rule of Bagian 8 and ends at the bottom rule of the revalidation
+    // grid, so the Bagian 9/10 band below it is never printed (UAT-2026-10-12 no. 16). A small
+    // two-point padding keeps the outer rules intact without carrying fragments from the neighbouring
+    // half of the original A3 sheet.
     private static readonly TemplatePageSplitLayout HotWorkPages = new(
         new(70, 172, 707, 497),
-        new(780, 172, 397, 512));
+        new(780, 172, 397, 280.1));
 
     private static readonly TemplatePageSplitLayout ColdWorkPages = new(
         new(54, 170, 705, 501),
-        new(762, 170, 398, 514));
+        new(762, 170, 398, 279.7));
 
     private static readonly TemplatePageSplitLayout ConfinedSpaceEntryPages = new(
         new(25, 171, 735, 502),
-        new(774, 171, 373, 513));
+        new(774, 171, 373, 268.1));
 
     internal static TemplateOverlayLayout Resolve(PermitClass permitClass) => permitClass switch
     {

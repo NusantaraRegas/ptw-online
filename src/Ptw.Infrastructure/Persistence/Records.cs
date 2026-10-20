@@ -19,7 +19,16 @@ public sealed class PermitRecord
     public Guid? RenewedFromPermitId { get; set; }
     public string? SuspensionReason { get; set; }
     public string? WorkflowEvidenceJson { get; set; }
+    /// <summary>Contractor subject that initiated the draft; null for Sponsor-authored PTWs.</summary>
+    public string? InitiatedBy { get; set; }
     public byte[] RowVersion { get; set; } = [];
+}
+
+/// <summary>Yearly counter behind the official PTW number; one row per WIB calendar year.</summary>
+public sealed class PermitNumberSequenceRecord
+{
+    public int Year { get; set; }
+    public int LastValue { get; set; }
 }
 
 public sealed class PermitVersionRecord

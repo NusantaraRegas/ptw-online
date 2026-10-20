@@ -28,8 +28,6 @@ internal static class PermitMapper
             riskLevel,
             request.ValidFrom,
             request.ValidUntil,
-            request.ESimiExternalId,
-            request.ESimiNumber,
             request.Hazards,
             request.Controls,
             request.RequiredDocumentCodes,
@@ -138,9 +136,41 @@ internal static class PermitMapper
                     permit.ClosureDecision?.ManagerAgreesWorkCompleted ?? false,
                     permit.ClosureDecision?.InhibitedSystemsRestored ?? false,
                     permit.ClosureDecision?.AreaHandedBackAndSafeguardsRestored ?? false,
-                    permit.ClosureDecision?.EvidenceReadable ?? false)),
+                    permit.ClosureDecision?.EvidenceReadable ?? false,
+                    permit.ClosureRequest?.Completion is { } completion
+                        ? new PermitWorkCompletionRequest(
+                            completion.WorkCompleted,
+                            completion.EquipmentAndMaterialsRemoved,
+                            completion.Explanation,
+                            completion.PerformingAuthorityName,
+                            completion.PerformingAuthorityBadgeNumber,
+                            completion.SponsorBadgeNumber)
+                        : null,
+                    permit.ClosureDecision?.IncompleteWorkStatus),
+                new HseSafetyEquipmentSelectionResponse(
+                    permit.SafetyEquipmentSelection is not null,
+                    permit.SafetyEquipmentSelection?.ActorId,
+                    permit.SafetyEquipmentSelection?.ActorName,
+                    permit.SafetyEquipmentSelection?.SafetyEquipmentCodes ?? [],
+                    permit.SafetyEquipmentSelection?.SavedAt),
+                new PermitInitiationResponse(
+                    permit.Initiation is not null,
+                    permit.Initiation?.ContractorId,
+                    permit.Initiation?.ContractorName,
+                    permit.Initiation is null ? null : ToUpperSnakeCase(permit.Initiation.Status.ToString()),
+                    permit.Initiation?.SubmittedToSponsorAt,
+                    permit.Initiation?.SponsorStatement,
+                    permit.Initiation?.DecidedAt)),
             stored.ETag);
     }
+
+    public static PermitWorkCompletionDeclaration ToDomain(this PermitWorkCompletionRequest request) => new(
+        request.WorkCompleted,
+        request.EquipmentAndMaterialsRemoved,
+        request.Explanation,
+        request.PerformingAuthorityName,
+        request.PerformingAuthorityBadgeNumber,
+        request.SponsorBadgeNumber);
 
     private static PermitValidationResponse ToValidationResponse(
         string code,
@@ -153,7 +183,8 @@ internal static class PermitMapper
         evidence?.ActorName,
         evidence?.Statement,
         evidence?.ValidatedAt,
-        evidence?.SafetyEquipmentCodes ?? []);
+        evidence?.SafetyEquipmentCodes ?? [],
+        evidence?.RevisionSelfCheckConfirmed ?? false);
 
     private static string ToUpperSnakeCase(string value) => string.Concat(
         value.Select((character, index) =>
@@ -177,8 +208,6 @@ internal static class PermitMapper
             draft.RiskLevel.ToString(),
             draft.ValidFrom,
             draft.ValidUntil,
-            draft.ESimiExternalId,
-            draft.ESimiNumber,
             draft.Hazards,
             draft.Controls,
             draft.RequiredDocumentCodes,

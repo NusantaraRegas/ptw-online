@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { switchMap } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import {
   DirectUserAuthorizationDraft,
@@ -37,6 +38,13 @@ export class AdminAuthorizations {
   protected readonly accessDenied = signal(false);
   protected readonly formOpen = signal(false);
   protected readonly editingAssignment = signal<UserAuthorization | null>(null);
+  /** Approved direct Manager assignment a PJS delegation is being created from. */
+  protected readonly delegatingFrom = signal<UserAuthorization | null>(null);
+  protected readonly delegationForm = this.formBuilder.nonNullable.group({
+    subjectId: ['', [Validators.required, Validators.maxLength(200)]],
+    effectiveFrom: [this.localDateTimeValue(), Validators.required],
+    effectiveUntil: ['', Validators.required],
+  });
   protected readonly subjectCount = computed(
     () => new Set(this.assignments().map((item) => item.subjectId.toLowerCase())).size,
   );
@@ -148,6 +156,77 @@ export class AdminAuthorizations {
           editing ? 'Assignment gagal diperbarui.' : 'Assignment gagal dibuat.',
         ),
     });
+  }
+
+  protected canDelegate(entry: UserAuthorization): boolean {
+    return (
+      entry.kind === 'DIRECT' &&
+      entry.status === 'APPROVED' &&
+      entry.roleCode === 'AreaOwnerManager'
+    );
+  }
+
+  protected openDelegation(entry: UserAuthorization): void {
+    if (!this.canDelegate(entry)) return;
+    this.closeForm();
+    this.delegatingFrom.set(entry);
+    this.delegationForm.reset({
+      subjectId: '',
+      effectiveFrom: this.localDateTimeValue(),
+      effectiveUntil: '',
+    });
+    this.error.set('');
+  }
+
+  protected closeDelegation(): void {
+    this.delegatingFrom.set(null);
+    this.error.set('');
+  }
+
+  /**
+   * Creates and activates a PJS delegation (UAT-2026-10-12 no. 13): the delegate inherits the
+   * source Manager assignment's scope and action codes for a bounded period.
+   */
+  protected createDelegation(): void {
+    const source = this.delegatingFrom();
+    if (!source) return;
+    if (this.delegationForm.invalid) {
+      this.delegationForm.markAllAsTouched();
+      this.error.set('Pilih pengguna PJS serta tanggal mulai dan akhir delegasi.');
+      return;
+    }
+    const value = this.delegationForm.getRawValue();
+    if (value.subjectId.trim().toLowerCase() === source.subjectId.toLowerCase()) {
+      this.error.set('PJS harus pengguna yang berbeda dari Manager definitif.');
+      return;
+    }
+    this.saving.set(true);
+    this.error.set('');
+    this.api
+      .create({
+        subjectId: value.subjectId.trim(),
+        roleCode: source.roleCode,
+        actionCodes: source.actionCodes,
+        locationId: source.locationId,
+        includeDescendants: source.includeDescendants,
+        requiredCompetencyCodes: source.requiredCompetencyCodes,
+        kind: 'DELEGATION',
+        sourceAuthorizationId: source.id,
+        effectiveFrom: new Date(value.effectiveFrom).toISOString(),
+        effectiveUntil: new Date(value.effectiveUntil).toISOString(),
+      })
+      .pipe(
+        switchMap((draft) => this.api.approve(draft.id, draft.eTag)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (entry) => {
+          this.assignments.update((items) => [entry, ...items]);
+          this.delegatingFrom.set(null);
+          this.saving.set(false);
+        },
+        error: (response) => this.handleError(response, 'Delegasi PJS gagal dibuat.'),
+      });
   }
 
   /** Activates a row left as Draft or PendingApproval by the earlier maker-checker flow. */

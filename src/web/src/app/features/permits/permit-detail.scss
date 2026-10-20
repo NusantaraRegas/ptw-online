@@ -414,3 +414,60 @@ button:disabled {
     gap: 8px;
   }
 }
+
+.initiation-note {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--nr-blue-dark);
+  background: var(--nr-blue-soft);
+  font-size: 11px;
+}
+
+.acting-banner {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #7a4b00;
+  background: #fff3d6;
+  font-size: 11px;
+}
+
+.saved-selection-note {
+  margin: 8px 0 0;
+  color: var(--nr-muted);
+  font-size: 10px;
+}
+
+.save-selection-button {
+  margin-top: 8px;
+}
+
+.revision-self-check {
+  align-items: flex-start;
+}
+
+.revision-self-check small {
+  display: block;
+  color: var(--nr-muted);
+}
+
+.section9-fieldset legend {
+  font-weight: 700;
+}
+
+.section9-summary {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+}
+
+.section9-summary dt {
+  color: var(--nr-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.section9-summary dd {
+  margin: 0;
+  font-size: 11px;
+}

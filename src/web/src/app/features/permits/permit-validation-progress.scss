@@ -215,3 +215,15 @@ time {
 .approval-panel.completed .approval-status {
   color: #157047;
 }
+
+.acting-badge {
+  display: inline-block;
+  width: fit-content;
+  margin: 2px 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #7a4b00;
+  background: #fff3d6;
+  font-size: 9px;
+  font-weight: 700;
+}

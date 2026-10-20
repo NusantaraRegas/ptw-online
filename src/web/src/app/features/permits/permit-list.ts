@@ -124,7 +124,10 @@ import {
       }
       @if (!loading() && count() > 0) {
         <footer class="pagination" aria-label="Navigasi halaman daftar PTW">
-          <span>Menampilkan {{ rangeStart() }}â€“{{ rangeEnd() }} dari {{ count() }} PTW</span>
+          <span>
+            Menampilkan {{ rangeStart() }}–{{ rangeEnd() }} dari {{ count() }} PTW · Halaman
+            {{ pageNumber() }} dari {{ pageCount() }}
+          </span>
           <div>
             <button type="button" (click)="previousPage()" [disabled]="!canGoBack()">
               Sebelumnya
@@ -364,6 +367,10 @@ export class PermitList {
   protected readonly rangeEnd = computed(() =>
     Math.min(this.offset() + this.pageSize(), this.count()),
   );
+  protected readonly pageNumber = computed(() => Math.floor(this.offset() / this.pageSize()) + 1);
+  protected readonly pageCount = computed(() =>
+    Math.max(1, Math.ceil(this.count() / this.pageSize())),
+  );
   protected readonly canGoBack = computed(() => this.offset() > 0);
   protected readonly canGoForward = computed(() => this.offset() + this.pageSize() < this.count());
   private readonly query = new BehaviorSubject({ search: '', offset: 0, limit: 25 });
@@ -375,7 +382,9 @@ export class PermitList {
     );
   });
   protected readonly canCreatePermit = computed(() =>
-    (this.identity()?.roles ?? []).some((role) => ['Sponsor', 'Administrator'].includes(role)),
+    (this.identity()?.roles ?? []).some((role) =>
+      ['Sponsor', 'Administrator', 'Contractor'].includes(role),
+    ),
   );
 
   protected statusLabel(status: string): string {

@@ -9,15 +9,17 @@ public sealed class PermitService(
     IPermitStore store,
     IActorContext actorContext,
     IClock clock,
-    IPermitNumberGenerator numberGenerator,
     IOperationalPolicyGate operationalPolicyGate,
     IPermitAttachmentStore attachmentStore,
     AttachmentPolicy attachmentPolicy,
     LocationReleaseSettings locationRelease,
     IssuancePolicySettings issuancePolicy,
-    IUserDirectoryStore userDirectoryStore)
+    IUserDirectoryStore userDirectoryStore,
+    IUserAuthorizationStore userAuthorizationStore,
+    ILocationMasterStore locationMasterStore)
 {
     private const string HseValidatorRole = "HSEValidator";
+    private const string ContractorRole = PermitAccess.ContractorRole;
     // Retain the persisted code for compatibility. This role is the single Bagian 7
     // reviewer pool and may be assigned to an SO or Officer Pemilik Wilayah.
     private const string AreaOperationsReviewerRole = "AreaOwnerSeniorOfficer";
@@ -29,6 +31,11 @@ public sealed class PermitService(
         CancellationToken cancellationToken)
     {
         var actor = actorContext.Current;
+        if (PermitAccess.IsContractorOnly(actor))
+        {
+            return await CreateInitialDraftAsync(actor, request, correlationId, cancellationToken);
+        }
+
         EnsureSponsorOrAdmin(actor);
         EnsureLocationScope(actor, request.LocationId);
         if (!string.Equals(actor.Id, request.SponsorId, StringComparison.OrdinalIgnoreCase)
@@ -49,10 +56,70 @@ public sealed class PermitService(
         return await ToResponseAsync(created, cancellationToken);
     }
 
+    /// <summary>
+    /// Contractor-initiated draft (UAT-2026-10-12 no. 14): the Contractor names the Sponsor who will
+    /// approve the initial PTW and later submit it to the PIC HSE.
+    /// </summary>
+    private async Task<PermitResponse> CreateInitialDraftAsync(
+        Actor actor,
+        PermitDraftRequest request,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        EnsureLocationScope(actor, request.LocationId);
+        await EnsureSponsorSelectionAsync(actor, request.SponsorId, cancellationToken);
+        var authorization = await operationalPolicyGate.AuthorizePermitCommandAsync(
+            actor,
+            PermitPolicyOperations.CreateInitialDraft,
+            request.LocationId,
+            cancellationToken);
+        var now = clock.UtcNow;
+        var permit = Permit.CreateDraft(
+            request.ToDomain(),
+            now,
+            new PermitInitiation(
+                actor.Id,
+                PermitInitiationStatus.Drafting,
+                now,
+                ContractorName: DisplayNameUnlessIdentifier(actor)));
+        var created = await store.AddAsync(permit, actor, correlationId, authorization, cancellationToken);
+        return await ToResponseAsync(created, cancellationToken);
+    }
+
+    private async Task EnsureSponsorSelectionAsync(
+        Actor actor,
+        string sponsorId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(sponsorId)
+            || string.Equals(sponsorId.Trim(), actor.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidRequestException(
+                "permit.initiation.sponsor_required",
+                "Kontraktor wajib memilih Sponsor NR yang akan menyetujui PTW awal.");
+        }
+
+        var sponsor = await userDirectoryStore.ResolveIdentityAsync(sponsorId.Trim(), clock.UtcNow, cancellationToken);
+        if (sponsor is not null && sponsor.IsActive && sponsor.Roles.Contains("Sponsor"))
+        {
+            return;
+        }
+
+        // Demo identities are not registered accounts; Development keeps the flow demonstrable.
+        if (actor.IsDevelopment && sponsor is null)
+        {
+            return;
+        }
+
+        throw new InvalidRequestException(
+            "permit.initiation.sponsor_invalid",
+            "Sponsor yang dipilih tidak aktif atau tidak memiliki role Sponsor.");
+    }
+
     public async Task<PermitResponse> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var stored = await GetStoredAsync(id, cancellationToken);
-        EnsurePermitReadScope(actorContext.Current, stored.Permit.Draft.LocationId);
+        EnsurePermitReadAccess(actorContext.Current, stored.Permit);
         return await ToResponseAsync(stored, cancellationToken);
     }
 
@@ -65,12 +132,15 @@ public sealed class PermitService(
         EnsureValidPage(offset, limit);
         var actor = actorContext.Current;
         search = NormalizeSearch(search);
-        var sponsorFilter = actor.Roles.Overlaps(
-            ["Auditor", "Administrator", HseValidatorRole, AreaOperationsReviewerRole, AreaOwnerManagerRole])
+        var contractorOnly = PermitAccess.IsContractorOnly(actor);
+        var sponsorFilter = contractorOnly
+            || actor.Roles.Overlaps(
+                ["Auditor", "Administrator", HseValidatorRole, AreaOperationsReviewerRole, AreaOwnerManagerRole])
             ? null
             : actor.Id;
         var storedPage = await store.ListAsync(
             sponsorFilter,
+            contractorOnly ? actor.Id : null,
             PermitMonitoringAccess.ReadLocationScopes(actor),
             search,
             offset,
@@ -136,7 +206,7 @@ public sealed class PermitService(
     {
         EnsureValidPage(offset, limit);
         var stored = await GetStoredAsync(id, cancellationToken);
-        EnsurePermitReadScope(actorContext.Current, stored.Permit.Draft.LocationId);
+        EnsurePermitReadAccess(actorContext.Current, stored.Permit);
         var page = await store.ListActivityAsync(id, offset, limit, cancellationToken);
         return new PagedResponse<PermitActivityResponse>(page.Items.Select(entry => new PermitActivityResponse(
             entry.Sequence,
@@ -155,7 +225,7 @@ public sealed class PermitService(
     {
         EnsureValidPage(offset, limit);
         var stored = await GetStoredAsync(id, cancellationToken);
-        EnsurePermitReadScope(actorContext.Current, stored.Permit.Draft.LocationId);
+        EnsurePermitReadAccess(actorContext.Current, stored.Permit);
         var page = await store.ListVersionsAsync(id, offset, limit, cancellationToken);
         return new PagedResponse<PermitVersionResponse>(page.Items.Select(entry => new PermitVersionResponse(
             entry.Version,
@@ -174,7 +244,30 @@ public sealed class PermitService(
     {
         var stored = await GetStoredAsync(id, cancellationToken);
         var actor = actorContext.Current;
-        EnsureSponsorOwnership(actor, stored.Permit);
+        var contractorEdit = PermitAccess.IsContractorOnly(actor);
+        if (contractorEdit)
+        {
+            if (!PermitAccess.ContractorMayEditDraft(actor, stored.Permit))
+            {
+                throw new UnauthorizedAccessException(
+                    "PTW awal berada di luar kewenangan Kontraktor atau sedang ditinjau Sponsor.");
+            }
+
+            EnsureLocationScope(actor, stored.Permit.Draft.LocationId);
+            await EnsureSponsorSelectionAsync(actor, request.SponsorId, cancellationToken);
+        }
+        else
+        {
+            EnsureSponsorOwnership(actor, stored.Permit);
+            if (stored.Permit.Initiation is not null
+                && !string.Equals(request.SponsorId, stored.Permit.Draft.SponsorId, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidRequestException(
+                    "permit.initiation.sponsor_locked",
+                    "Sponsor PTW awal Kontraktor hanya dapat diubah oleh Kontraktor sebelum persetujuan.");
+            }
+        }
+
         if (stored.Permit.RenewedFromPermitId is Guid sourcePermitId)
         {
             var source = await GetStoredAsync(sourcePermitId, cancellationToken);
@@ -191,7 +284,7 @@ public sealed class PermitService(
         EnsureLocationScope(actor, request.LocationId);
         var authorization = await operationalPolicyGate.AuthorizePermitCommandAsync(
             actor,
-            PermitPolicyOperations.UpdateDraft,
+            contractorEdit ? PermitPolicyOperations.CreateInitialDraft : PermitPolicyOperations.UpdateDraft,
             request.LocationId,
             cancellationToken);
         stored.Permit.UpdateDraft(request.ToDomain(), clock.UtcNow);
@@ -423,23 +516,146 @@ public sealed class PermitService(
             PermitPolicyOperations.Submit,
             stored.Permit.Draft.LocationId,
             cancellationToken);
-        stored.Permit.Submit(
-            numberGenerator.Generate(clock.UtcNow),
-            new SubmissionReadiness(
-                request.ESimiEligible,
-                request.RulesEvaluated,
-                request.RequiredDocumentsSafe,
-                request.MissingRequirements),
-            clock.UtcNow);
+        var now = clock.UtcNow;
+        var readiness = new SubmissionReadiness(
+            request.RulesEvaluated,
+            request.RequiredDocumentsSafe,
+            request.MissingRequirements,
+            request.RevisionSelfCheckConfirmed);
+        // The official number is allocated by the store inside the submit transaction so the yearly
+        // sequence never skips or duplicates when two Sponsors submit at the same moment.
+        var updated = await store.UpdateWithPermitNumberAsync(
+            stored.Permit,
+            number => stored.Permit.Submit(number, readiness, now),
+            now,
+            expectedETag,
+            actor,
+            correlationId,
+            new IdempotencyContext(actor.Id, PermitPolicyOperations.Submit, idempotencyKey, requestHash),
+            authorization,
+            cancellationToken);
+        return await ToResponseAsync(updated, cancellationToken);
+    }
+
+    /// <summary>Contractor hands the completed initial PTW to its Sponsor (task <c>SPONSOR_INITIAL_APPROVAL</c>).</summary>
+    public async Task<PermitResponse> SubmitInitiationAsync(
+        Guid id,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        EnsureIdempotencyKey(idempotencyKey);
+        var actor = actorContext.Current;
+        EnsureAnyRole(actor, [ContractorRole]);
+        var requestHash = Hash(new { PermitId = id, Operation = PermitPolicyOperations.SubmitInitiation });
+        var prior = await store.FindIdempotentResultAsync(
+            actor.Id,
+            PermitPolicyOperations.SubmitInitiation,
+            idempotencyKey,
+            requestHash,
+            cancellationToken);
+        if (prior is not null)
+        {
+            return await ToResponseAsync(prior, cancellationToken);
+        }
+
+        var stored = await GetStoredAsync(id, cancellationToken);
+        if (!PermitAccess.IsInitiator(actor, stored.Permit))
+        {
+            throw new UnauthorizedAccessException("PTW awal berada di luar kewenangan Kontraktor.");
+        }
+
+        EnsureLocationScope(actor, stored.Permit.Draft.LocationId);
+        if (!locationRelease.TryGetAreaOwnerDepartment(stored.Permit.Draft.LocationId, out _))
+        {
+            throw new InvalidRequestException(
+                "permit.location.not_released",
+                $"Lokasi {stored.Permit.Draft.LocationId} belum memiliki release dan konfigurasi pemilik wilayah yang aktif.");
+        }
+
+        var attachments = await attachmentStore.ListActiveAsync(id, cancellationToken);
+        EnsureSupportingDocumentEvidence(stored.Permit, attachments);
+        var authorization = await operationalPolicyGate.AuthorizePermitCommandAsync(
+            actor,
+            PermitPolicyOperations.SubmitInitiation,
+            stored.Permit.Draft.LocationId,
+            cancellationToken);
+        stored.Permit.SubmitInitiationToSponsor(actor.Id, clock.UtcNow);
         return await PersistCommandAsync(
             stored.Permit,
             expectedETag,
             actor,
             correlationId,
-            PermitPolicyOperations.Submit,
+            PermitPolicyOperations.SubmitInitiation,
             idempotencyKey,
             requestHash,
             authorization,
+            cancellationToken);
+    }
+
+    public Task<PermitResponse> ApproveInitiationAsync(
+        Guid taskId,
+        InitialApprovalRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken) =>
+        ExecuteTaskCommandAsync(
+            taskId,
+            "SPONSOR_INITIAL_APPROVAL",
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.ApproveInitiation,
+            ["Sponsor"],
+            (permit, actor, now, _) => permit.ApproveInitiation(actor.Id, request.Statement, now),
+            cancellationToken);
+
+    public Task<PermitResponse> ReturnInitiationAsync(
+        Guid taskId,
+        PermitReasonRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken) =>
+        ExecuteTaskCommandAsync(
+            taskId,
+            "SPONSOR_INITIAL_APPROVAL",
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.ReturnInitiation,
+            ["Sponsor"],
+            (permit, actor, now, _) => permit.ReturnInitiation(actor.Id, request.Reason, now),
+            cancellationToken);
+
+    /// <summary>Saves the PIC HSE Bagian 5 choice without deciding the validation (UAT-2026-10-12 no. 9).</summary>
+    public async Task<PermitResponse> SaveSafetyEquipmentAsync(
+        Guid taskId,
+        SaveSafetyEquipmentRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        var presentation = await ResolveActorPresentationAsync(actorContext.Current.Id, cancellationToken);
+        return await ExecuteTaskCommandAsync(
+            taskId,
+            "HSE_VALIDATION",
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.SaveSafetyEquipment,
+            [HseValidatorRole],
+            (permit, actor, now, _) => permit.SaveSafetyEquipmentSelection(
+                actor.Id,
+                request.SafetyEquipmentCodes,
+                now,
+                DisplayNameUnlessIdentifier(actor, presentation.DisplayName)),
             cancellationToken);
     }
 
@@ -564,7 +780,8 @@ public sealed class PermitService(
                 request.Statement,
                 request.SafetyEquipmentCodes,
                 now,
-                DisplayNameUnlessIdentifier(actor, presentation.DisplayName)),
+                DisplayNameUnlessIdentifier(actor, presentation.DisplayName),
+                request.RevisionSelfCheckConfirmed),
             cancellationToken);
     }
 
@@ -595,7 +812,22 @@ public sealed class PermitService(
         string correlationId,
         CancellationToken cancellationToken)
     {
-        var presentation = await ResolveActorPresentationAsync(actorContext.Current.Id, cancellationToken);
+        var currentActor = actorContext.Current;
+        var presentation = await ResolveActorPresentationAsync(currentActor.Id, cancellationToken);
+        // Acting (PJS) capacity is decided by the server from the approver's delegation assignment,
+        // never from the client payload (UAT-2026-10-12 no. 13). The lookup needs the permit location,
+        // so it runs before the task command; a task that is already gone falls through to the usual
+        // idempotent replay or 404 handling below.
+        ActingManagerContext? acting = null;
+        if (currentActor.ActingRoleSet.Contains(AreaOwnerManagerRole))
+        {
+            var pendingTask = await store.FindPendingTaskAsync(taskId, cancellationToken);
+            if (pendingTask is not null)
+            {
+                acting = await ResolveActingManagerAsync(currentActor, pendingTask.LocationId, cancellationToken);
+            }
+        }
+
         return await ExecuteTaskCommandAsync(
             taskId,
             "AREA_APPROVE_AND_ISSUE",
@@ -613,14 +845,9 @@ public sealed class PermitService(
                         "Penerbitan diblokir: ruleset, template cetak, dan campaign asset yang disahkan belum dikonfigurasi.");
                 }
 
-                if (request.ActingAssignmentId is not null)
-                {
-                    throw new PolicyAuthorizationDeniedException(
-                        "authorization.acting_assignment_not_ready",
-                        "Approval sebagai pengganti diblokir sampai resolver acting assignment v1.6 dapat memverifikasi principal, dokumen, maker-checker, scope, risiko, dan status pencabutan.");
-                }
-
-                var authorizationId = authorization?.AssignmentIds.SingleOrDefault() ?? Guid.Empty;
+                var authorizationId = acting?.ActingAssignmentId
+                    ?? authorization?.AssignmentIds.SingleOrDefault()
+                    ?? Guid.Empty;
                 if (authorizationId == Guid.Empty && actor.IsDevelopment)
                 {
                     authorizationId = DevelopmentAuthorizationId(actor.Id);
@@ -646,11 +873,11 @@ public sealed class PermitService(
                 permit.ApproveAndIssue(new PermitApprovalEvidence(
                     actor.Id,
                     actorPosition,
-                    ApprovalCapacity.Manager,
-                    actor.Id,
-                    actorPosition,
+                    acting is null ? ApprovalCapacity.Manager : ApprovalCapacity.ActingForManager,
+                    acting?.PrincipalManagerUserId ?? actor.Id,
+                    acting?.PrincipalPosition ?? actorPosition,
                     authorizationId,
-                    null,
+                    acting?.ActingAssignmentId,
                     issuancePolicy.RuleVersion,
                     issuancePolicy.PrintTemplateVersion,
                     issuancePolicy.CampaignAssetVersion,
@@ -660,6 +887,58 @@ public sealed class PermitService(
                     presentation.Signature), now);
             },
             cancellationToken);
+    }
+
+    private sealed record ActingManagerContext(
+        Guid ActingAssignmentId,
+        string PrincipalManagerUserId,
+        string? PrincipalPosition);
+
+    private async Task<ActingManagerContext> ResolveActingManagerAsync(
+        Actor actor,
+        string locationCode,
+        CancellationToken cancellationToken)
+    {
+        if (actor.IsDevelopment)
+        {
+            // Demo identities carry no stored assignments; the acting claim itself is the evidence.
+            return new ActingManagerContext(
+                DevelopmentAuthorizationId($"{actor.Id}:acting"),
+                $"{actor.Id}.principal",
+                null);
+        }
+
+        var now = clock.UtcNow;
+        var locations = await locationMasterStore.FindApprovedEffectiveByCodeAsync(locationCode, now, cancellationToken);
+        var locationId = locations.Count == 1 ? locations[0].Entry.Id : (Guid?)null;
+        var delegations = (await userAuthorizationStore.ListApprovedForSubjectAsync(actor.Id, cancellationToken))
+            .Select(stored => stored.Entry)
+            .Where(entry => entry.Kind == AuthorizationAssignmentKind.Delegation
+                && entry.IsEffectiveAt(now)
+                && string.Equals(entry.RoleCode, AreaOwnerManagerRole, StringComparison.OrdinalIgnoreCase)
+                && (entry.LocationId is null || entry.LocationId == locationId))
+            .OrderByDescending(entry => entry.LocationId is not null)
+            .ToArray();
+        if (delegations.Length == 0)
+        {
+            throw new PolicyAuthorizationDeniedException(
+                "authorization.acting_assignment_missing",
+                "Assignment delegasi (PJS) Manager Pemilik Wilayah yang efektif untuk lokasi PTW tidak ditemukan.");
+        }
+
+        var delegation = delegations[0];
+        var source = delegation.SourceAuthorizationId is Guid sourceId
+            ? await userAuthorizationStore.FindAsync(sourceId, cancellationToken)
+            : null;
+        if (source is null)
+        {
+            throw new PolicyAuthorizationDeniedException(
+                "authorization.acting_principal_missing",
+                "Assignment sumber delegasi (Manager definitif) tidak ditemukan.");
+        }
+
+        var principal = await ResolveActorPresentationAsync(source.Entry.SubjectId, cancellationToken);
+        return new ActingManagerContext(delegation.Id, source.Entry.SubjectId, principal.Position);
     }
 
     public async Task<PermitResponse> ReviewAreaOperationsAsync(
@@ -836,6 +1115,7 @@ public sealed class PermitService(
                 request.SignedFieldCopyAttachmentIds,
                 actor.Id,
                 request.CompletionStatement,
+                RequireSection9(request),
                 now),
             cancellationToken);
     }
@@ -862,6 +1142,7 @@ public sealed class PermitService(
                 request.SignedFieldCopyAttachmentIds,
                 actor.Id,
                 request.CompletionStatement,
+                RequireSection9(request),
                 now),
             cancellationToken);
     }
@@ -895,8 +1176,6 @@ public sealed class PermitService(
     {
         if (string.IsNullOrWhiteSpace(request.OfficerName)
             || !request.WorkAreaInspectedAndClean
-            || !request.WorkCompleted
-            || !request.ManagerAgreesWorkCompleted
             || !request.InhibitedSystemsRestored
             || !request.AreaHandedBackAndSafeguardsRestored
             || !request.EvidenceReadable)
@@ -925,8 +1204,21 @@ public sealed class PermitService(
                 request.InhibitedSystemsRestored,
                 request.AreaHandedBackAndSafeguardsRestored,
                 request.EvidenceReadable,
-                now),
+                now,
+                request.IncompleteWorkStatus),
             cancellationToken);
+    }
+
+    private static PermitWorkCompletionDeclaration RequireSection9(RequestClosureRequest request)
+    {
+        if (request.Completion is null)
+        {
+            throw new InvalidRequestException(
+                "permit.closure.section9_required",
+                "Pernyataan Bagian 9 (status pekerjaan, peralatan/material, Pelaksana Pekerjaan, dan No. ID Badge) wajib diisi.");
+        }
+
+        return request.Completion.ToDomain();
     }
 
     public Task<PermitResponse> CancelAsync(
@@ -1272,6 +1564,16 @@ public sealed class PermitService(
             workflow.Approval.ActorName,
             accountCache,
             cancellationToken);
+        var selectionName = await ResolveActorNameAsync(
+            workflow.SafetyEquipmentSelection.ActorId,
+            workflow.SafetyEquipmentSelection.ActorName,
+            accountCache,
+            cancellationToken);
+        var contractorName = await ResolveActorNameAsync(
+            workflow.Initiation.ContractorId,
+            workflow.Initiation.ContractorName,
+            accountCache,
+            cancellationToken);
 
         return response with
         {
@@ -1280,7 +1582,9 @@ public sealed class PermitService(
             {
                 Hse = workflow.Hse with { ActorName = hseName },
                 AreaOperations = workflow.AreaOperations with { ActorName = areaOperationsName },
-                Approval = workflow.Approval with { ActorName = approvalName }
+                Approval = workflow.Approval with { ActorName = approvalName },
+                SafetyEquipmentSelection = workflow.SafetyEquipmentSelection with { ActorName = selectionName },
+                Initiation = workflow.Initiation with { ContractorName = contractorName }
             }
         };
     }
@@ -1393,11 +1697,16 @@ public sealed class PermitService(
         }
     }
 
-    private static void EnsurePermitReadScope(Actor actor, string locationId)
+    private static void EnsurePermitReadAccess(Actor actor, Permit permit)
     {
-        if (!PermitMonitoringAccess.CanReadLocation(actor, locationId))
+        if (!PermitMonitoringAccess.CanReadLocation(actor, permit.Draft.LocationId))
         {
             throw new UnauthorizedAccessException("Lokasi PTW berada di luar cakupan pemantauan pengguna.");
+        }
+
+        if (PermitAccess.IsContractorOnly(actor) && !PermitAccess.IsInitiator(actor, permit))
+        {
+            throw new UnauthorizedAccessException("PTW berada di luar kewenangan Kontraktor.");
         }
     }
 

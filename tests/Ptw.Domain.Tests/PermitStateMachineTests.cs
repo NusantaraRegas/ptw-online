@@ -30,7 +30,7 @@ public sealed class PermitStateMachineTests
     {
         var permit = CreatePermit();
         var error = Assert.Throws<DomainRuleViolationException>(() =>
-            permit.Submit("PTW-20260915-0001", new(true, false, true, ["JSA"]), Now));
+            permit.Submit("PTW-20260915-0001", new(false, true, ["JSA"]), Now));
 
         Assert.Equal("permit.submit.requirements_incomplete", error.Code);
         Assert.Equal(PermitStatus.Draft, permit.Status);
@@ -198,7 +198,7 @@ public sealed class PermitStateMachineTests
         var permit = ReviewedPermit();
         permit.RequestRevision("JSA berubah material.", Now.AddMinutes(3));
         permit.UpdateDraft(ValidDraft() with { Title = "Versi kedua" }, Now.AddMinutes(4));
-        permit.Submit("IGNORED", ReadyToSubmit(), Now.AddMinutes(5));
+        permit.Submit("IGNORED", ReadyToResubmit(), Now.AddMinutes(5));
 
         Assert.Equal(PermitStatus.UnderValidation, permit.Status);
         Assert.Equal(2, permit.Version);
@@ -213,7 +213,7 @@ public sealed class PermitStateMachineTests
         var reviewedVersion = permit.Version;
 
         permit.RequestRevision("Konfirmasi ulang dokumen pendukung.", Now.AddMinutes(3));
-        permit.Submit("IGNORED", ReadyToSubmit(), Now.AddMinutes(4));
+        permit.Submit("IGNORED", ReadyToResubmit(), Now.AddMinutes(4));
 
         Assert.Equal(PermitStatus.UnderValidation, permit.Status);
         Assert.Equal(reviewedVersion + 1, permit.Version);
@@ -288,11 +288,15 @@ public sealed class PermitStateMachineTests
     {
         var permit = IssuedPermit();
         var nonSponsor = Assert.Throws<DomainRuleViolationException>(() => permit.RequestClosure(
-            Guid.NewGuid(), [Guid.NewGuid()], "other.user", "Lengkap.", Now.AddHours(1)));
+            Guid.NewGuid(), [Guid.NewGuid()], "other.user", "Lengkap.",
+            Section9(),
+            Now.AddHours(1)));
         Assert.Equal("permit.closure.sponsor_mismatch", nonSponsor.Code);
 
         var missing = Assert.Throws<DomainRuleViolationException>(() => permit.RequestClosure(
-            Guid.Empty, [], "sponsor.demo", "Lengkap.", Now.AddHours(1)));
+            Guid.Empty, [], "sponsor.demo", "Lengkap.",
+            Section9(),
+            Now.AddHours(1)));
         Assert.Equal("permit.closure.evidence_required", missing.Code);
     }
 
@@ -303,7 +307,9 @@ public sealed class PermitStateMachineTests
         var packageId = Guid.NewGuid();
         var attachmentId = Guid.NewGuid();
         var replacementAttachmentId = Guid.NewGuid();
-        permit.RequestClosure(packageId, [attachmentId], "sponsor.demo", "Semua halaman lengkap.", Now.AddHours(1));
+        permit.RequestClosure(packageId, [attachmentId], "sponsor.demo", "Semua halaman lengkap.",
+            Section9(),
+            Now.AddHours(1));
         permit.RequestClosureEvidenceReplacement("area.manager", "Halaman handback tidak terbaca.", Now.AddHours(2));
 
         Assert.Equal(PermitStatus.ClosureRequested, permit.Status);
@@ -315,6 +321,7 @@ public sealed class PermitStateMachineTests
             [replacementAttachmentId],
             "sponsor.demo",
             "Pekerjaan selesai dan hardcopy terbaru telah diverifikasi.",
+            Section9(),
             Now.AddHours(4));
 
         Assert.Equal(PermitStatus.ClosureRequested, permit.Status);
@@ -345,7 +352,9 @@ public sealed class PermitStateMachineTests
         var permit = IssuedPermit();
         var packageId = Guid.NewGuid();
         var attachmentId = Guid.NewGuid();
-        permit.RequestClosure(packageId, [attachmentId], "sponsor.demo", "Hardcopy awal.", Now.AddHours(1));
+        permit.RequestClosure(packageId, [attachmentId], "sponsor.demo", "Hardcopy awal.",
+            Section9(),
+            Now.AddHours(1));
 
         var prematureUpload = Assert.Throws<DomainRuleViolationException>(() =>
             permit.AddSignedFieldCopy(Guid.NewGuid(), packageId, Now.AddHours(2)));
@@ -361,6 +370,7 @@ public sealed class PermitStateMachineTests
             [attachmentId],
             "sponsor.demo",
             "Mengirim ulang file lama.",
+            Section9(),
             Now.AddHours(4)));
         Assert.Equal("permit.closure.evidence_not_replaced", unchangedEvidence.Code);
 
@@ -384,7 +394,9 @@ public sealed class PermitStateMachineTests
     {
         var permit = IssuedPermit();
         permit.RequestClosure(
-            Guid.NewGuid(), [Guid.NewGuid()], "sponsor.demo", "Hardcopy lengkap.", Now.AddHours(1));
+            Guid.NewGuid(), [Guid.NewGuid()], "sponsor.demo", "Hardcopy lengkap.",
+            Section9(),
+            Now.AddHours(1));
 
         var error = Assert.Throws<DomainRuleViolationException>(() => permit.Close(
             "area.manager",
@@ -464,6 +476,7 @@ public sealed class PermitStateMachineTests
             [Guid.NewGuid()],
             "sponsor.demo",
             "Pekerjaan selesai.",
+            Section9(),
             Now.AddHours(2)));
         Assert.Equal("permit.closure.renewal_conflict", error.Code);
     }
@@ -540,7 +553,9 @@ public sealed class PermitStateMachineTests
         Assert.Equal("permit.invalid_transition", resume.Code);
 
         permit.RequestClosure(
-            Guid.NewGuid(), [Guid.NewGuid()], "sponsor.demo", "Hardcopy lengkap.", permit.Draft.ValidUntil.AddMinutes(2));
+            Guid.NewGuid(), [Guid.NewGuid()], "sponsor.demo", "Hardcopy lengkap.",
+            Section9(),
+            permit.Draft.ValidUntil.AddMinutes(2));
         Assert.Equal(PermitStatus.ClosureRequested, permit.Status);
     }
 
@@ -548,7 +563,9 @@ public sealed class PermitStateMachineTests
     public void TerminalStatesCannotBeReopened()
     {
         var permit = IssuedPermit();
-        permit.RequestClosure(Guid.NewGuid(), [Guid.NewGuid()], "sponsor.demo", "Lengkap.", Now.AddHours(1));
+        permit.RequestClosure(Guid.NewGuid(), [Guid.NewGuid()], "sponsor.demo", "Lengkap.",
+            Section9(),
+            Now.AddHours(1));
         permit.Close(
             "area.manager",
             "Ditutup.",
@@ -738,7 +755,7 @@ public sealed class PermitStateMachineTests
     public void MandatoryUploadCatalogMakesWorkProcedureRequiredInBagian4()
     {
         Assert.Equal(
-            ["JSA", "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW", "ESIMI"],
+            ["JSA", "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW"],
             PermitMandatoryDocumentCatalog.Resolve().Select(option => option.Code));
         Assert.True(
             PermitSupportingDocumentCatalog.Resolve(PermitSupportingDocumentCatalog.WorkProcedureCode).Required);
@@ -830,6 +847,189 @@ public sealed class PermitStateMachineTests
         Assert.Equal("permit.work_type_other_detail_required", error.Code);
     }
 
+    [Fact]
+    public void PermitNumberFormatUsesWibDateAndYearlySequence()
+    {
+        // 23:30 UTC on 31 Dec is already 06:30 WIB on 1 Jan: both the date and the year follow WIB.
+        var instant = new DateTimeOffset(2026, 12, 31, 23, 30, 0, TimeSpan.Zero);
+
+        Assert.Equal("PTW/0007/01/01/2027", PermitNumberFormat.Compose(instant, 7));
+        Assert.Equal(2027, PermitNumberFormat.SequenceYear(instant));
+        Assert.Equal("permit.number.sequence_invalid", Assert.Throws<DomainRuleViolationException>(() =>
+            PermitNumberFormat.Compose(instant, 0)).Code);
+    }
+
+    [Fact]
+    public void ResubmissionRequiresSponsorSelfCheck()
+    {
+        var permit = ValidatedPermit();
+        permit.RequestRevision("Perbaiki uraian.", Now.AddMinutes(3));
+
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.Submit("IGNORED", ReadyToSubmit(), Now.AddMinutes(4)));
+        Assert.Equal("permit.submit.revision_self_check_required", error.Code);
+        Assert.Equal(PermitStatus.RevisionRequired, permit.Status);
+
+        permit.Submit("IGNORED", ReadyToResubmit(), Now.AddMinutes(5));
+        Assert.Equal(PermitStatus.UnderValidation, permit.Status);
+        Assert.Equal("PTW-20260915-0001", permit.PermitNumber);
+        var submitted = permit.Events.Last(x => x.Type == "permit_submitted");
+        Assert.Contains("RevisionSelfCheckConfirmed = True", submitted.Payload.ToString());
+    }
+
+    [Fact]
+    public void SavedSafetyEquipmentSurvivesRevisionAndIsReusedByValidationWithSelfCheck()
+    {
+        var permit = SubmittedPermit();
+        permit.SaveSafetyEquipmentSelection(
+            "hse.validator",
+            ["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"],
+            Now.AddMinutes(2),
+            "Darsono");
+        Assert.Contains(permit.Events, x => x.Type == "hse_safety_equipment_saved");
+        Assert.Equal(PermitStatus.UnderValidation, permit.Status);
+        Assert.Null(permit.HseValidation);
+
+        var sponsorError = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.SaveSafetyEquipmentSelection("sponsor.demo", ["SAFETY_LOTO"], Now.AddMinutes(2)));
+        Assert.Equal("permit.validation.self_validation_forbidden", sponsorError.Code);
+
+        permit.RequestRevision("Nomor JSA salah.", Now.AddMinutes(3));
+        permit.UpdateDraft(ValidDraft() with { JsaDocumentNumber = "JSA-2" }, Now.AddMinutes(4));
+        Assert.Equal(["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"], permit.SafetyEquipmentSelection?.SafetyEquipmentCodes);
+
+        permit.Submit("IGNORED", ReadyToResubmit(), Now.AddMinutes(5));
+        var selfCheckError = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.ValidateSubmission("hse.validator", "Revisi sesuai.", null, Now.AddMinutes(6)));
+        Assert.Equal("permit.validation.revision_self_check_required", selfCheckError.Code);
+
+        permit.ValidateSubmission("hse.validator", "Revisi sesuai.", null, Now.AddMinutes(6), "Darsono", true);
+        Assert.Equal(PermitStatus.AwaitingAreaApproval, permit.Status);
+        Assert.Equal(["SAFETY_FIRE_EXTINGUISHER", "SAFETY_LOTO"], permit.HseValidation?.SafetyEquipmentCodes);
+        Assert.True(permit.HseValidation?.RevisionSelfCheckConfirmed);
+    }
+
+    [Fact]
+    public void ValidationWithoutSavedOrSuppliedSelectionStillRequiresBagian5()
+    {
+        var permit = SubmittedPermit();
+        var error = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.ValidateSubmission("hse.validator", "Valid.", null, Now.AddMinutes(2)));
+        Assert.Equal("permit.safety_equipment_required", error.Code);
+    }
+
+    [Fact]
+    public void ContractorInitialPermitFollowsSponsorApprovalBeforeHseSubmission()
+    {
+        var permit = Permit.CreateDraft(
+            ValidDraft() with { SubmitterType = "CONTRACTOR" },
+            Now,
+            new PermitInitiation("contractor.demo", PermitInitiationStatus.Approved, Now, ContractorName: "Kontraktor"));
+        Assert.Equal(PermitInitiationStatus.Drafting, permit.Initiation?.Status);
+
+        var early = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.Submit("PTW-X", ReadyToSubmit(), Now.AddMinutes(1)));
+        Assert.Equal("permit.submit.initial_approval_required", early.Code);
+
+        var wrongContractor = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.SubmitInitiationToSponsor("other.contractor", Now.AddMinutes(1)));
+        Assert.Equal("permit.initiation.contractor_mismatch", wrongContractor.Code);
+
+        permit.SubmitInitiationToSponsor("contractor.demo", Now.AddMinutes(1));
+        Assert.Equal(PermitInitiationStatus.AwaitingSponsorApproval, permit.Initiation?.Status);
+        Assert.Equal(PermitStatus.Draft, permit.Status);
+
+        var wrongSponsor = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.ApproveInitiation("another.sponsor", "Oke.", Now.AddMinutes(2)));
+        Assert.Equal("permit.initiation.sponsor_mismatch", wrongSponsor.Code);
+        var blank = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.ReturnInitiation("sponsor.demo", "   ", Now.AddMinutes(2)));
+        Assert.Equal("permit.evidence_required", blank.Code);
+
+        permit.ReturnInitiation("sponsor.demo", "Lengkapi pelaksana.", Now.AddMinutes(2));
+        Assert.Equal(PermitInitiationStatus.Returned, permit.Initiation?.Status);
+        permit.SubmitInitiationToSponsor("contractor.demo", Now.AddMinutes(3));
+        permit.ApproveInitiation("sponsor.demo", "PTW awal lengkap.", Now.AddMinutes(4));
+        Assert.Equal(PermitInitiationStatus.Approved, permit.Initiation?.Status);
+
+        permit.Submit("PTW-X", ReadyToSubmit(), Now.AddMinutes(5));
+        Assert.Equal(PermitStatus.UnderValidation, permit.Status);
+        Assert.Contains(permit.Events, x => x.Type == "permit_initial_approved");
+    }
+
+    [Fact]
+    public void ClosureSection9DeclarationDrivesSection10Pairing()
+    {
+        var permit = IssuedPermit();
+        var missingIdentity = Assert.Throws<DomainRuleViolationException>(() => permit.RequestClosure(
+            Guid.NewGuid(),
+            [Guid.NewGuid()],
+            "sponsor.demo",
+            "Lengkap.",
+            Section9() with { PerformingAuthorityBadgeNumber = " " },
+            Now.AddHours(1)));
+        Assert.Equal("permit.closure.section9_identity_required", missingIdentity.Code);
+
+        var missingExplanation = Assert.Throws<DomainRuleViolationException>(() => permit.RequestClosure(
+            Guid.NewGuid(),
+            [Guid.NewGuid()],
+            "sponsor.demo",
+            "Lengkap.",
+            Section9(workCompleted: false) with { Explanation = null },
+            Now.AddHours(1)));
+        Assert.Equal("permit.closure.explanation_required", missingExplanation.Code);
+
+        permit.RequestClosure(
+            Guid.NewGuid(),
+            [Guid.NewGuid()],
+            "sponsor.demo",
+            "Sisa pekerjaan dilanjutkan.",
+            Section9(workCompleted: false),
+            Now.AddHours(1));
+        Assert.False(permit.ClosureRequest?.Completion?.WorkCompleted);
+
+        var mismatch = Assert.Throws<DomainRuleViolationException>(() => permit.Close(
+            "area.manager", "Ditutup.", "Officer", true, true, true, true, true, true, Now.AddHours(2)));
+        Assert.Equal("permit.closure.completion_mismatch", mismatch.Code);
+        var missingStatus = Assert.Throws<DomainRuleViolationException>(() => permit.Close(
+            "area.manager", "Ditutup.", "Officer", true, false, false, true, true, true, Now.AddHours(2)));
+        Assert.Equal("permit.closure.incomplete_status_required", missingStatus.Code);
+
+        permit.Close(
+            "area.manager",
+            "Ditutup dengan status belum selesai.",
+            "Officer",
+            true,
+            false,
+            false,
+            true,
+            true,
+            true,
+            Now.AddHours(2),
+            "Flange belum terpasang.");
+        Assert.Equal(PermitStatus.Closed, permit.Status);
+        Assert.Equal("Flange belum terpasang.", permit.ClosureDecision?.IncompleteWorkStatus);
+        Assert.False(permit.ClosureDecision?.WorkCompleted);
+    }
+
+    [Fact]
+    public void LegacyClosureWithoutSection9StillRequiresCompletedPath()
+    {
+        var permit = Permit.Rehydrate(
+            Guid.NewGuid(),
+            "PTW-LEGACY",
+            PermitStatus.ClosureRequested,
+            1,
+            ValidDraft(),
+            Now,
+            Now,
+            closureRequest: new PermitClosureEvidence(Guid.NewGuid(), [Guid.NewGuid()], "sponsor.demo", "Selesai.", Now, 1));
+
+        var error = Assert.Throws<DomainRuleViolationException>(() => permit.Close(
+            "area.manager", "Ditutup.", "Officer", true, false, false, true, true, true, Now.AddHours(1), "status"));
+        Assert.Equal("permit.closure.verification_incomplete", error.Code);
+    }
+
     private static Permit CreatePermit() => Permit.CreateDraft(ValidDraft(), Now);
 
     private static Permit SubmittedPermit()
@@ -864,7 +1064,17 @@ public sealed class PermitStateMachineTests
         return permit;
     }
 
-    private static SubmissionReadiness ReadyToSubmit() => new(true, true, true, []);
+    private static SubmissionReadiness ReadyToSubmit() => new(true, true, []);
+
+    private static SubmissionReadiness ReadyToResubmit() => new(true, true, [], RevisionSelfCheckConfirmed: true);
+
+    private static PermitWorkCompletionDeclaration Section9(bool workCompleted = true) => new(
+        workCompleted,
+        true,
+        workCompleted ? null : "Sisa pekerjaan dilanjutkan pada PTW baru.",
+        "Budi Pelaksana",
+        "B-1234",
+        "S-5678");
 
     private static PermitApprovalEvidence ManagerApproval() => new(
         "area.manager",
@@ -907,8 +1117,6 @@ public sealed class PermitStateMachineTests
         RiskLevel.High,
         Now,
         Now.AddDays(1),
-        "esimi-123",
-        "ESM-2026-00123",
         [],
         [],
         ["JSA", "WORK_PROCEDURE"],

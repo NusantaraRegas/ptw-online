@@ -227,12 +227,60 @@
                   <button type="button" (click)="edit(item)" [disabled]="actingId() === item.id">
                     Edit
                   </button>
+                  @if (canDelegate(item)) {
+                    <button
+                      type="button"
+                      (click)="openDelegation(item)"
+                      [disabled]="actingId() === item.id || saving()"
+                    >
+                      Tetapkan PJS
+                    </button>
+                  }
                 } @else {
                   <span>v{{ item.version }}</span>
                 }
               }
             </div>
           </article>
+          @if (delegatingFrom()?.id === item.id) {
+            <form
+              class="delegation-form"
+              [formGroup]="delegationForm"
+              (ngSubmit)="createDelegation()"
+              aria-label="Tetapkan PJS Manager Pemilik Wilayah"
+            >
+              <p>
+                PJS memperoleh kewenangan Manager Pemilik Wilayah untuk
+                <strong>{{ locationLabel(item.locationId) }}</strong> selama periode di bawah ini.
+                Approval yang diberikan PJS dicatat dan dicetak dengan label PJS.
+              </p>
+              <label>
+                Pengguna PJS
+                <select formControlName="subjectId">
+                  <option value="" disabled>Pilih pengguna</option>
+                  @for (user of users(); track user.subjectId) {
+                    <option [value]="user.subjectId">{{ user.displayName }}</option>
+                  }
+                </select>
+              </label>
+              <label>
+                Mulai delegasi
+                <input type="datetime-local" formControlName="effectiveFrom" />
+              </label>
+              <label>
+                Akhir delegasi (wajib)
+                <input type="datetime-local" formControlName="effectiveUntil" />
+              </label>
+              <div class="delegation-actions">
+                <button type="button" class="secondary-action" (click)="closeDelegation()">
+                  Batal
+                </button>
+                <button type="submit" class="primary-action" [disabled]="saving()">
+                  {{ saving() ? 'Menyimpan…' : 'Berlakukan delegasi PJS' }}
+                </button>
+              </div>
+            </form>
+          }
         } @empty {
           <div class="empty">
             <strong>Belum ada assignment</strong>

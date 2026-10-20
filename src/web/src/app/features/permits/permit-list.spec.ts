@@ -247,8 +247,10 @@ describe('PermitList', () => {
       .flush(page);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('.pagination')?.textContent).toContain(
-      'Menampilkan 1â€“10 dari 60 PTW',
-    );
+    const paginationText = fixture.nativeElement
+      .querySelector('.pagination')
+      ?.textContent?.replace(/\s+/g, ' ');
+    expect(paginationText).toContain('Menampilkan 1–10 dari 60 PTW');
+    expect(paginationText).toContain('Halaman 1 dari 6');
   });
 });

@@ -14,8 +14,6 @@ export interface PermitDraft {
   riskLevel: string;
   validFrom: string;
   validUntil: string;
-  eSimiExternalId?: string | null;
-  eSimiNumber?: string | null;
   hazards: string[];
   controls: string[];
   requiredDocumentCodes: string[];
@@ -119,6 +117,54 @@ export interface PermitValidation {
   statement: string | null;
   completedAt: string | null;
   safetyEquipmentCodes: string[];
+  revisionSelfCheckConfirmed?: boolean;
+}
+
+/** Bagian 5 choice the PIC HSE saved before deciding; it survives revision cycles. */
+export interface HseSafetyEquipmentSelection {
+  saved: boolean;
+  actorId: string | null;
+  actorName: string | null;
+  safetyEquipmentCodes: string[];
+  savedAt: string | null;
+}
+
+export type PermitInitiationStatus =
+  'DRAFTING' | 'AWAITING_SPONSOR_APPROVAL' | 'RETURNED' | 'APPROVED';
+
+/** Contractor-initiated draft awaiting or holding the Sponsor's initial approval. */
+export interface PermitInitiation {
+  initiated: boolean;
+  contractorId: string | null;
+  contractorName: string | null;
+  status: PermitInitiationStatus | null;
+  submittedToSponsorAt: string | null;
+  sponsorStatement: string | null;
+  decidedAt: string | null;
+}
+
+/** Bagian 9 declared by the Sponsor when requesting closure. */
+export interface PermitWorkCompletion {
+  workCompleted: boolean;
+  equipmentAndMaterialsRemoved: boolean;
+  explanation: string | null;
+  performingAuthorityName: string;
+  performingAuthorityBadgeNumber: string;
+  sponsorBadgeNumber: string;
+}
+
+export interface SponsorOption {
+  subjectId: string;
+  displayName: string;
+  position: string | null;
+  department: string | null;
+}
+
+export interface AttachmentPolicy {
+  maxFileBytes: number;
+  maxFilesPerPermit: number;
+  acceptedMediaTypes: string[];
+  acceptedExtensions: string[];
 }
 
 export interface PermitWorkflow {
@@ -128,6 +174,8 @@ export interface PermitWorkflow {
   suspension: PermitSuspension;
   renewal?: PermitRenewalWorkflow;
   closure: PermitClosure;
+  safetyEquipmentSelection?: HseSafetyEquipmentSelection;
+  initiation?: PermitInitiation;
 }
 
 export interface AreaOperationsReview {
@@ -203,18 +251,21 @@ export interface PermitClosure {
   inhibitedSystemsRestored?: boolean;
   areaHandedBackAndSafeguardsRestored?: boolean;
   evidenceReadable?: boolean;
+  completion?: PermitWorkCompletion | null;
+  incompleteWorkStatus?: string | null;
 }
 
 export interface SubmitPermitRequest {
-  eSimiEligible: boolean;
   rulesEvaluated: boolean;
   requiredDocumentsSafe: boolean;
   missingRequirements: string[];
+  revisionSelfCheckConfirmed?: boolean;
 }
 
 export interface ValidateSubmissionRequest {
   statement: string;
   safetyEquipmentCodes: string[];
+  revisionSelfCheckConfirmed?: boolean;
 }
 
 export interface RequestPermitRenewal {
@@ -233,6 +284,7 @@ export interface RequestPermitClosure {
   completionStatement: string;
   allPagesReviewed: boolean;
   readableAndCompleteAcknowledged: boolean;
+  completion: PermitWorkCompletion;
 }
 
 export interface PermitRenewalResult {
@@ -343,6 +395,36 @@ export class PermitApi {
     );
   }
 
+  getAttachmentPolicy(): Observable<AttachmentPolicy> {
+    return this.http.get<AttachmentPolicy>('/api/v1/reference-data/attachment-policy');
+  }
+
+  listSponsors(): Observable<{ items: SponsorOption[]; count: number }> {
+    return this.http.get<{ items: SponsorOption[]; count: number }>('/api/v1/sponsors');
+  }
+
+  /** Contractor hands the initial PTW to the Sponsor named on the draft. */
+  submitInitiation(id: string, eTag: string): Observable<Permit> {
+    return this.command(id, 'initial-submit', eTag, {});
+  }
+
+  approveInitiation(taskId: string, eTag: string, statement: string): Observable<Permit> {
+    return this.taskCommand(taskId, 'approve-initial', eTag, { statement });
+  }
+
+  returnInitiation(taskId: string, eTag: string, reason: string): Observable<Permit> {
+    return this.taskCommand(taskId, 'return-initial', eTag, { reason });
+  }
+
+  /** Saves the PIC HSE Bagian 5 choice without deciding the validation. */
+  saveSafetyEquipment(
+    taskId: string,
+    eTag: string,
+    safetyEquipmentCodes: string[],
+  ): Observable<Permit> {
+    return this.taskCommand(taskId, 'safety-equipment', eTag, { safetyEquipmentCodes });
+  }
+
   create(draft: PermitDraft): Observable<Permit> {
     return this.http.post<Permit>('/api/v1/permits', draft);
   }
@@ -421,6 +503,7 @@ export class PermitApi {
       inhibitedSystemsRestored: boolean;
       areaHandedBackAndSafeguardsRestored: boolean;
       evidenceReadable: boolean;
+      incompleteWorkStatus?: string | null;
     },
   ): Observable<Permit> {
     return this.taskCommand(taskId, 'close', eTag, request, '/api/v1/closure-tasks');

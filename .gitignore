@@ -57,6 +57,13 @@ Thumbs.db
 docs/Panduan-Pengguna-*.docx
 docs/Panduan-Pengguna-*.pdf
 
+# UAT/decision source documents shared by stakeholders (PDF/DOCX, kept outside Git) and local
+# print-preview dumps written by tests when PTW_PRINT_PREVIEW_DIR points into the repository.
+Hasil_UAT_*.pdf
+docs/uat/*.pdf
+docs/uat/*.docx
+print-preview/
+
 # Runtime data
 attachments/
 quarantine/

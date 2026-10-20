@@ -42,6 +42,8 @@ export class TaskList {
         AREA_APPROVE_AND_ISSUE: 'TERBIT',
         AREA_CLOSE_VERIFICATION: 'TUTUP',
         SPONSOR_REVISION: 'REVISI',
+        SPONSOR_INITIAL_APPROVAL: 'INISIAL',
+        CONTRACTOR_INITIAL_REVISION: 'INISIAL',
       }[type] ?? 'PTW'
     );
   }

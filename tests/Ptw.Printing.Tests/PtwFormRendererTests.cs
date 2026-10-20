@@ -328,6 +328,61 @@ public sealed class PtwFormRendererTests
     private static PrintPackageRenderRequest Request(PermitClass permitClass) =>
         new(Snapshot(permitClass), "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false);
 
+    [Theory]
+    [InlineData(PermitClass.HotWork, 452.1)]
+    [InlineData(PermitClass.ColdWork, 449.7)]
+    [InlineData(PermitClass.ConfinedSpaceEntry, 439.1)]
+    public void PageTwoCropStopsAtTheBottomRuleOfBagian8(PermitClass permitClass, double expectedBottom)
+    {
+        // Measured from the controlled sheets: the Bagian 9/10 band starts right below this rule,
+        // so the daily revalidation sheet is the only content printed on page two (UAT no. 16).
+        var pageTwo = TemplateOverlayCatalog.PageSplit(permitClass).PageTwo;
+
+        Assert.Equal(expectedBottom, pageTwo.Y + pageTwo.Height, 1);
+        Assert.True(pageTwo.Height < 300, "Bagian 9/10 must no longer be part of page two.");
+    }
+
+    [Fact]
+    public void HsseReminderWordingMatchesTheUatAgreement()
+    {
+        Assert.Equal(4, HsseReminder.Lines.Count);
+        Assert.StartsWith("1. PASTIKAN Pelaksana Pekerjaan/Kontraktor Memahami serta Mengimplementasikan 10 CLSR & 9 Perilaku Utama", HsseReminder.Lines[0], StringComparison.Ordinal);
+        Assert.Contains("HSSE Golden Rules (PATUH, INTERVENSI, PEDULI) saat Bekerja.", HsseReminder.Lines[0], StringComparison.Ordinal);
+        Assert.Equal("2. PASTIKAN Pelaksana Pekerjaan/Kontraktor Memahami Semua Risiko serta Melaksanakan Tindakan Pengendaliannya.", HsseReminder.Lines[1]);
+        Assert.Equal("3. PASTIKAN Pelaksana Pekerjaan/Kontraktor Bekerja Aman dengan Perilaku/Tindakan Aman dan Kondisi Aman.", HsseReminder.Lines[2]);
+        Assert.Equal("4. PASTIKAN semua Pelaksana Pekerjaan Fit To Work.", HsseReminder.Lines[3]);
+        Assert.Equal("ptw-form-renderer/4.0.0", PtwFormRenderer.RendererVersion);
+    }
+
+    [Fact]
+    public void ActingManagerApprovalChangesTheBagian7ManagerRow()
+    {
+        var renderer = new PtwFormRenderer();
+        var baseline = Snapshot(PermitClass.HotWork);
+        var acting = baseline with
+        {
+            Approval = baseline.Approval! with
+            {
+                Capacity = ApprovalCapacity.ActingForManager,
+                ActingAssignmentId = Guid.Parse("0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5e"),
+                PrincipalManagerUserId = "manager.principal.demo"
+            }
+        };
+
+        var baselineDocument = renderer.Render(new(baseline, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var actingDocument = renderer.Render(new(acting, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+
+        Assert.NotEqual(Canonicalise(baselineDocument.Content), Canonicalise(actingDocument.Content));
+    }
+
+    [Fact]
+    public void WorkCertificateLabelIsRewrittenAsSertifikatPekerja()
+    {
+        Assert.Equal(
+            "Sertifikat Pekerja",
+            PermitSupportingDocumentCatalog.Resolve(PermitSupportingDocumentCatalog.WorkCertificateCode).Label);
+    }
+
     private static PrintPackageSnapshotPayload Snapshot(PermitClass permitClass) => new(
         Guid.Parse("0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"),
         "PTW-20260915-0007",
@@ -405,8 +460,6 @@ public sealed class PtwFormRendererTests
         RiskLevel.Medium,
         IssuedAt.AddHours(6),
         IssuedAt.AddDays(5),
-        null,
-        "ESIMI-2026-004512",
         [],
         [],
         ["Job Safety Analisis (JSA)", "Prosedur Pekerjaan", "P & ID, Plot Plan / Lay Out"],

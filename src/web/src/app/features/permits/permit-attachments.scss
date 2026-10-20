@@ -478,3 +478,117 @@ h3 {
     flex: 1;
   }
 }
+
+.visually-hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.upload-policy {
+  margin: 10px 0 0;
+  color: var(--nr-muted);
+  font-size: 11px;
+}
+
+.document-readiness-list li .document-upload {
+  margin-left: 8px;
+  padding: 5px 10px;
+  border: 1px solid var(--nr-blue-dark);
+  border-radius: 8px;
+  color: var(--nr-blue-dark);
+  background: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.document-readiness-list li .document-upload:hover:not(:disabled) {
+  background: var(--nr-blue-soft);
+}
+
+.document-readiness-list li .document-upload:focus-visible {
+  outline: 3px solid rgb(0 117 191 / 35%);
+  outline-offset: 2px;
+}
+
+.document-readiness-list li .document-upload:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.file-actions button.preview svg {
+  width: 14px;
+  height: 14px;
+}
+
+.preview-dialog {
+  width: min(96vw, 1100px);
+  height: min(92vh, 900px);
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 30%);
+}
+
+.preview-dialog::backdrop {
+  background: rgb(10 30 40 / 55%);
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--nr-border);
+}
+
+.preview-header h4 {
+  margin: 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-close {
+  padding: 6px 12px;
+  border: 1px solid #cbdade;
+  border-radius: 8px;
+  color: #315766;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.preview-close:focus-visible {
+  outline: 3px solid rgb(0 117 191 / 35%);
+  outline-offset: 2px;
+}
+
+.preview-body {
+  height: calc(100% - 50px);
+  display: grid;
+  place-items: center;
+  background: #f3f6f7;
+  overflow: auto;
+}
+
+.preview-body img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.preview-body iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}

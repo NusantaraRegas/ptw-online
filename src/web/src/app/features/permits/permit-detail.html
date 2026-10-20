@@ -261,10 +261,6 @@
               <dd>v{{ permit()!.version }}</dd>
             </div>
             <div>
-              <dt>Nomor E-SIMI</dt>
-              <dd>{{ permit()!.draft.eSimiNumber || 'Belum tersedia' }}</dd>
-            </div>
-            <div>
               <dt>Dibuat</dt>
               <dd>{{ permit()!.createdAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta' }} WIB</dd>
             </div>
@@ -306,6 +302,40 @@
             <span>Ditangguhkan oleh {{ permit()!.workflow.suspension.suspendedBy }}</span>
             @if (permit()!.workflow.suspension.resolvedAt) {
               <span>Diselesaikan oleh {{ permit()!.workflow.suspension.resolvedBy }}</span>
+            }
+          </section>
+        }
+
+        @if (initiation(); as initiation) {
+          <section class="card workflow-action evidence-card initiation-card">
+            <span class="workflow-action-kicker">PTW awal Kontraktor</span>
+            <h2>{{ initiationTitle() }}</h2>
+            <p>
+              Diisi oleh {{ initiation.contractorName || 'Nama tidak tersedia' }}.
+              @if (initiation.status === 'AWAITING_SPONSOR_APPROVAL') {
+                Sponsor meninjau isi dan lampiran sebelum menyetujui.
+              } @else if (initiation.status === 'APPROVED') {
+                Sponsor dapat melengkapi draft lalu mengajukannya ke PIC HSE.
+              } @else if (initiation.status === 'RETURNED') {
+                Perbaiki sesuai catatan Sponsor, lalu ajukan kembali.
+              } @else {
+                Lengkapi data dan lampiran wajib, lalu ajukan ke Sponsor.
+              }
+            </p>
+            @if (initiation.sponsorStatement) {
+              <p class="initiation-note">
+                <strong>Catatan Sponsor:</strong> {{ initiation.sponsorStatement }}
+              </p>
+            }
+            @if (canSubmitInitiation()) {
+              <button
+                class="primary-button"
+                type="button"
+                [disabled]="saving()"
+                (click)="submitInitiation()"
+              >
+                Ajukan ke Sponsor
+              </button>
             }
           </section>
         }
@@ -516,6 +546,79 @@
               Pernyataan penyelesaian pekerjaan
               <textarea rows="3" maxlength="1000" formControlName="completionStatement"></textarea>
             </label>
+            <fieldset class="confirmation-list section9-fieldset">
+              <legend>Bagian 9 — Pekerjaan selesai</legend>
+              <p class="confirmation-help">
+                Diisi oleh Sponsor bersama Pelaksana Pekerjaan; dicatat pada riwayat PTW, tidak lagi
+                dicetak pada hardcopy.
+              </p>
+              <div class="closure-outcome" role="radiogroup" aria-label="Status pekerjaan">
+                <label class="closure-outcome-option">
+                  <input type="radio" formControlName="workOutcome" value="COMPLETED" />
+                  <span><strong>Pekerjaan telah selesai</strong></span>
+                </label>
+                <label class="closure-outcome-option incomplete">
+                  <input type="radio" formControlName="workOutcome" value="NOT_COMPLETED" />
+                  <span><strong>Pekerjaan belum diselesaikan dalam waktu 7 hari</strong></span>
+                </label>
+              </div>
+              <div class="closure-outcome" role="radiogroup" aria-label="Peralatan dan material">
+                <label class="closure-outcome-option">
+                  <input type="radio" formControlName="equipmentOutcome" value="REMOVED" />
+                  <span>
+                    <strong>Semua peralatan dan material sudah dikeluarkan dari lapangan</strong>
+                  </span>
+                </label>
+                <label class="closure-outcome-option incomplete">
+                  <input type="radio" formControlName="equipmentOutcome" value="NOT_REMOVED" />
+                  <span>
+                    <strong>Semua peralatan dan material belum dikeluarkan dari lapangan</strong>
+                  </span>
+                </label>
+              </div>
+              <label>
+                Penjelasan
+                <textarea rows="2" maxlength="800" formControlName="explanation"></textarea>
+                @if (closureForm.controls.explanation.touched && !closureSection9Valid()) {
+                  <span class="field-error" role="alert">
+                    Penjelasan wajib diisi bila pekerjaan belum selesai atau peralatan belum
+                    dikeluarkan.
+                  </span>
+                }
+              </label>
+              <label>
+                Pelaksana Pekerjaan
+                <input formControlName="performingAuthorityName" maxlength="100" />
+                @if (
+                  closureForm.controls.performingAuthorityName.touched &&
+                  closureForm.controls.performingAuthorityName.invalid
+                ) {
+                  <span class="field-error" role="alert"
+                    >Nama Pelaksana Pekerjaan wajib diisi.</span
+                  >
+                }
+              </label>
+              <label>
+                No. ID Badge Pelaksana Pekerjaan
+                <input formControlName="performingAuthorityBadgeNumber" maxlength="40" />
+                @if (
+                  closureForm.controls.performingAuthorityBadgeNumber.touched &&
+                  closureForm.controls.performingAuthorityBadgeNumber.invalid
+                ) {
+                  <span class="field-error" role="alert">No. ID Badge wajib diisi.</span>
+                }
+              </label>
+              <label>
+                No. ID Badge Sponsor Pekerjaan
+                <input formControlName="sponsorBadgeNumber" maxlength="40" />
+                @if (
+                  closureForm.controls.sponsorBadgeNumber.touched &&
+                  closureForm.controls.sponsorBadgeNumber.invalid
+                ) {
+                  <span class="field-error" role="alert">No. ID Badge wajib diisi.</span>
+                }
+              </label>
+            </fieldset>
             <label class="check">
               <input type="checkbox" formControlName="allPagesReviewed" />
               Saya telah meninjau seluruh halaman hardcopy terbaru.
@@ -544,7 +647,7 @@
               <button
                 class="primary-button"
                 type="submit"
-                [disabled]="saving() || closureForm.invalid"
+                [disabled]="saving() || closureForm.invalid || !closureSection9Valid()"
               >
                 {{
                   saving()
@@ -560,11 +663,20 @@
 
         @if (canSubmit()) {
           <form class="card workflow-action" [formGroup]="submissionForm">
-            <h2>Ajukan validasi</h2>
+            <h2>{{ resubmitting() ? 'Ajukan ulang setelah revisi' : 'Ajukan validasi' }}</h2>
             <p>Konfirmasi seluruh prasyarat submit sebelum mengirim PTW ke PIC HSE.</p>
-            <label class="check"
-              ><input type="checkbox" formControlName="eSimiEligible" /> E-SIMI layak</label
-            >
+            @if (resubmitting()) {
+              <label class="check revision-self-check">
+                <input type="checkbox" formControlName="revisionSelfCheckConfirmed" />
+                <span>
+                  <strong>Self check revisi</strong>
+                  <small>
+                    Seluruh permintaan dan catatan revisi telah dilaksanakan pada draft dan lampiran
+                    ini. Submit ulang hanya dapat dilakukan setelah dicentang.
+                  </small>
+                </span>
+              </label>
+            }
             <label class="check"
               ><input type="checkbox" formControlName="rulesEvaluated" /> Rules telah
               dievaluasi</label
@@ -580,17 +692,27 @@
             <button
               class="primary-button"
               type="button"
-              [disabled]="saving() || submissionForm.invalid"
+              [disabled]="saving() || submissionForm.invalid || submissionSelfCheckMissing()"
               (click)="submitForValidation()"
             >
-              Ajukan PTW
+              {{ resubmitting() ? 'Ajukan ulang PTW' : 'Ajukan PTW' }}
             </button>
           </form>
         }
 
         @if (hasDecisionAction()) {
           <section class="card workflow-action" [class.closure-workflow-action]="canClose()">
-            @if (canReviewAreaOperations()) {
+            @if (canDecideInitiation()) {
+              <header class="workflow-action-header">
+                <span class="workflow-action-kicker">PTW awal Kontraktor</span>
+                <h2>Persetujuan Sponsor</h2>
+                <p>
+                  Periksa isi dan lampiran PTW awal dari
+                  {{ initiation()?.contractorName || 'Kontraktor' }}. Setelah disetujui, Anda dapat
+                  mengedit draft lalu mengajukannya ke PIC HSE.
+                </p>
+              </header>
+            } @else if (canReviewAreaOperations()) {
               <header class="workflow-action-header">
                 <span class="workflow-action-kicker">Bagian 7</span>
                 <h2>Verifikasi kondisi operasi</h2>
@@ -604,6 +726,13 @@
                 <span class="workflow-action-kicker">Approval final Bagian 7</span>
                 <h2>Review dan terbitkan PTW</h2>
                 <p>Tinjau hasil verifikasi SO/Officer sebelum memberikan persetujuan akhir.</p>
+                @if (isActingManager()) {
+                  <p class="acting-banner" role="status">
+                    <strong>Anda bertindak sebagai PJS Manager Pemilik Wilayah.</strong>
+                    Persetujuan dicatat atas nama Manager definitif dengan label PJS pada informasi
+                    PTW dan paket cetak.
+                  </p>
+                }
               </header>
             } @else if (canClose()) {
               <header class="workflow-action-header">
@@ -659,7 +788,42 @@
                     Pilih minimal satu APD/perlengkapan safety.
                   </span>
                 }
+                @if (savedSafetyEquipment()?.saved) {
+                  <p class="saved-selection-note" role="status">
+                    Pilihan tersimpan oleh
+                    {{ savedSafetyEquipment()!.actorName || 'PIC HSE' }} pada
+                    {{
+                      savedSafetyEquipment()!.savedAt | date: 'dd MMM yyyy, HH:mm' : 'Asia/Jakarta'
+                    }}
+                    WIB dan tetap tersimpan meskipun PTW direvisi.
+                  </p>
+                }
+                <button
+                  class="secondary-button save-selection-button"
+                  type="button"
+                  [disabled]="
+                    saving() ||
+                    hseSafetyEquipmentCodes.invalid ||
+                    loadingSafetyEquipment() ||
+                    !!safetyEquipmentError()
+                  "
+                  (click)="saveSafetyEquipment()"
+                >
+                  Simpan Pilihan APD
+                </button>
               </fieldset>
+              @if (validatingResubmission()) {
+                <label class="check revision-self-check">
+                  <input type="checkbox" [formControl]="hseRevisionSelfCheck" />
+                  <span>
+                    <strong>Self check revisi (versi {{ permit()!.version }})</strong>
+                    <small>
+                      Saya telah memastikan revisi dilaksanakan sesuai permintaan; pemeriksaan penuh
+                      tidak diulang.
+                    </small>
+                  </span>
+                </label>
+              }
             }
             @if (approvalMissingSafetyEquipment()) {
               <div class="field-error approval-prerequisite" role="alert">
@@ -837,6 +1001,47 @@
               <div class="decision-context closure-context">
                 <span class="decision-context-label">Pernyataan penyelesaian Sponsor</span>
                 <p>{{ permit()!.workflow.closure.completionStatement }}</p>
+                @if (permit()!.workflow.closure.completion; as section9) {
+                  <dl class="section9-summary">
+                    <div>
+                      <dt>Bagian 9 — Status pekerjaan</dt>
+                      <dd>
+                        {{
+                          section9.workCompleted
+                            ? 'Pekerjaan telah selesai'
+                            : 'Pekerjaan belum diselesaikan dalam waktu 7 hari'
+                        }}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Peralatan dan material</dt>
+                      <dd>
+                        {{
+                          section9.equipmentAndMaterialsRemoved
+                            ? 'Sudah dikeluarkan dari lapangan'
+                            : 'Belum dikeluarkan dari lapangan'
+                        }}
+                      </dd>
+                    </div>
+                    @if (section9.explanation) {
+                      <div>
+                        <dt>Penjelasan</dt>
+                        <dd>{{ section9.explanation }}</dd>
+                      </div>
+                    }
+                    <div>
+                      <dt>Pelaksana Pekerjaan</dt>
+                      <dd>
+                        {{ section9.performingAuthorityName }} (ID Badge
+                        {{ section9.performingAuthorityBadgeNumber }})
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>ID Badge Sponsor</dt>
+                      <dd>{{ section9.sponsorBadgeNumber }}</dd>
+                    </div>
+                  </dl>
+                }
               </div>
               <div [formGroup]="closureDecisionForm" class="closure-verification-form">
                 <fieldset class="confirmation-list closure-confirmations">
@@ -855,7 +1060,12 @@
                   </label>
                   <div class="closure-outcome" role="radiogroup" aria-label="Status pekerjaan">
                     <label class="closure-outcome-option">
-                      <input type="radio" formControlName="completionOutcome" value="COMPLETED" />
+                      <input
+                        type="radio"
+                        formControlName="completionOutcome"
+                        value="COMPLETED"
+                        [attr.disabled]="sponsorDeclaredIncomplete() ? '' : null"
+                      />
                       <span>
                         <strong>Pekerjaan selesai</strong>
                         <small>Lanjutkan verifikasi pengembalian ke kondisi normal.</small>
@@ -865,7 +1075,14 @@
                       <input type="radio" formControlName="completionOutcome" value="INCOMPLETE" />
                       <span>
                         <strong>Pekerjaan belum selesai</strong>
-                        <small>PTW tidak dapat ditutup dan tidak otomatis kembali berlaku.</small>
+                        <small>
+                          @if (sponsorDeclaredIncomplete()) {
+                            Sponsor menyatakan pekerjaan belum selesai (Bagian 9); catat statusnya
+                            dan PTW dapat ditutup tanpa pernyataan selesai.
+                          } @else {
+                            PTW tidak dapat ditutup dan tidak otomatis kembali berlaku.
+                          }
+                        </small>
                       </span>
                     </label>
                   </div>
@@ -906,7 +1123,10 @@
                   </label>
                 </fieldset>
 
-                @if (closureDecisionForm.controls.completionOutcome.value === 'COMPLETED') {
+                @if (
+                  closureDecisionForm.controls.completionOutcome.value === 'COMPLETED' ||
+                  sponsorDeclaredIncomplete()
+                ) {
                   <fieldset class="confirmation-list closure-confirmations owner-confirmations">
                     <legend>Persetujuan Pemilik Wilayah</legend>
                     <div class="closure-manager-identity">
@@ -914,16 +1134,18 @@
                       <strong>{{ actorDisplayName() }}</strong>
                       <small>{{ actorId() }}</small>
                     </div>
-                    <label class="check closure-check">
-                      <input type="checkbox" formControlName="managerAgreesWorkCompleted" />
-                      <span>
-                        <strong>Menyetujui pekerjaan telah selesai</strong>
-                        <small>
-                          Kondisi tempat kerja dan peralatan telah kembali normal berdasarkan
-                          rincian Officer.
-                        </small>
-                      </span>
-                    </label>
+                    @if (closureDecisionForm.controls.completionOutcome.value === 'COMPLETED') {
+                      <label class="check closure-check">
+                        <input type="checkbox" formControlName="managerAgreesWorkCompleted" />
+                        <span>
+                          <strong>Menyetujui pekerjaan telah selesai</strong>
+                          <small>
+                            Kondisi tempat kerja dan peralatan telah kembali normal berdasarkan
+                            rincian Officer.
+                          </small>
+                        </span>
+                      </label>
+                    }
                     <label class="check closure-check">
                       <input type="checkbox" formControlName="inhibitedSystemsRestored" />
                       <span>
@@ -980,6 +1202,26 @@
               }
             </label>
             <div class="action-buttons">
+              @if (canDecideInitiation()) {
+                <button
+                  class="primary-button"
+                  type="button"
+                  [disabled]="saving() || decisionStatement.invalid"
+                  (click)="approveInitiation()"
+                >
+                  Setujui PTW awal
+                </button>
+                <div class="disposition-actions">
+                  <button
+                    class="secondary-button"
+                    type="button"
+                    [disabled]="saving() || decisionStatement.invalid"
+                    (click)="returnInitiation()"
+                  >
+                    Kembalikan ke Kontraktor
+                  </button>
+                </div>
+              }
               @if (canValidateHse()) {
                 <button
                   class="primary-button"
@@ -989,7 +1231,8 @@
                     decisionStatement.invalid ||
                     hseSafetyEquipmentCodes.invalid ||
                     loadingSafetyEquipment() ||
-                    !!safetyEquipmentError()
+                    !!safetyEquipmentError() ||
+                    hseSelfCheckMissing()
                   "
                   (click)="validateHse()"
                 >
@@ -1054,7 +1297,10 @@
                 </div>
               }
               @if (canClose()) {
-                @if (closureDecisionForm.controls.completionOutcome.value === 'COMPLETED') {
+                @if (
+                  closureDecisionForm.controls.completionOutcome.value === 'COMPLETED' ||
+                  sponsorDeclaredIncomplete()
+                ) {
                   <button
                     class="primary-button"
                     type="button"
@@ -1183,6 +1429,18 @@
             }
           </small></label
         >
+        @if (isContractor()) {
+          <label class="wide"
+            >Sponsor NR yang menyetujui<select formControlName="sponsorId">
+              <option value="" disabled>Pilih Sponsor</option>
+              @for (sponsor of sponsors(); track sponsor.subjectId) {
+                <option [value]="sponsor.subjectId">
+                  {{ sponsor.displayName }}{{ sponsor.position ? ' · ' + sponsor.position : '' }}
+                </option>
+              }
+            </select></label
+          >
+        }
         <label>Perusahaan pelaksana<input formControlName="company" /></label>
         <label
           >Tipe pengaju<select formControlName="submitterType">
@@ -1378,7 +1636,6 @@
             </div>
           }
         </fieldset>
-        <label>Nomor E-SIMI<input formControlName="eSimiNumber" /></label>
         <label>Mulai<input type="datetime-local" formControlName="validFrom" /></label>
         <label
           >Selesai (maks. 7 hari)<input type="datetime-local" formControlName="validUntil"

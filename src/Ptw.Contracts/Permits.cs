@@ -13,8 +13,6 @@ public sealed record PermitDraftRequest(
     string RiskLevel,
     DateTimeOffset ValidFrom,
     DateTimeOffset ValidUntil,
-    string? ESimiExternalId,
-    string? ESimiNumber,
     IReadOnlyList<string> Hazards,
     IReadOnlyList<string> Controls,
     IReadOnlyList<string> RequiredDocumentCodes,
@@ -77,14 +75,40 @@ public sealed record PermitMandatoryDocumentOptionResponse(
     bool RequiresMetadata);
 
 public sealed record SubmitPermitRequest(
-    bool ESimiEligible,
     bool RulesEvaluated,
     bool RequiredDocumentsSafe,
-    IReadOnlyList<string> MissingRequirements);
+    IReadOnlyList<string> MissingRequirements,
+    bool RevisionSelfCheckConfirmed = false);
 
 public sealed record ValidateSubmissionRequest(
     string Statement,
-    IReadOnlyList<string> SafetyEquipmentCodes);
+    IReadOnlyList<string>? SafetyEquipmentCodes,
+    bool RevisionSelfCheckConfirmed = false);
+
+public sealed record SaveSafetyEquipmentRequest(IReadOnlyList<string> SafetyEquipmentCodes);
+
+public sealed record InitialApprovalRequest(string Statement);
+
+public sealed record AttachmentPolicyResponse(
+    long MaxFileBytes,
+    int MaxFilesPerPermit,
+    IReadOnlyList<string> AcceptedMediaTypes,
+    IReadOnlyList<string> AcceptedExtensions);
+
+public sealed record SponsorOptionResponse(
+    string SubjectId,
+    string DisplayName,
+    string? Position,
+    string? Department);
+
+/// <summary>Bagian 9 declared by the Sponsor when requesting closure.</summary>
+public sealed record PermitWorkCompletionRequest(
+    bool WorkCompleted,
+    bool EquipmentAndMaterialsRemoved,
+    string? Explanation,
+    string PerformingAuthorityName,
+    string PerformingAuthorityBadgeNumber,
+    string SponsorBadgeNumber);
 
 public sealed record ReviewAreaOperationsRequest(
     string Statement,
@@ -119,7 +143,8 @@ public sealed record RequestClosureRequest(
     IReadOnlyList<Guid> SignedFieldCopyAttachmentIds,
     string CompletionStatement,
     bool AllPagesReviewed,
-    bool ReadableAndCompleteAcknowledged);
+    bool ReadableAndCompleteAcknowledged,
+    PermitWorkCompletionRequest? Completion = null);
 
 public sealed record ClosePermitRequest(
     string Statement,
@@ -129,7 +154,8 @@ public sealed record ClosePermitRequest(
     bool ManagerAgreesWorkCompleted,
     bool InhibitedSystemsRestored,
     bool AreaHandedBackAndSafeguardsRestored,
-    bool EvidenceReadable);
+    bool EvidenceReadable,
+    string? IncompleteWorkStatus = null);
 
 public sealed record PermitValidationResponse(
     string Code,
@@ -139,7 +165,24 @@ public sealed record PermitValidationResponse(
     string? ActorName,
     string? Statement,
     DateTimeOffset? CompletedAt,
-    IReadOnlyList<string> SafetyEquipmentCodes);
+    IReadOnlyList<string> SafetyEquipmentCodes,
+    bool RevisionSelfCheckConfirmed = false);
+
+public sealed record HseSafetyEquipmentSelectionResponse(
+    bool Saved,
+    string? ActorId,
+    string? ActorName,
+    IReadOnlyList<string> SafetyEquipmentCodes,
+    DateTimeOffset? SavedAt);
+
+public sealed record PermitInitiationResponse(
+    bool Initiated,
+    string? ContractorId,
+    string? ContractorName,
+    string? Status,
+    DateTimeOffset? SubmittedToSponsorAt,
+    string? SponsorStatement,
+    DateTimeOffset? DecidedAt);
 
 public sealed record PermitApprovalResponse(
     bool Completed,
@@ -193,7 +236,9 @@ public sealed record PermitClosureResponse(
     bool ManagerAgreesWorkCompleted,
     bool InhibitedSystemsRestored,
     bool AreaHandedBackAndSafeguardsRestored,
-    bool EvidenceReadable);
+    bool EvidenceReadable,
+    PermitWorkCompletionRequest? Completion = null,
+    string? IncompleteWorkStatus = null);
 
 public sealed record PermitRenewalRequestResponse(
     bool Requested,
@@ -217,7 +262,9 @@ public sealed record PermitWorkflowResponse(
     PermitApprovalResponse Approval,
     PermitSuspensionResponse Suspension,
     PermitRenewalRequestResponse Renewal,
-    PermitClosureResponse Closure);
+    PermitClosureResponse Closure,
+    HseSafetyEquipmentSelectionResponse SafetyEquipmentSelection,
+    PermitInitiationResponse Initiation);
 
 public sealed record PermitResponse(
     Guid Id,
@@ -340,4 +387,5 @@ public sealed record MeResponse(
     IReadOnlyList<string> Roles,
     IReadOnlyList<string> LocationScopes,
     IReadOnlyList<string> CompetencyCodes,
-    bool IsDevelopmentIdentity);
+    bool IsDevelopmentIdentity,
+    IReadOnlyList<string>? ActingRoles = null);

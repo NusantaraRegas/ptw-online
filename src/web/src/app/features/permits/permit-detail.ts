@@ -4,7 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Observable } from 'rxjs';
-import { CurrentIdentity, IdentityApi } from '../../core/development-identity';
+import { CurrentIdentity, IdentityApi, isContractorOnly } from '../../core/development-identity';
 import { LocationApi, LocationOption } from '../../core/location-api';
 import { PermitAttachment, PermitAttachmentApi } from '../../core/permit-attachment-api';
 import {
@@ -18,7 +18,9 @@ import {
   PermitSafetyEquipmentOption,
   PermitSupportingDocumentOption,
   PermitTask,
+  PermitWorkCompletion,
   PermitWorkTypeOption,
+  SponsorOption,
 } from '../../core/permit-api';
 import { PermitAttachmentPermitChange, PermitAttachments } from './permit-attachments';
 import { PermitHistory } from './permit-history';
@@ -102,10 +104,60 @@ export class PermitDetail {
   protected readonly roles = computed(() => this.identity()?.roles ?? []);
   protected readonly actorId = computed(() => this.identity()?.userId ?? '');
   protected readonly actorDisplayName = computed(() => this.identity()?.displayName ?? '');
+  protected readonly isContractor = computed(() => isContractorOnly(this.roles()));
+  protected readonly isActingManager = computed(() =>
+    (this.identity()?.actingRoles ?? []).includes('AreaOwnerManager'),
+  );
+  protected readonly initiation = computed(() => {
+    const initiation = this.permit()?.workflow.initiation;
+    return initiation?.initiated ? initiation : null;
+  });
+  protected readonly isInitiator = computed(
+    () => !!this.initiation() && this.initiation()!.contractorId === this.actorId(),
+  );
+  /** The Contractor keeps the initial draft until it hands it to the Sponsor. */
+  protected readonly contractorMayEdit = computed(
+    () =>
+      this.isInitiator() &&
+      this.permit()?.status === 'DRAFT' &&
+      ['DRAFTING', 'RETURNED'].includes(this.initiation()?.status ?? ''),
+  );
   protected readonly canEdit = computed(() => {
     const status = this.permit()?.status;
+    if (this.isContractor()) return this.contractorMayEdit();
     return status === 'DRAFT' || status === 'REVISION_REQUIRED';
   });
+  protected readonly canSubmitInitiation = computed(
+    () => this.isContractor() && this.contractorMayEdit() && !this.editing(),
+  );
+  protected readonly canDecideInitiation = computed(
+    () =>
+      this.currentTask()?.type === 'SPONSOR_INITIAL_APPROVAL' &&
+      this.roles().includes('Sponsor') &&
+      this.permit()?.draft.sponsorId === this.actorId(),
+  );
+  protected readonly initiationTitle = computed(() => {
+    switch (this.initiation()?.status) {
+      case 'AWAITING_SPONSOR_APPROVAL':
+        return 'Menunggu persetujuan Sponsor';
+      case 'RETURNED':
+        return 'Dikembalikan kepada Kontraktor';
+      case 'APPROVED':
+        return 'Disetujui Sponsor';
+      default:
+        return 'Sedang diisi Kontraktor';
+    }
+  });
+  protected readonly resubmitting = computed(() => this.permit()?.status === 'REVISION_REQUIRED');
+  /** A version above one means the PIC HSE validates a resubmission (UAT no. 10 self check). */
+  protected readonly validatingResubmission = computed(() => (this.permit()?.version ?? 1) > 1);
+  protected readonly savedSafetyEquipment = computed(
+    () => this.permit()?.workflow.safetyEquipmentSelection ?? null,
+  );
+  protected readonly sponsorDeclaredIncomplete = computed(
+    () => this.permit()?.workflow.closure.completion?.workCompleted === false,
+  );
+  protected readonly sponsors = signal<SponsorOption[]>([]);
   /** Ready print packages, used to bind a signed field copy to the sheet actually used in the field. */
   protected readonly readyPrintPackages = signal<{ id: string; permitVersion: number }[]>([]);
 
@@ -122,7 +174,8 @@ export class PermitDetail {
     () =>
       this.canEdit() &&
       (this.roles().includes('Administrator') ||
-        (this.roles().includes('Sponsor') && this.permit()?.draft.sponsorId === this.actorId())),
+        (this.roles().includes('Sponsor') && this.permit()?.draft.sponsorId === this.actorId()) ||
+        this.contractorMayEdit()),
   );
   protected readonly closureReplacementPending = computed(
     () =>
@@ -188,7 +241,8 @@ export class PermitDetail {
     () =>
       this.canEdit() &&
       (this.roles().includes('Sponsor') || this.roles().includes('Administrator')) &&
-      !this.editing(),
+      !this.editing() &&
+      (!this.initiation() || this.initiation()!.status === 'APPROVED'),
   );
   protected readonly currentTask = computed(() =>
     this.tasks().find((task) => task.permitId === this.permit()?.id),
@@ -276,6 +330,7 @@ export class PermitDetail {
   );
   protected readonly hasDecisionAction = computed(
     () =>
+      this.canDecideInitiation() ||
       this.canValidateHse() ||
       this.canReviewAreaOperations() ||
       this.canApprove() ||
@@ -315,14 +370,15 @@ export class PermitDetail {
     jsaDate: ['', Validators.required],
     validFrom: ['', Validators.required],
     validUntil: ['', Validators.required],
-    eSimiNumber: [''],
+    sponsorId: [''],
   });
   protected readonly submissionForm = this.fb.nonNullable.group({
-    eSimiEligible: [false, Validators.requiredTrue],
     rulesEvaluated: [false, Validators.requiredTrue],
     requiredDocumentsSafe: [false, Validators.requiredTrue],
     noMissingRequirements: [false, Validators.requiredTrue],
+    revisionSelfCheckConfirmed: [false],
   });
+  protected readonly hseRevisionSelfCheck = this.fb.nonNullable.control(false);
   protected readonly decisionStatement = this.fb.nonNullable.control('', [
     Validators.required,
     Validators.pattern(/\S/),
@@ -351,6 +407,13 @@ export class PermitDetail {
     completionStatement: ['', [Validators.required, Validators.maxLength(1000)]],
     allPagesReviewed: [false, Validators.requiredTrue],
     readableAndCompleteAcknowledged: [false, Validators.requiredTrue],
+    // Bagian 9, declared digitally since UAT-2026-10-12.
+    workOutcome: this.fb.nonNullable.control<'COMPLETED' | 'NOT_COMPLETED'>('COMPLETED'),
+    equipmentOutcome: this.fb.nonNullable.control<'REMOVED' | 'NOT_REMOVED'>('REMOVED'),
+    explanation: ['', Validators.maxLength(800)],
+    performingAuthorityName: ['', [Validators.required, Validators.maxLength(100)]],
+    performingAuthorityBadgeNumber: ['', [Validators.required, Validators.maxLength(40)]],
+    sponsorBadgeNumber: ['', [Validators.required, Validators.maxLength(40)]],
   });
   protected readonly renewalDecisionForm = this.fb.nonNullable.group({
     fieldVerificationConfirmed: [false, Validators.requiredTrue],
@@ -448,8 +511,11 @@ export class PermitDetail {
       jsaDate: permit.draft.jsaDate?.slice(0, 10) ?? '',
       validFrom: toLocalInput(permit.draft.validFrom),
       validUntil: toLocalInput(permit.draft.validUntil),
-      eSimiNumber: permit.draft.eSimiNumber ?? '',
+      sponsorId: permit.draft.sponsorId,
     });
+    if (this.isContractor() && this.sponsors().length === 0) {
+      this.loadSponsors();
+    }
     this.reconcileHeaderClassificationSelection();
     this.syncOtherWorkTypeValidation();
     this.reconcileSupportingDocumentSelection();
@@ -477,11 +543,9 @@ export class PermitDetail {
     const value = this.form.getRawValue();
     const draft: PermitDraft = {
       ...value,
-      sponsorId: permit.draft.sponsorId,
+      sponsorId: this.isContractor() && value.sponsorId ? value.sponsorId : permit.draft.sponsorId,
       validFrom: new Date(value.validFrom).toISOString(),
       validUntil: new Date(value.validUntil).toISOString(),
-      eSimiExternalId: value.eSimiNumber || null,
-      eSimiNumber: value.eSimiNumber || null,
       hazards: [],
       controls: [],
       workTypeCode: null,
@@ -853,12 +917,21 @@ export class PermitDetail {
     const permit = this.permit();
     if (!permit || (!this.canRequestClosure() && !this.canResubmitClosure())) return;
     const resubmitting = this.canResubmitClosure();
+    const previous = permit.workflow.closure.completion ?? null;
     this.closureForm.reset({
       printPackageId: resubmitting ? (permit.workflow.closure.printPackageId ?? '') : '',
       signedFieldCopyAttachmentId: '',
       completionStatement: resubmitting ? (permit.workflow.closure.completionStatement ?? '') : '',
       allPagesReviewed: false,
       readableAndCompleteAcknowledged: false,
+      workOutcome: previous?.workCompleted === false ? 'NOT_COMPLETED' : 'COMPLETED',
+      equipmentOutcome:
+        previous?.equipmentAndMaterialsRemoved === false ? 'NOT_REMOVED' : 'REMOVED',
+      explanation: previous?.explanation ?? '',
+      performingAuthorityName:
+        previous?.performingAuthorityName ?? permit.draft.performingAuthority,
+      performingAuthorityBadgeNumber: previous?.performingAuthorityBadgeNumber ?? '',
+      sponsorBadgeNumber: previous?.sponsorBadgeNumber ?? '',
     });
     this.error.set('');
     this.success.set('');
@@ -874,9 +947,17 @@ export class PermitDetail {
     this.closureForm.reset();
   }
 
+  /** Bagian 9 requires an explanation whenever work or equipment is not fully done. */
+  protected closureSection9Valid(): boolean {
+    const value = this.closureForm.getRawValue();
+    const needsExplanation =
+      value.workOutcome === 'NOT_COMPLETED' || value.equipmentOutcome === 'NOT_REMOVED';
+    return !needsExplanation || !!value.explanation.trim();
+  }
+
   protected requestClosure(): void {
     const permit = this.permit();
-    if (!permit || this.closureForm.invalid) {
+    if (!permit || this.closureForm.invalid || !this.closureSection9Valid()) {
       this.closureForm.markAllAsTouched();
       return;
     }
@@ -886,12 +967,21 @@ export class PermitDetail {
     this.success.set('');
     this.closureError.set('');
     this.closureConflict.set(false);
+    const completion: PermitWorkCompletion = {
+      workCompleted: value.workOutcome === 'COMPLETED',
+      equipmentAndMaterialsRemoved: value.equipmentOutcome === 'REMOVED',
+      explanation: value.explanation.trim() || null,
+      performingAuthorityName: value.performingAuthorityName.trim(),
+      performingAuthorityBadgeNumber: value.performingAuthorityBadgeNumber.trim(),
+      sponsorBadgeNumber: value.sponsorBadgeNumber.trim(),
+    };
     const request = {
       printPackageId: value.printPackageId,
       signedFieldCopyAttachmentIds: [value.signedFieldCopyAttachmentId],
       completionStatement: value.completionStatement,
       allPagesReviewed: value.allPagesReviewed,
       readableAndCompleteAcknowledged: value.readableAndCompleteAcknowledged,
+      completion,
     };
     const command = resubmitting
       ? this.api.resubmitClosure(permit.id, permit.eTag, request)
@@ -916,22 +1006,86 @@ export class PermitDetail {
     });
   }
 
+  protected submissionSelfCheckMissing(): boolean {
+    return this.resubmitting() && !this.submissionForm.controls.revisionSelfCheckConfirmed.value;
+  }
+
   protected submitForValidation(): void {
     const permit = this.permit();
-    if (!permit || this.submissionForm.invalid) {
+    if (!permit || this.submissionForm.invalid || this.submissionSelfCheckMissing()) {
       this.submissionForm.markAllAsTouched();
       return;
     }
     const value = this.submissionForm.getRawValue();
     this.runCommand(
       this.api.submit(permit.id, permit.eTag, {
-        eSimiEligible: value.eSimiEligible,
         rulesEvaluated: value.rulesEvaluated,
         requiredDocumentsSafe: value.requiredDocumentsSafe,
         missingRequirements: value.noMissingRequirements ? [] : ['Persyaratan belum lengkap'],
+        revisionSelfCheckConfirmed: value.revisionSelfCheckConfirmed,
       }),
-      'PTW diajukan untuk validasi PIC HSE.',
+      this.resubmitting()
+        ? 'PTW diajukan ulang untuk validasi PIC HSE dengan self check revisi.'
+        : 'PTW diajukan untuk validasi PIC HSE.',
     );
+  }
+
+  protected submitInitiation(): void {
+    const permit = this.permit();
+    if (!permit || !this.canSubmitInitiation()) return;
+    this.runCommand(
+      this.api.submitInitiation(permit.id, permit.eTag),
+      'PTW awal diajukan kepada Sponsor untuk persetujuan.',
+    );
+  }
+
+  protected approveInitiation(): void {
+    this.runTaskDecision(
+      (task, permit, statement) => this.api.approveInitiation(task.id, permit.eTag, statement),
+      'PTW awal disetujui. Lengkapi draft bila perlu, lalu ajukan ke PIC HSE.',
+    );
+  }
+
+  protected returnInitiation(): void {
+    this.runTaskDecision(
+      (task, permit, reason) => this.api.returnInitiation(task.id, permit.eTag, reason),
+      'PTW awal dikembalikan kepada Kontraktor dengan catatan.',
+    );
+  }
+
+  protected hseSelfCheckMissing(): boolean {
+    return this.validatingResubmission() && !this.hseRevisionSelfCheck.value;
+  }
+
+  /** Persists the Bagian 5 choice without deciding the validation (UAT no. 9). */
+  protected saveSafetyEquipment(): void {
+    const task = this.currentTask();
+    const permit = this.permit();
+    if (!task || !permit || this.hseSafetyEquipmentCodes.invalid) {
+      this.hseSafetyEquipmentCodes.markAsTouched();
+      return;
+    }
+
+    this.saving.set(true);
+    this.error.set('');
+    this.success.set('');
+    this.api
+      .saveSafetyEquipment(task.id, permit.eTag, this.hseSafetyEquipmentCodes.getRawValue())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (updated) => {
+          this.permit.set(updated);
+          this.saving.set(false);
+          this.success.set(
+            'Pilihan APD Bagian 5 disimpan dan tetap tersimpan meskipun PTW direvisi.',
+          );
+        },
+        error: (response) => {
+          this.saving.set(false);
+          this.conflict.set(response.status === 409);
+          this.error.set(response?.error?.detail ?? 'Pilihan APD gagal disimpan.');
+        },
+      });
   }
 
   protected validateHse(): void {
@@ -941,10 +1095,12 @@ export class PermitDetail {
       !task ||
       !permit ||
       this.decisionStatement.invalid ||
-      this.hseSafetyEquipmentCodes.invalid
+      this.hseSafetyEquipmentCodes.invalid ||
+      this.hseSelfCheckMissing()
     ) {
       this.decisionStatement.markAsTouched();
       this.hseSafetyEquipmentCodes.markAsTouched();
+      this.hseRevisionSelfCheck.markAsTouched();
       return;
     }
 
@@ -952,6 +1108,7 @@ export class PermitDetail {
       this.api.validate(task.id, permit.eTag, {
         statement: this.decisionStatement.getRawValue(),
         safetyEquipmentCodes: this.hseSafetyEquipmentCodes.getRawValue(),
+        revisionSelfCheckConfirmed: this.hseRevisionSelfCheck.getRawValue(),
       }),
       'Validasi PIC HSE tersimpan. APD/perlengkapan safety akan dicentang pada Bagian 5 paket cetak.',
     );
@@ -1137,33 +1294,41 @@ export class PermitDetail {
       this.decisionStatement.markAsTouched();
       return;
     }
+    const incomplete = confirmations.completionOutcome === 'INCOMPLETE';
     this.runTaskDecision(
       (task, permit, statement) =>
         this.api.close(task.id, permit.eTag, {
           statement,
           officerName: confirmations.officerName.trim(),
           workAreaInspectedAndClean: confirmations.workAreaInspectedAndClean,
-          workCompleted: confirmations.completionOutcome === 'COMPLETED',
-          managerAgreesWorkCompleted: confirmations.managerAgreesWorkCompleted,
+          workCompleted: !incomplete,
+          managerAgreesWorkCompleted: incomplete ? false : confirmations.managerAgreesWorkCompleted,
           inhibitedSystemsRestored: confirmations.inhibitedSystemsRestored,
           areaHandedBackAndSafeguardsRestored: confirmations.areaHandedBackAndSafeguardsRestored,
           evidenceReadable: confirmations.evidenceReadable,
+          incompleteWorkStatus: incomplete ? confirmations.incompleteWorkStatus.trim() : null,
         }),
-      'PTW ditutup setelah seluruh checklist Bagian 10 dan hardcopy terverifikasi.',
+      incomplete
+        ? 'PTW ditutup dengan status pekerjaan belum selesai (Bagian 9/10 tercatat pada riwayat).'
+        : 'PTW ditutup setelah seluruh checklist Bagian 10 dan hardcopy terverifikasi.',
     );
   }
 
   protected closureReadyToClose(): boolean {
     const verification = this.closureDecisionForm.getRawValue();
-    return (
-      verification.completionOutcome === 'COMPLETED' &&
+    const common =
       verification.workAreaInspectedAndClean &&
       !!verification.officerName.trim() &&
-      verification.managerAgreesWorkCompleted &&
       verification.inhibitedSystemsRestored &&
       verification.areaHandedBackAndSafeguardsRestored &&
-      verification.evidenceReadable
-    );
+      verification.evidenceReadable;
+    if (verification.completionOutcome === 'INCOMPLETE') {
+      // Only a job the Sponsor itself declared unfinished (Bagian 9) can be closed as incomplete.
+      return (
+        this.sponsorDeclaredIncomplete() && common && !!verification.incompleteWorkStatus.trim()
+      );
+    }
+    return common && verification.managerAgreesWorkCompleted;
   }
 
   protected closureFollowUpReady(): boolean {
@@ -1243,7 +1408,20 @@ export class PermitDetail {
       .subscribe({
         next: (permit) => {
           this.permit.set(permit);
-          this.hseSafetyEquipmentCodes.setValue(permit.workflow.hse.safetyEquipmentCodes ?? []);
+          // Prefer the decided evidence, otherwise the selection the HSE saved earlier so a
+          // revision cycle never asks for the same APD choice twice.
+          const decided = permit.workflow.hse.safetyEquipmentCodes ?? [];
+          this.hseSafetyEquipmentCodes.setValue(
+            decided.length > 0
+              ? decided
+              : (permit.workflow.safetyEquipmentSelection?.safetyEquipmentCodes ?? []),
+          );
+          this.hseRevisionSelfCheck.setValue(false);
+          this.closureDecisionForm.controls.completionOutcome.setValue(
+            permit.workflow.closure.completion?.workCompleted === false
+              ? 'INCOMPLETE'
+              : 'COMPLETED',
+          );
           this.areaOperationForm.reset({
             conditionCodes: permit.workflow.areaOperations.conditionCodes ?? [],
             otherConditionDetail: permit.workflow.areaOperations.otherConditionDetail ?? '',
@@ -1262,6 +1440,16 @@ export class PermitDetail {
               : (response?.error?.detail ?? 'Detail PTW gagal dimuat.'),
           );
         },
+      });
+  }
+
+  private loadSponsors(): void {
+    this.api
+      .listSponsors()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (page) => this.sponsors.set(page.items),
+        error: () => this.sponsors.set([]),
       });
   }
 

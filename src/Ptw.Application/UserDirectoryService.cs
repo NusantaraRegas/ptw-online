@@ -29,6 +29,30 @@ public sealed class UserDirectoryService(
         return Map(await RequiredAsync(subjectId, cancellationToken));
     }
 
+    /// <summary>
+    /// Sponsors a Contractor can address an initial PTW to (UAT-2026-10-12 no. 14). Only display data is
+    /// returned; usernames and credentials never leave the directory.
+    /// </summary>
+    public async Task<PagedResponse<SponsorOptionResponse>> ListSponsorOptionsAsync(CancellationToken cancellationToken)
+    {
+        var actor = actorContext.Current;
+        if (!actor.Roles.Overlaps(["Contractor", "Sponsor", "Administrator"]))
+        {
+            throw new UnauthorizedAccessException("Daftar Sponsor hanya tersedia untuk Kontraktor, Sponsor, dan Administrator.");
+        }
+
+        var sponsors = await store.ListActiveWithRoleAsync("Sponsor", clock.UtcNow, cancellationToken);
+        var items = sponsors
+            .OrderBy(x => x.Account.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Select(x => new SponsorOptionResponse(
+                x.Account.SubjectId,
+                x.Account.DisplayName,
+                x.Account.Position,
+                x.Account.Department))
+            .ToArray();
+        return new PagedResponse<SponsorOptionResponse>(items, items.Length);
+    }
+
     public async Task<UserSignatureEntry> GetActiveSignatureAsync(
         string subjectId,
         CancellationToken cancellationToken)

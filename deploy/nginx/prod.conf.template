@@ -76,7 +76,7 @@ server {
     # Angular injects component styles at runtime through <style> elements that carry the nonce
     # from <app-root ngCspNonce>. The nonce is this request's id, substituted into index.html
     # below, so 'unsafe-inline' is no longer needed for style-src.
-    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'nonce-$request_id'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; frame-src 'self' blob:; style-src 'self' 'nonce-$request_id'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
 
     # Shared by every proxied location below (inherited unless a location sets its own).
     proxy_http_version 1.1;

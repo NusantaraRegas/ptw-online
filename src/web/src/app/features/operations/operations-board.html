@@ -204,7 +204,10 @@
 
   @if (!loading() && count() > 0) {
     <footer class="pagination" aria-label="Navigasi halaman Papan Operasi">
-      <span>Menampilkan {{ rangeStart() }}–{{ rangeEnd() }} dari {{ count() }} PTW</span>
+      <span>
+        Menampilkan {{ rangeStart() }}–{{ rangeEnd() }} dari {{ count() }} PTW · Halaman
+        {{ pageNumber() }} dari {{ pageCount() }}
+      </span>
       <div>
         <button type="button" (click)="previousPage()" [disabled]="!canGoBack()">Sebelumnya</button>
         <button type="button" (click)="nextPage()" [disabled]="!canGoForward()">Berikutnya</button>

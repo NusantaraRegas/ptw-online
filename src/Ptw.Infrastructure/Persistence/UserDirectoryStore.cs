@@ -175,6 +175,12 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
             }
         }
 
+        // A role held only through delegation assignments is an acting (PJS) role.
+        var actingRoles = assignments
+            .GroupBy(x => x.RoleCode, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.All(x => string.Equals(x.Kind, "Delegation", StringComparison.OrdinalIgnoreCase)))
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return new ResolvedUserIdentity(
             account.SubjectId,
             account.DisplayName,
@@ -182,7 +188,29 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
             account.SecurityStamp,
             assignments.Select(x => x.RoleCode).ToHashSet(StringComparer.OrdinalIgnoreCase),
             scopes,
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            actingRoles);
+    }
+
+    public async Task<IReadOnlyList<StoredUserAccount>> ListActiveWithRoleAsync(
+        string roleCode,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var utc = now.ToUniversalTime();
+        var subjectIds = await dbContext.UserAuthorizations.AsNoTracking()
+            .Where(x => x.RoleCode == roleCode
+                && x.Status == "Approved"
+                && x.EffectiveFrom <= utc
+                && (x.EffectiveUntil == null || utc < x.EffectiveUntil))
+            .Select(x => x.SubjectId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var accounts = await dbContext.UserAccounts.AsNoTracking()
+            .Where(x => x.IsActive && subjectIds.Contains(x.SubjectId))
+            .OrderBy(x => x.DisplayName)
+            .ToListAsync(cancellationToken);
+        return accounts.Select(account => ToStored(account, null)).ToArray();
     }
 
     public async Task<UserSignatureEntry?> FindActiveSignatureAsync(

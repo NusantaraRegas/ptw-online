@@ -228,6 +228,13 @@ describe('PermitDetail HSE validation', () => {
     ).toBe(true);
     options[0]!.checked = true;
     options[0]!.dispatchEvent(new Event('change'));
+    // Version 2 is a resubmission: the PIC HSE confirms one self check instead of re-checking.
+    const selfCheck = fixture.nativeElement.querySelector(
+      '.revision-self-check input',
+    ) as HTMLInputElement;
+    expect(selfCheck).not.toBeNull();
+    selfCheck.click();
+    fixture.detectChanges();
 
     const statement = (
       fixture.componentInstance as unknown as { decisionStatement: FormControl<string> }
@@ -250,6 +257,7 @@ describe('PermitDetail HSE validation', () => {
     expect(validationRequest).toEqual({
       statement: 'APD dan perlengkapan safety telah diverifikasi.',
       safetyEquipmentCodes: ['SAFETY_FIRE_EXTINGUISHER'],
+      revisionSelfCheckConfirmed: true,
     });
   });
 

@@ -10,14 +10,15 @@ namespace Ptw.Infrastructure.Printing;
 /// Renders one controlled Nusantara Regas PTW form as two A3 portrait pages.
 /// </summary>
 /// <remarks>
-/// Page one contains Bagian 1 to 7. Page two starts at Bagian 8 and contains the blank field-work
-/// scaffolding for daily revalidation, completion, inspection and handback. Bagian 1 to 5 and the
-/// validity, operational-condition checks, and both approval rows in Bagian 7 are populated from
-/// the approved snapshot; Bagian 6 and Bagian 8 to 10 remain completed by hand.
+/// Page one contains Bagian 1 to 7 followed by the HSSE reminder block agreed at the UAT of
+/// 12 October 2026. Page two contains only Bagian 8, the daily revalidation sheet; Bagian 9 and 10
+/// moved into the application workflow (UAT-2026-10-12 no. 16-17) and are no longer printed.
+/// Bagian 1 to 5 and the validity, operational-condition checks, and both approval rows in Bagian 7
+/// are populated from the approved snapshot; Bagian 6 and Bagian 8 remain completed by hand.
 /// </remarks>
 internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
 {
-    internal const string RendererVersion = "ptw-form-renderer/3.4.3";
+    internal const string RendererVersion = "ptw-form-renderer/4.0.0";
 
     private const double PageWidth = 420;
     private const double PageHeight = 297;
@@ -57,8 +58,9 @@ internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
         template.PageNumber = TemplateOverlayCatalog.Resolve(descriptor.PermitClass).PageNumber;
 
         // Keep the controlled source sheet intact and expose it as two more legible pages. The first
-        // crop ends after Bagian 7; the second starts exactly at the Bagian 8 column. Drawing the source
-        // PDF through a transform preserves its vector text and rules instead of rasterising the form.
+        // crop ends after Bagian 7; the second starts exactly at the Bagian 8 column and stops at the
+        // bottom rule of the revalidation grid. Drawing the source PDF through a transform preserves its
+        // vector text and rules instead of rasterising the form.
         var pageSplit = TemplateOverlayCatalog.PageSplit(descriptor.PermitClass);
         DrawCroppedPage(
             document,
@@ -69,7 +71,9 @@ internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
             request.Watermark,
             pageSplit.PageOne,
             outputPageWidth: 420,
-            outputPageHeight: 297);
+            outputPageHeight: 297,
+            reservedBottomMm: HsseReminder.BlockHeightMm + 2,
+            afterTemplate: canvas => HsseReminder.Draw(canvas, 420, 297, OutputMargin));
         DrawCroppedPage(
             document,
             template,
@@ -79,7 +83,9 @@ internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
             request.Watermark,
             pageSplit.PageTwo,
             outputPageWidth: 297,
-            outputPageHeight: 420);
+            outputPageHeight: 420,
+            reservedBottomMm: 0,
+            afterTemplate: canvas => DrawReconciliationReference(canvas, snapshot, request.SnapshotHash, 297, 420));
 
         using var buffer = new MemoryStream();
         document.Save(buffer, false);
@@ -95,19 +101,23 @@ internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
         bool watermark,
         PdfRect sourceBounds,
         double outputPageWidth,
-        double outputPageHeight)
+        double outputPageHeight,
+        double reservedBottomMm,
+        Action<FormCanvas> afterTemplate)
     {
         var sourceX = Pt(sourceBounds.X);
         var sourceY = Pt(sourceBounds.Y);
         var sourceWidth = Pt(sourceBounds.Width);
         var sourceHeight = Pt(sourceBounds.Height);
         var availableWidth = outputPageWidth - (OutputMargin * 2);
-        var availableHeight = outputPageHeight - (OutputMargin * 2);
+        var availableHeight = outputPageHeight - (OutputMargin * 2) - reservedBottomMm;
         var scale = Math.Min(availableWidth / sourceWidth, availableHeight / sourceHeight);
         var renderedWidth = sourceWidth * scale;
         var renderedHeight = sourceHeight * scale;
         var destinationX = (outputPageWidth - renderedWidth) / 2;
-        var destinationY = (outputPageHeight - renderedHeight) / 2;
+        // Top-aligned so the reminder strip (page one) and the blank remainder (page two) sit below
+        // the controlled sheet rather than splitting the free space around it.
+        var destinationY = OutputMargin;
 
         var page = document.AddPage();
         page.Width = XUnit.FromMillimeter(outputPageWidth);
@@ -127,11 +137,31 @@ internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
         graphics.DrawImage(template, 0, 0, template.PointWidth, template.PointHeight);
         DrawControlledTemplateOverlay(canvas, descriptor, snapshot, snapshotHash);
         graphics.Restore(state);
+        afterTemplate(canvas);
 
         if (watermark)
         {
             canvas.Watermark(outputPageWidth, outputPageHeight, "DRAFT / TIDAK BERLAKU");
         }
+    }
+
+    /// <summary>Reconciliation reference for the signed field copy uploaded at closure (BRD RB-016).</summary>
+    private static void DrawReconciliationReference(
+        FormCanvas canvas,
+        PrintPackageSnapshotPayload snapshot,
+        string snapshotHash,
+        double outputPageWidth,
+        double outputPageHeight)
+    {
+        var reference = snapshotHash.Length >= 12 ? snapshotHash[..12] : snapshotHash;
+        canvas.Text(
+            OutputMargin,
+            outputPageHeight - OutputMargin - 4,
+            outputPageWidth - (OutputMargin * 2),
+            4,
+            $"Ref: {snapshot.PermitNumber ?? "-"} | v{snapshot.PermitVersion} | {reference} | Bukti persetujuan elektronik, bukan tanda tangan tersertifikasi",
+            4.0,
+            align: TextAlign.Right);
     }
 
     private static void DrawHeader(

@@ -134,6 +134,14 @@ describe('PermitApi', () => {
       completionStatement: 'Pekerjaan selesai.',
       allPagesReviewed: true,
       readableAndCompleteAcknowledged: true,
+      completion: {
+        workCompleted: true,
+        equipmentAndMaterialsRemoved: true,
+        explanation: null,
+        performingAuthorityName: 'Budi Pelaksana',
+        performingAuthorityBadgeNumber: 'B-1234',
+        sponsorBadgeNumber: 'S-5678',
+      },
     };
     api.requestClosure('permit-id', '"etag-value"', body).subscribe();
 
@@ -151,6 +159,14 @@ describe('PermitApi', () => {
       completionStatement: 'Pekerjaan telah selesai setelah tindak lanjut.',
       allPagesReviewed: true,
       readableAndCompleteAcknowledged: true,
+      completion: {
+        workCompleted: false,
+        equipmentAndMaterialsRemoved: false,
+        explanation: 'Sisa pekerjaan dilanjutkan pada PTW baru.',
+        performingAuthorityName: 'Budi Pelaksana',
+        performingAuthorityBadgeNumber: 'B-1234',
+        sponsorBadgeNumber: 'S-5678',
+      },
     };
     api.resubmitClosure('permit-id', '"etag-value"', body).subscribe();
 
@@ -222,6 +238,67 @@ describe('PermitApi', () => {
       safetyEquipmentCodes: ['SAFETY_FIRE_EXTINGUISHER', 'SAFETY_LOTO'],
     });
     request.flush({});
+  });
+
+  it('saves the PIC HSE Bagian 5 choice through its own task command', () => {
+    api.saveSafetyEquipment('task-id', '"etag-value"', ['SAFETY_LOTO']).subscribe();
+    const request = http.expectOne('/api/v1/tasks/task-id/safety-equipment');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.headers.get('If-Match')).toBe('"etag-value"');
+    expect(request.request.headers.get('Idempotency-Key')).toBeTruthy();
+    expect(request.request.body).toEqual({ safetyEquipmentCodes: ['SAFETY_LOTO'] });
+    request.flush({});
+  });
+
+  it('sends the resubmission self check with the submit command', () => {
+    api
+      .submit('permit-id', '"etag-value"', {
+        rulesEvaluated: true,
+        requiredDocumentsSafe: true,
+        missingRequirements: [],
+        revisionSelfCheckConfirmed: true,
+      })
+      .subscribe();
+    const request = http.expectOne('/api/v1/permits/permit-id/submit');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      rulesEvaluated: true,
+      requiredDocumentsSafe: true,
+      missingRequirements: [],
+      revisionSelfCheckConfirmed: true,
+    });
+    request.flush({});
+  });
+
+  it('routes the Contractor initial PTW through explicit commands', () => {
+    api.submitInitiation('permit-id', '"etag-value"').subscribe();
+    const submit = http.expectOne('/api/v1/permits/permit-id/initial-submit');
+    expect(submit.request.method).toBe('POST');
+    expect(submit.request.headers.get('If-Match')).toBe('"etag-value"');
+    expect(submit.request.headers.get('Idempotency-Key')).toBeTruthy();
+    submit.flush({});
+
+    api.approveInitiation('task-id', '"etag-value"', 'Disetujui.').subscribe();
+    const approve = http.expectOne('/api/v1/tasks/task-id/approve-initial');
+    expect(approve.request.body).toEqual({ statement: 'Disetujui.' });
+    approve.flush({});
+
+    api.returnInitiation('task-id', '"etag-value"', 'Lengkapi JSA.').subscribe();
+    const back = http.expectOne('/api/v1/tasks/task-id/return-initial');
+    expect(back.request.body).toEqual({ reason: 'Lengkapi JSA.' });
+    back.flush({});
+  });
+
+  it('loads the upload policy and the Sponsor options from reference endpoints', () => {
+    api.getAttachmentPolicy().subscribe();
+    const policy = http.expectOne('/api/v1/reference-data/attachment-policy');
+    expect(policy.request.method).toBe('GET');
+    policy.flush({});
+
+    api.listSponsors().subscribe();
+    const sponsors = http.expectOne('/api/v1/sponsors');
+    expect(sponsors.request.method).toBe('GET');
+    sponsors.flush({ items: [], count: 0 });
   });
 
   it('loads the controlled Bagian 5 safety-equipment catalogue', () => {

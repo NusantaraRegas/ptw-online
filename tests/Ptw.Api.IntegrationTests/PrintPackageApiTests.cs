@@ -64,7 +64,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         Assert.True(payload.Sponsor.SubmittedAt < payload.CreatedAt);
         var document = await db.GeneratedDocuments.AsNoTracking()
             .SingleAsync(x => x.PrintPackageSnapshotId == snapshot.Id);
-        Assert.Equal("ptw-form-renderer/3.4.3", document.RendererVersion);
+        Assert.Equal("ptw-form-renderer/4.0.0", document.RendererVersion);
         // Sensitive downloads are material audit events under BR-AUD-001.
         Assert.True(await db.AuditEvents.AsNoTracking().AnyAsync(
             x => x.PermitId == issued.Id && x.EventType == "print_package_downloaded"));
@@ -193,7 +193,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
             HttpMethod.Post,
             $"/api/v1/permits/{draft.Id}/submit",
             draft.ETag,
-            new SubmitPermitRequest(true, true, true, [])));
+            new SubmitPermitRequest(true, true, [])));
         submitResponse.EnsureSuccessStatusCode();
         var submitted = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
 
@@ -266,7 +266,7 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         PermitResponse permit)
     {
         permit = await UploadJsaAsync(client, permit);
-        foreach (var code in new[] { "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW", "ESIMI" })
+        foreach (var code in new[] { "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW" })
         {
             permit = await UploadSupportingDocumentAsync(client, permit, code);
         }
@@ -375,8 +375,6 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
             "High",
             now.AddHours(1),
             now.AddDays(1),
-            "esimi-test",
-            $"ESM-{Guid.NewGuid():N}",
             [],
             [],
             ["JSA", "WORK_PROCEDURE"],

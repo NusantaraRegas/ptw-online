@@ -1,6 +1,16 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, DestroyRef, input, output, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  DestroyRef,
+  ElementRef,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { DomSanitizer, SafeResourceUrl, SafeUrl } from '@angular/platform-browser';
 import { catchError, concatMap, defer, EMPTY, finalize, from, tap } from 'rxjs';
 import {
   PermitAttachment,
@@ -10,6 +20,7 @@ import {
   PermitAttachmentUpload,
 } from '../../core/permit-attachment-api';
 import {
+  AttachmentPolicy,
   PermitApi,
   PermitMandatoryDocumentOption,
   PermitSupportingDocumentOption,
@@ -64,6 +75,18 @@ export class PermitAttachments {
   protected readonly documentRevision = signal('');
   protected readonly documentDate = signal('');
   protected readonly printPackageId = signal('');
+  protected readonly policy = signal<AttachmentPolicy | null>(null);
+  protected readonly previewAttachment = signal<PermitAttachment | null>(null);
+  protected readonly previewImageUrl = signal<SafeUrl | null>(null);
+  protected readonly previewFrameUrl = signal<SafeResourceUrl | null>(null);
+  protected readonly previewError = signal('');
+  private previewObjectUrl = '';
+  private readonly documentPicker = viewChild<ElementRef<HTMLInputElement>>('documentPicker');
+  private readonly previewDialog = viewChild<ElementRef<HTMLDialogElement>>('previewDialog');
+  protected readonly maxFileLabel = computed(() => {
+    const bytes = this.policy()?.maxFileBytes ?? 0;
+    return bytes > 0 ? PermitAttachments.formatSizeStatic(bytes) : '';
+  });
   protected readonly hasUnavailableDownloads = computed(() =>
     this.attachments().some((attachment) => attachment.scanStatus !== 'CLEAN'),
   );
@@ -103,6 +126,7 @@ export class PermitAttachments {
     private readonly api: PermitAttachmentApi,
     private readonly permitApi: PermitApi,
     private readonly destroyRef: DestroyRef,
+    private readonly sanitizer: DomSanitizer,
   ) {}
 
   ngOnInit(): void {
@@ -115,6 +139,18 @@ export class PermitAttachments {
     this.load();
     this.loadMandatoryDocuments();
     this.loadSupportingDocuments();
+    this.loadPolicy();
+  }
+
+  ngOnDestroy(): void {
+    this.releasePreview();
+  }
+
+  /** One-click upload for a document on the readiness list: picks the type, then the file. */
+  protected uploadFor(documentCode: string): void {
+    if (this.busy()) return;
+    this.setDocumentType(documentCode);
+    this.documentPicker()?.nativeElement.click();
   }
 
   ngOnChanges(): void {
@@ -132,6 +168,17 @@ export class PermitAttachments {
       this.error.set(
         `Hanya PDF, JPEG, atau PNG yang dapat diunggah: ${invalid
           .map((file) => file.name)
+          .join(', ')}`,
+      );
+      return;
+    }
+
+    const maxBytes = this.policy()?.maxFileBytes ?? 0;
+    const tooLarge = maxBytes > 0 ? files.filter((file) => file.size > maxBytes) : [];
+    if (tooLarge.length > 0) {
+      this.error.set(
+        `Ukuran file melebihi batas ${this.maxFileLabel()} per file: ${tooLarge
+          .map((file) => `${file.name} (${this.formatSize(file.size)})`)
           .join(', ')}`,
       );
       return;
@@ -305,9 +352,75 @@ export class PermitAttachments {
   }
 
   protected formatSize(bytes: number): string {
-    return bytes < 1024 * 1024
-      ? `${Math.ceil(bytes / 1024)} KB`
-      : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return PermitAttachments.formatSizeStatic(bytes);
+  }
+
+  private static formatSizeStatic(bytes: number): string {
+    if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
+    const megabytes = bytes / (1024 * 1024);
+    return Number.isInteger(megabytes) ? `${megabytes} MB` : `${megabytes.toFixed(1)} MB`;
+  }
+
+  protected isImage(attachment: PermitAttachment): boolean {
+    return attachment.mediaType.startsWith('image/');
+  }
+
+  /** Shows a CLEAN attachment inside the app through the same authenticated download endpoint. */
+  protected preview(attachment: PermitAttachment): void {
+    if (attachment.scanStatus !== 'CLEAN') return;
+    this.releasePreview();
+    this.previewError.set('');
+    this.previewAttachment.set(attachment);
+    this.openPreviewDialog();
+    this.api
+      .download(this.permitId(), attachment.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          this.previewObjectUrl = URL.createObjectURL(blob);
+          if (this.isImage(attachment)) {
+            this.previewImageUrl.set(this.sanitizer.bypassSecurityTrustUrl(this.previewObjectUrl));
+          } else {
+            this.previewFrameUrl.set(
+              this.sanitizer.bypassSecurityTrustResourceUrl(this.previewObjectUrl),
+            );
+          }
+        },
+        error: (response) =>
+          this.previewError.set(response?.error?.detail ?? 'Pratinjau lampiran gagal dimuat.'),
+      });
+  }
+
+  protected closePreview(): void {
+    this.releasePreview();
+    const dialog = this.previewDialog()?.nativeElement;
+    if (dialog?.open) dialog.close();
+  }
+
+  private openPreviewDialog(): void {
+    const dialog = this.previewDialog()?.nativeElement;
+    if (dialog && typeof dialog.showModal === 'function' && !dialog.open) dialog.showModal();
+  }
+
+  private releasePreview(): void {
+    if (this.previewObjectUrl) {
+      URL.revokeObjectURL(this.previewObjectUrl);
+      this.previewObjectUrl = '';
+    }
+    this.previewAttachment.set(null);
+    this.previewImageUrl.set(null);
+    this.previewFrameUrl.set(null);
+  }
+
+  private loadPolicy(): void {
+    this.permitApi
+      .getAttachmentPolicy()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (policy) => this.policy.set(policy),
+        // The server still enforces the limit; without the policy the UI only loses the hint.
+        error: () => this.policy.set(null),
+      });
   }
 
   protected categoryLabel(category: PermitAttachmentCategory): string {

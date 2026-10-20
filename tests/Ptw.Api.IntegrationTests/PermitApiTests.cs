@@ -416,7 +416,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             await response.Content.ReadFromJsonAsync<PermitMandatoryDocumentOptionResponse[]>());
 
         Assert.Equal(
-            ["JSA", "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW", "ESIMI"],
+            ["JSA", "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW"],
             options.Select(x => x.Code));
         Assert.Equal("JSA", options[0].UploadCategory);
         Assert.All(options.Skip(1), option => Assert.Equal("SUPPORTING", option.UploadCategory));
@@ -531,7 +531,6 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     [InlineData("ID", "ID")]
     [InlineData("BPJS_TK", "BPJS TK")]
     [InlineData("FTW", "FTW")]
-    [InlineData("ESIMI", "E-SIMI")]
     public async Task SubmitRejectsEachMissingMandatoryDocument(string omittedCode, string expectedLabel)
     {
         var sponsorId = Unique("sponsor");
@@ -587,7 +586,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             HttpMethod.Post,
             $"/api/v1/permits/{draft.Id}/submit",
             draft.ETag,
-            new SubmitPermitRequest(true, true, true, [])));
+            new SubmitPermitRequest(true, true, [])));
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal("permit.location.not_released", await ProblemCodeAsync(response));
@@ -970,7 +969,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             HttpMethod.Post,
             $"/api/v1/permits/{updated.Id}/submit",
             updated.ETag,
-            ReadyToSubmit()));
+            ReadyToResubmit()));
         submitResponse.EnsureSuccessStatusCode();
         var resubmitted = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
         Assert.Equal(updated.Version + 1, resubmitted.Version);
@@ -1010,7 +1009,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             HttpMethod.Post,
             $"/api/v1/permits/{revision.Id}/submit",
             revision.ETag,
-            ReadyToSubmit()));
+            ReadyToResubmit()));
         submitResponse.EnsureSuccessStatusCode();
         var resubmitted = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
 
@@ -1231,7 +1230,8 @@ public sealed class PermitApiTests(PtwApiFactory factory)
                 [upload.Attachment.Id],
                 "Pekerjaan dan handback pada hardcopy telah selesai.",
                 true,
-                true)));
+                true,
+                Section9())));
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, closureResponse.StatusCode);
         Assert.Equal("permit.closure.evidence_invalid", await ProblemCodeAsync(closureResponse));
@@ -1256,7 +1256,8 @@ public sealed class PermitApiTests(PtwApiFactory factory)
                 [upload.Attachment.Id],
                 "Pekerjaan dan handback pada hardcopy telah selesai.",
                 true,
-                true)));
+                true,
+                Section9())));
         validClosureResponse.EnsureSuccessStatusCode();
         var closureRequested = Required(await validClosureResponse.Content.ReadFromJsonAsync<PermitResponse>());
         var closureTask = await PendingTaskAsync(issued.Id, "AREA_CLOSE_VERIFICATION");
@@ -1331,7 +1332,8 @@ public sealed class PermitApiTests(PtwApiFactory factory)
                 [upload.Attachment.Id],
                 "Percobaan pengajuan ulang oleh Pemilik Wilayah.",
                 true,
-                true)));
+                true,
+                Section9())));
         Assert.Equal(HttpStatusCode.Forbidden, managerResubmit.StatusCode);
 
         using var replacementUploadContent = new MultipartFormDataContent();
@@ -1367,7 +1369,8 @@ public sealed class PermitApiTests(PtwApiFactory factory)
                 [replacementUpload.Attachment.Id],
                 "Pekerjaan telah selesai setelah tindak lanjut dan hardcopy diperbarui.",
                 true,
-                true)));
+                true,
+                Section9())));
         resubmitResponse.EnsureSuccessStatusCode();
         var resubmitted = Required(await resubmitResponse.Content.ReadFromJsonAsync<PermitResponse>());
         Assert.Equal("CLOSURE_REQUESTED", resubmitted.Status);
@@ -1557,7 +1560,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             permit = await UploadJsaAsync(client, permit);
         }
 
-        foreach (var code in new[] { "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW", "ESIMI" })
+        foreach (var code in new[] { "WORK_PROCEDURE", "ID", "BPJS_TK", "FTW" })
         {
             if (string.Equals(omittedCode, code, StringComparison.OrdinalIgnoreCase))
             {
@@ -1672,7 +1675,11 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         return request;
     }
 
-    private static SubmitPermitRequest ReadyToSubmit() => new(true, true, true, []);
+    private static SubmitPermitRequest ReadyToSubmit() => new(true, true, []);
+
+    private static SubmitPermitRequest ReadyToResubmit() => new(true, true, [], RevisionSelfCheckConfirmed: true);
+
+    private static PermitWorkCompletionRequest Section9() => new(true, true, null, "Pelaksana Uji", "B-001", "S-001");
 
     private static PermitDraftRequest Draft(string sponsorId, string location)
     {
@@ -1688,8 +1695,6 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             "High",
             now.AddHours(1),
             now.AddDays(1),
-            "esimi-test",
-            $"ESM-{Guid.NewGuid():N}",
             [],
             [],
             ["JSA", "WORK_PROCEDURE"],

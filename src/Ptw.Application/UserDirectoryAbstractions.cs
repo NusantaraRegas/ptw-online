@@ -26,7 +26,8 @@ public sealed record ResolvedUserIdentity(
     string SecurityStamp,
     IReadOnlySet<string> Roles,
     IReadOnlySet<string> LocationScopes,
-    IReadOnlySet<string> CompetencyCodes);
+    IReadOnlySet<string> CompetencyCodes,
+    IReadOnlySet<string>? ActingRoles = null);
 
 /// <summary>Why the local credential store accepted or refused a login attempt.</summary>
 public enum LocalAuthenticationOutcome
@@ -139,6 +140,11 @@ public interface IUserDirectoryStore
     Task<StoredUserAccount?> FindAsync(string subjectId, CancellationToken cancellationToken);
     Task<StoredUserAccount?> FindByUserNameAsync(string userName, CancellationToken cancellationToken);
     Task<LocalAuthenticationResult> AuthenticateAsync(string userName, string password, CancellationToken cancellationToken);
+    /// <summary>Active accounts holding an approved, effective assignment for <paramref name="roleCode"/>.</summary>
+    Task<IReadOnlyList<StoredUserAccount>> ListActiveWithRoleAsync(
+        string roleCode,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
     Task<ResolvedUserIdentity?> ResolveIdentityAsync(
         string subjectId,
         DateTimeOffset now,

@@ -22,7 +22,8 @@ untuk perluasan di masa depan, bukan prasyarat baseline.
 | [OPN-009](OPN-009.md) | Topologi produksi dan HA | TI | ACCEPTED (24 Sep 2026) | observability/on-call belum diputuskan |
 | [PROD-UPLOAD-SCAN](PROD-UPLOAD-SCAN.md) | Unggahan tanpa malware scanner | TI/HSE | ACCEPTED risiko (24 Sep 2026) | scanner resmi (backlog) |
 | [PTW-RENEWAL](PTW-RENEWAL.md) | Renewal berbasis review pemilik wilayah | PO/Operasi | ACCEPTED melalui PTW-WORKFLOW-BASELINE (25 Sep 2026) | batas renewal berantai (OPN-010, backlog) |
-| [PTW-WORKFLOW-BASELINE](PTW-WORKFLOW-BASELINE.md) | Pengesahan alur sistem saat ini sebagai baseline operasional; Amendemen 1: scope baca lintas lokasi pemilik wilayah ORF | PO | ACCEPTED (25 Sep 2026, termasuk Amendemen 1) | tidak ada; OPN yang masih DRAFT adalah backlog |
+| [PTW-WORKFLOW-BASELINE](PTW-WORKFLOW-BASELINE.md) | Pengesahan alur sistem saat ini sebagai baseline operasional; Amendemen 1: scope baca lintas lokasi pemilik wilayah ORF; Amendemen 3: tindak lanjut UAT | PO | ACCEPTED (25 Sep 2026, termasuk Amendemen 1; Amendemen 3 20 Okt 2026) | tidak ada; OPN yang masih DRAFT adalah backlog |
+| [UAT-2026-10-12](UAT-2026-10-12.md) | 18 temuan UAT: hapus E-SIMI, istilah, pagination, upload/preview, self check revisi, APD tersimpan, pengingat HSSE, PJS, inisial Kontraktor, format nomor, Bagian 9/10 ke workflow | PO | ACCEPTED (12 Okt 2026; parameter 20 Okt 2026) | tidak ada |
 
 OPN-010 (tujuh hari, tanpa batas renewal berantai) dan OPN-011 (materi kampanye tidak termasuk rilis)
 disahkan pada PTW-WORKFLOW-BASELINE Amendemen 2; OPN-012 disahkan sebagian (keterbacaan hardcopy

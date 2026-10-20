@@ -20,7 +20,39 @@ public sealed record PermitValidationEvidence(
     string Statement,
     DateTimeOffset ValidatedAt,
     IReadOnlyList<string>? SafetyEquipmentCodes = null,
+    string? ActorName = null,
+    bool RevisionSelfCheckConfirmed = false);
+
+/// <summary>
+/// Bagian 5 selection the PIC HSE saved before deciding the validation. It survives revision requests,
+/// draft edits, and resubmission so the HSE never re-enters the same choice (UAT-2026-10-12 no. 8-9).
+/// </summary>
+public sealed record HseSafetyEquipmentSelection(
+    string ActorId,
+    IReadOnlyList<string> SafetyEquipmentCodes,
+    DateTimeOffset SavedAt,
     string? ActorName = null);
+
+public enum PermitInitiationStatus
+{
+    Drafting,
+    AwaitingSponsorApproval,
+    Returned,
+    Approved
+}
+
+/// <summary>
+/// Contractor-initiated draft that must be approved by the Sponsor before it can be submitted to the
+/// PIC HSE (UAT-2026-10-12 no. 14). The lifecycle status stays DRAFT throughout.
+/// </summary>
+public sealed record PermitInitiation(
+    string ContractorId,
+    PermitInitiationStatus Status,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? SubmittedToSponsorAt = null,
+    string? SponsorStatement = null,
+    DateTimeOffset? DecidedAt = null,
+    string? ContractorName = null);
 
 public sealed record AreaOperationsReviewEvidence(
     string ActorId,
@@ -70,6 +102,18 @@ public sealed record PermitSuspensionEvidence(
     string? Resolution = null,
     DateTimeOffset? ResolvedAt = null);
 
+/// <summary>
+/// Bagian 9 of the controlled form, declared digitally by the Sponsor when requesting closure
+/// (UAT-2026-10-12 no. 17). Null on closures recorded before the section moved off the hardcopy.
+/// </summary>
+public sealed record PermitWorkCompletionDeclaration(
+    bool WorkCompleted,
+    bool EquipmentAndMaterialsRemoved,
+    string? Explanation,
+    string PerformingAuthorityName,
+    string PerformingAuthorityBadgeNumber,
+    string SponsorBadgeNumber);
+
 public sealed record PermitClosureEvidence(
     Guid PrintPackageId,
     IReadOnlyList<Guid> AttachmentIds,
@@ -77,7 +121,8 @@ public sealed record PermitClosureEvidence(
     string CompletionStatement,
     DateTimeOffset RequestedAt,
     int Revision,
-    string? ReplacementReason = null);
+    string? ReplacementReason = null,
+    PermitWorkCompletionDeclaration? Completion = null);
 
 public sealed record PermitClosureDecisionEvidence(
     string ActorId,
@@ -89,7 +134,8 @@ public sealed record PermitClosureDecisionEvidence(
     bool ManagerAgreesWorkCompleted = false,
     bool InhibitedSystemsRestored = false,
     bool AreaHandedBackAndSafeguardsRestored = false,
-    bool EvidenceReadable = false);
+    bool EvidenceReadable = false,
+    string? IncompleteWorkStatus = null);
 
 public enum PermitRenewalReviewStatus
 {
@@ -125,8 +171,6 @@ public sealed record PermitDraft(
     RiskLevel RiskLevel,
     DateTimeOffset ValidFrom,
     DateTimeOffset ValidUntil,
-    string? ESimiExternalId,
-    string? ESimiNumber,
     IReadOnlyList<string> Hazards,
     IReadOnlyList<string> Controls,
     IReadOnlyList<string> RequiredDocumentCodes,
@@ -149,10 +193,32 @@ public sealed record PermitDraft(
     IReadOnlyList<string>? HeaderClassificationCodes = null);
 
 public sealed record SubmissionReadiness(
-    bool ESimiEligible,
     bool RulesEvaluated,
     bool RequiredDocumentsSafe,
-    IReadOnlyList<string> MissingRequirements)
+    IReadOnlyList<string> MissingRequirements,
+    bool RevisionSelfCheckConfirmed = false)
 {
-    public bool IsReady => ESimiEligible && RulesEvaluated && RequiredDocumentsSafe && MissingRequirements.Count == 0;
+    public bool IsReady => RulesEvaluated && RequiredDocumentsSafe && MissingRequirements.Count == 0;
+}
+
+/// <summary>
+/// Official PTW number: <c>PTW/NNNN/DD/MM/YYYY</c> where NNNN is the yearly sequence and the date is the
+/// WIB submission date (UAT-2026-10-12 no. 15). WIB has no daylight saving, so a fixed offset is exact.
+/// </summary>
+public static class PermitNumberFormat
+{
+    public static readonly TimeSpan WibOffset = TimeSpan.FromHours(7);
+
+    public static int SequenceYear(DateTimeOffset instant) => instant.ToOffset(WibOffset).Year;
+
+    public static string Compose(DateTimeOffset instant, int sequence)
+    {
+        if (sequence <= 0)
+        {
+            throw new DomainRuleViolationException("permit.number.sequence_invalid", "Nomor urut PTW harus positif.");
+        }
+
+        var wib = instant.ToOffset(WibOffset);
+        return $"PTW/{sequence:0000}/{wib:dd}/{wib:MM}/{wib:yyyy}";
+    }
 }

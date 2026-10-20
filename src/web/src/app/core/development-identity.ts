@@ -9,6 +9,8 @@ export interface DevelopmentIdentityProfile {
   roles: string[];
   locationScopes: string[];
   competencyCodes: string[];
+  /** Roles held only as acting (PJS); the server treats them like delegation assignments. */
+  actingRoles?: string[];
 }
 
 export interface CurrentIdentity {
@@ -18,15 +20,23 @@ export interface CurrentIdentity {
   locationScopes: string[];
   competencyCodes: string[];
   isDevelopmentIdentity: boolean;
+  actingRoles?: string[];
 }
 
 const ROLE_LABELS: Readonly<Record<string, string>> = {
   Administrator: 'Administrator',
   Sponsor: 'Sponsor',
+  Contractor: 'Kontraktor',
   HSEValidator: 'PIC HSE',
   AreaOwnerSeniorOfficer: 'SO / Officer Pemilik Wilayah',
   AreaOwnerManager: 'Manager Pemilik Wilayah',
 };
+
+export function isContractorOnly(roles: readonly string[]): boolean {
+  return (
+    roles.includes('Contractor') && !roles.includes('Sponsor') && !roles.includes('Administrator')
+  );
+}
 
 export const OPERATION_BOARD_ROLES = [
   'Administrator',
@@ -49,8 +59,16 @@ export function canMonitorAllPermits(
   );
 }
 
-export function roleDisplayLabel(roles: readonly string[]): string {
-  return roles.map((role) => ROLE_LABELS[role] ?? role).join(' · ');
+export function roleDisplayLabel(
+  roles: readonly string[],
+  actingRoles: readonly string[] = [],
+): string {
+  return roles
+    .map((role) => {
+      const label = ROLE_LABELS[role] ?? role;
+      return actingRoles.includes(role) ? `PJS ${label}` : label;
+    })
+    .join(' · ');
 }
 
 export const DEVELOPMENT_IDENTITIES: DevelopmentIdentityProfile[] = [
@@ -83,6 +101,14 @@ export const DEVELOPMENT_IDENTITIES: DevelopmentIdentityProfile[] = [
     userId: 'sponsor.only.demo',
     displayName: 'Sponsor Only Demo',
     roles: ['Sponsor'],
+    locationScopes: ['*'],
+    competencyCodes: [],
+  },
+  {
+    key: 'contractor',
+    userId: 'contractor.demo',
+    displayName: 'Kontraktor Demo',
+    roles: ['Contractor'],
     locationScopes: ['*'],
     competencyCodes: [],
   },
@@ -133,6 +159,15 @@ export const DEVELOPMENT_IDENTITIES: DevelopmentIdentityProfile[] = [
     roles: ['AreaOwnerManager'],
     locationScopes: ['ORF'],
     competencyCodes: [],
+  },
+  {
+    key: 'area-owner-orf-pjs',
+    userId: 'area.owner.orf.pjs.demo',
+    displayName: 'PJS Manager Pemilik Wilayah ORF Demo',
+    roles: ['AreaOwnerManager'],
+    locationScopes: ['ORF'],
+    competencyCodes: [],
+    actingRoles: ['AreaOwnerManager'],
   },
   {
     key: 'area-owner-water-based',
@@ -243,6 +278,7 @@ export const developmentIdentityInterceptor: HttpInterceptorFn = (request, next)
         'X-Dev-Roles': identity.roles.join(','),
         'X-Dev-Locations': identity.locationScopes.join(','),
         'X-Dev-Competencies': identity.competencyCodes.join(','),
+        'X-Dev-Acting-Roles': (identity.actingRoles ?? []).join(','),
       },
     }),
   );

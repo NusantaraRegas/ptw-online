@@ -307,6 +307,19 @@ public sealed class PermitAttachmentService(
         var stored = await permitStore.FindAsync(permitId, cancellationToken)
             ?? throw new ResourceNotFoundException("Permit", permitId);
         var actor = actorContext.Current;
+        if (PermitAccess.IsContractorOnly(actor))
+        {
+            // A Contractor manages attachments only on its own initial PTW and only while the
+            // draft is still in its hands (not while the Sponsor is reviewing it).
+            if (!PermitAccess.ContractorMayEditDraft(actor, stored.Permit))
+            {
+                throw new UnauthorizedAccessException("Lampiran PTW berada di luar kewenangan Kontraktor.");
+            }
+
+            EnsureLocationScope(actor, stored.Permit.Draft.LocationId);
+            return stored;
+        }
+
         if (!actor.Roles.Overlaps(["Sponsor", "Administrator"]))
         {
             throw new UnauthorizedAccessException("Peran Sponsor diperlukan untuk mengelola lampiran PTW.");
@@ -346,6 +359,10 @@ public sealed class PermitAttachmentService(
         if (!PermitMonitoringAccess.CanReadLocation(actor, stored.Permit.Draft.LocationId))
         {
             throw new UnauthorizedAccessException("PTW berada di luar cakupan pemantauan pengguna.");
+        }
+        if (PermitAccess.IsContractorOnly(actor) && !PermitAccess.IsInitiator(actor, stored.Permit))
+        {
+            throw new UnauthorizedAccessException("Lampiran PTW berada di luar kewenangan Kontraktor.");
         }
         if (actor.Roles.Contains("Sponsor")
             && !actor.Roles.Overlaps(

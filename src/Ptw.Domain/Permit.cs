@@ -38,14 +38,154 @@ public sealed class Permit
     public PermitClosureEvidence? ClosureRequest { get; private set; }
     public PermitClosureDecisionEvidence? ClosureDecision { get; private set; }
     public PermitRenewalRequestEvidence? RenewalRequest { get; private set; }
+    /// <summary>Bagian 5 choice saved by the PIC HSE; survives revision cycles until validation.</summary>
+    public HseSafetyEquipmentSelection? SafetyEquipmentSelection { get; private set; }
+    /// <summary>Set only for drafts initiated by a Contractor that a Sponsor must approve first.</summary>
+    public PermitInitiation? Initiation { get; private set; }
     public IReadOnlyList<DomainEvent> Events => _events;
 
-    public static Permit CreateDraft(PermitDraft draft, DateTimeOffset now)
+    public static Permit CreateDraft(PermitDraft draft, DateTimeOffset now, PermitInitiation? initiation = null)
     {
         EnsureSafetyEquipmentIsAssignedByHse(draft);
         var permit = new Permit(Guid.CreateVersion7(), draft, now);
-        permit.Raise("permit_draft_created", new { permit.Version });
+        if (initiation is not null)
+        {
+            if (string.IsNullOrWhiteSpace(initiation.ContractorId))
+            {
+                throw new DomainRuleViolationException(
+                    "permit.initiation.contractor_required",
+                    "Identitas Kontraktor pengisi PTW awal wajib tersedia.");
+            }
+
+            permit.Initiation = initiation with
+            {
+                ContractorId = initiation.ContractorId.Trim(),
+                Status = PermitInitiationStatus.Drafting,
+                CreatedAt = now.ToUniversalTime(),
+                ContractorName = NormalizeOptional(initiation.ContractorName)
+            };
+        }
+
+        permit.Raise("permit_draft_created", new
+        {
+            permit.Version,
+            InitiatedBy = permit.Initiation?.ContractorId,
+            InitiatedByName = permit.Initiation?.ContractorName
+        });
         return permit;
+    }
+
+    /// <summary>Contractor hands the completed initial PTW to the Sponsor for approval.</summary>
+    public void SubmitInitiationToSponsor(string actorId, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Draft);
+        var initiation = EnsureInitiationOwnedBy(actorId);
+        if (initiation.Status is not (PermitInitiationStatus.Drafting or PermitInitiationStatus.Returned))
+        {
+            throw new DomainRuleViolationException(
+                "permit.initiation.invalid_state",
+                "PTW awal sudah diajukan kepada Sponsor atau sudah disetujui.");
+        }
+
+        EnsureHeaderClassificationIsComplete(Draft);
+        EnsureOtherWorkTypeDetailIsComplete(Draft);
+        EnsureSupportingDocumentSelectionIsComplete(Draft);
+        Initiation = initiation with
+        {
+            Status = PermitInitiationStatus.AwaitingSponsorApproval,
+            SubmittedToSponsorAt = now.ToUniversalTime(),
+            SponsorStatement = null,
+            DecidedAt = null
+        };
+        ChangeSequence++;
+        Touch(now);
+        Raise("permit_initial_submitted", new
+        {
+            ContractorId = Initiation.ContractorId,
+            SponsorId = Draft.SponsorId,
+            PermitVersion = Version
+        });
+    }
+
+    public void ApproveInitiation(string actorId, string statement, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Draft);
+        EnsureEvidence(actorId, statement);
+        var initiation = EnsureInitiationAwaitingSponsor(actorId);
+        Initiation = initiation with
+        {
+            Status = PermitInitiationStatus.Approved,
+            SponsorStatement = statement.Trim(),
+            DecidedAt = now.ToUniversalTime()
+        };
+        ChangeSequence++;
+        Touch(now);
+        Raise("permit_initial_approved", new
+        {
+            ApprovedBy = actorId.Trim(),
+            Statement = statement.Trim(),
+            ContractorId = Initiation.ContractorId,
+            PermitVersion = Version
+        });
+    }
+
+    public void ReturnInitiation(string actorId, string reason, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Draft);
+        EnsureEvidence(actorId, reason);
+        var initiation = EnsureInitiationAwaitingSponsor(actorId);
+        Initiation = initiation with
+        {
+            Status = PermitInitiationStatus.Returned,
+            SponsorStatement = reason.Trim(),
+            DecidedAt = now.ToUniversalTime()
+        };
+        ChangeSequence++;
+        Touch(now);
+        Raise("permit_initial_returned", new
+        {
+            ReturnedBy = actorId.Trim(),
+            Reason = reason.Trim(),
+            ContractorId = Initiation.ContractorId,
+            PermitVersion = Version
+        });
+    }
+
+    /// <summary>
+    /// Stores the PIC HSE Bagian 5 choice without deciding the validation. The selection is reused by
+    /// <see cref="ValidateSubmission"/> and is deliberately not cleared by revision requests.
+    /// </summary>
+    public void SaveSafetyEquipmentSelection(
+        string actorId,
+        IReadOnlyList<string> safetyEquipmentCodes,
+        DateTimeOffset now,
+        string? actorName = null)
+    {
+        EnsureStatus(PermitStatus.UnderValidation);
+        if (string.IsNullOrWhiteSpace(actorId))
+        {
+            throw new DomainRuleViolationException("permit.evidence_required", "Identitas aktor wajib dicatat.");
+        }
+
+        EnsureNotSponsor(
+            actorId,
+            "permit.validation.self_validation_forbidden",
+            "Sponsor PTW tidak boleh menetapkan APD pada pengajuannya sendiri.");
+        var selected = PermitSafetyEquipmentCatalog.NormalizeAndValidate(Draft.PermitClass, safetyEquipmentCodes);
+        SafetyEquipmentSelection = new HseSafetyEquipmentSelection(
+            actorId.Trim(),
+            selected,
+            now.ToUniversalTime(),
+            NormalizeOptional(actorName));
+        ChangeSequence++;
+        Touch(now);
+        Raise("hse_safety_equipment_saved", new
+        {
+            SafetyEquipmentSelection.ActorId,
+            SafetyEquipmentSelection.ActorName,
+            SafetyEquipmentSelection.SafetyEquipmentCodes,
+            PermitVersion = Version
+        });
     }
 
     public static Permit CreateRenewal(Guid sourcePermitId, PermitDraft draft, DateTimeOffset now)
@@ -84,7 +224,9 @@ public sealed class Permit
         Guid? renewedFromPermitId = null,
         Guid? renewalPermitId = null,
         AreaOperationsReviewEvidence? areaOperationsReview = null,
-        int? changeSequence = null) =>
+        int? changeSequence = null,
+        HseSafetyEquipmentSelection? safetyEquipmentSelection = null,
+        PermitInitiation? initiation = null) =>
         new(id, NormalizeAndValidate(draft, allowLegacyIncompleteDraft: true), createdAt, draftIsNormalized: true)
         {
             PermitNumber = permitNumber,
@@ -101,7 +243,9 @@ public sealed class Permit
             ClosureDecision = closureDecision,
             RenewalRequest = renewalRequest,
             RenewedFromPermitId = renewedFromPermitId,
-            RenewalPermitId = renewalPermitId
+            RenewalPermitId = renewalPermitId,
+            SafetyEquipmentSelection = safetyEquipmentSelection,
+            Initiation = initiation
         };
 
     public void RequestRenewal(
@@ -369,6 +513,20 @@ public sealed class Permit
                 "PTW belum memenuhi seluruh persyaratan submit.");
         }
 
+        if (Initiation is not null && Initiation.Status != PermitInitiationStatus.Approved)
+        {
+            throw new DomainRuleViolationException(
+                "permit.submit.initial_approval_required",
+                "PTW awal dari Kontraktor harus disetujui Sponsor sebelum diajukan kepada PIC HSE.");
+        }
+
+        if (isResubmission && !readiness.RevisionSelfCheckConfirmed)
+        {
+            throw new DomainRuleViolationException(
+                "permit.submit.revision_self_check_required",
+                "Sponsor wajib mengonfirmasi bahwa seluruh permintaan revisi telah dilaksanakan sebelum mengajukan ulang.");
+        }
+
         if (string.IsNullOrWhiteSpace(permitNumber))
         {
             throw new DomainRuleViolationException("permit.number.required", "Nomor PTW resmi wajib tersedia saat submit.");
@@ -384,34 +542,57 @@ public sealed class Permit
             ChangeSequence++;
         }
 
-        MoveTo(PermitStatus.UnderValidation, "permit_submitted", now);
+        var from = Status;
+        MoveTo(PermitStatus.UnderValidation, "permit_submitted", now, new
+        {
+            From = from.ToString(),
+            To = PermitStatus.UnderValidation.ToString(),
+            PermitNumber,
+            PermitVersion = Version,
+            Resubmission = isResubmission,
+            readiness.RevisionSelfCheckConfirmed
+        });
     }
 
     public void ValidateSubmission(
         string actorId,
         string statement,
-        IReadOnlyList<string> safetyEquipmentCodes,
+        IReadOnlyList<string>? safetyEquipmentCodes,
         DateTimeOffset now,
-        string? actorName = null)
+        string? actorName = null,
+        bool revisionSelfCheckConfirmed = false)
     {
         EnsureStatus(PermitStatus.UnderValidation);
         EnsureOtherWorkTypeDetailIsComplete(Draft);
         EnsureEvidence(actorId, statement);
-        if (string.Equals(Draft.SponsorId, actorId.Trim(), StringComparison.OrdinalIgnoreCase))
+        EnsureNotSponsor(
+            actorId,
+            "permit.validation.self_validation_forbidden",
+            "Sponsor PTW tidak boleh memvalidasi pengajuannya sendiri.");
+        if (Version > 1 && !revisionSelfCheckConfirmed)
         {
             throw new DomainRuleViolationException(
-                "permit.validation.self_validation_forbidden",
-                "Sponsor PTW tidak boleh memvalidasi pengajuannya sendiri.");
+                "permit.validation.revision_self_check_required",
+                "PIC HSE wajib mengonfirmasi bahwa revisi telah dilaksanakan sesuai permintaan sebelum memvalidasi ulang.");
         }
 
+        // A decision without an explicit choice reuses the selection saved through the separate
+        // "Simpan Pilihan APD" command, so a revision cycle never discards the HSE's work.
+        var requestedCodes = safetyEquipmentCodes?.Where(code => !string.IsNullOrWhiteSpace(code)).ToArray() ?? [];
         var selectedSafetyEquipment = PermitSafetyEquipmentCatalog.NormalizeAndValidate(
             Draft.PermitClass,
-            safetyEquipmentCodes);
+            requestedCodes.Length > 0 ? requestedCodes : SafetyEquipmentSelection?.SafetyEquipmentCodes);
         HseValidation = new PermitValidationEvidence(
             actorId.Trim(),
             statement.Trim(),
             now.ToUniversalTime(),
             selectedSafetyEquipment,
+            NormalizeOptional(actorName),
+            revisionSelfCheckConfirmed);
+        SafetyEquipmentSelection = new HseSafetyEquipmentSelection(
+            actorId.Trim(),
+            selectedSafetyEquipment,
+            now.ToUniversalTime(),
             NormalizeOptional(actorName));
         MoveTo(PermitStatus.AwaitingAreaApproval, "hse_validation_completed", now, new
         {
@@ -419,6 +600,7 @@ public sealed class Permit
             HseValidation.ActorName,
             HseValidation.Statement,
             HseValidation.SafetyEquipmentCodes,
+            HseValidation.RevisionSelfCheckConfirmed,
             PermitVersion = Version
         });
     }
@@ -624,6 +806,7 @@ public sealed class Permit
         IReadOnlyList<Guid> attachmentIds,
         string actorId,
         string completionStatement,
+        PermitWorkCompletionDeclaration completion,
         DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.Issued, PermitStatus.Suspended, PermitStatus.Expired);
@@ -655,13 +838,15 @@ public sealed class Permit
             actorId.Trim(),
             completionStatement.Trim(),
             now.ToUniversalTime(),
-            1);
+            1,
+            Completion: NormalizeCompletion(completion));
         MoveTo(PermitStatus.ClosureRequested, "closure_requested", now, new
         {
             PrintPackageId = printPackageId,
             AttachmentIds = ClosureRequest.AttachmentIds,
             ClosureRequest.RequestedBy,
             ClosureRequest.CompletionStatement,
+            Section9 = ClosureRequest.Completion,
             PermitVersion = Version
         });
     }
@@ -703,6 +888,7 @@ public sealed class Permit
         IReadOnlyList<Guid> attachmentIds,
         string actorId,
         string completionStatement,
+        PermitWorkCompletionDeclaration completion,
         DateTimeOffset now)
     {
         EnsureStatus(PermitStatus.ClosureRequested);
@@ -750,7 +936,8 @@ public sealed class Permit
             RequestedBy = actorId.Trim(),
             CompletionStatement = completionStatement.Trim(),
             RequestedAt = now.ToUniversalTime(),
-            ReplacementReason = null
+            ReplacementReason = null,
+            Completion = NormalizeCompletion(completion)
         };
         Touch(now);
         Raise("closure_resubmitted", new
@@ -760,6 +947,7 @@ public sealed class Permit
             ClosureRequest.RequestedBy,
             ClosureRequest.CompletionStatement,
             ClosureRequest.Revision,
+            Section9 = ClosureRequest.Completion,
             PermitVersion = Version
         });
     }
@@ -774,7 +962,8 @@ public sealed class Permit
         bool inhibitedSystemsRestored,
         bool areaHandedBackAndSafeguardsRestored,
         bool evidenceReadable,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? incompleteWorkStatus = null)
     {
         EnsureStatus(PermitStatus.ClosureRequested);
         EnsureEvidence(actorId, statement);
@@ -807,8 +996,6 @@ public sealed class Permit
         }
 
         if (!workAreaInspectedAndClean
-            || !workCompleted
-            || !managerAgreesWorkCompleted
             || !inhibitedSystemsRestored
             || !areaHandedBackAndSafeguardsRestored
             || !evidenceReadable)
@@ -816,6 +1003,45 @@ public sealed class Permit
             throw new DomainRuleViolationException(
                 "permit.closure.verification_incomplete",
                 "Seluruh inspeksi, persetujuan Pemilik Wilayah, handback, dan keterbacaan hardcopy wajib dikonfirmasi sebelum PTW ditutup.");
+        }
+
+        // Bagian 9/10 pairing: the Sponsor's declaration decides which Bagian 10 statement applies.
+        // Closures recorded before the section moved off the hardcopy still require the completed path.
+        var sponsorDeclaredCompleted = ClosureRequest.Completion?.WorkCompleted ?? true;
+        var normalizedIncompleteStatus = NormalizeOptional(incompleteWorkStatus);
+        if (sponsorDeclaredCompleted)
+        {
+            if (!workCompleted || !managerAgreesWorkCompleted)
+            {
+                throw new DomainRuleViolationException(
+                    "permit.closure.verification_incomplete",
+                    "Sponsor menyatakan pekerjaan selesai; Pemilik Wilayah wajib mengonfirmasi penyelesaian sebelum PTW ditutup.");
+            }
+
+            normalizedIncompleteStatus = null;
+        }
+        else
+        {
+            if (workCompleted || managerAgreesWorkCompleted)
+            {
+                throw new DomainRuleViolationException(
+                    "permit.closure.completion_mismatch",
+                    "Sponsor menyatakan pekerjaan belum selesai; Pemilik Wilayah tidak dapat menyatakan pekerjaan selesai.");
+            }
+
+            if (normalizedIncompleteStatus is null)
+            {
+                throw new DomainRuleViolationException(
+                    "permit.closure.incomplete_status_required",
+                    "Status pekerjaan yang belum selesai wajib dicatat oleh Pemilik Wilayah (Bagian 10).");
+            }
+
+            if (normalizedIncompleteStatus.Length > 800)
+            {
+                throw new DomainRuleViolationException(
+                    "permit.closure.incomplete_status_too_long",
+                    "Status pekerjaan yang belum selesai maksimum 800 karakter.");
+            }
         }
 
         ClosureDecision = new PermitClosureDecisionEvidence(
@@ -828,7 +1054,8 @@ public sealed class Permit
             managerAgreesWorkCompleted,
             inhibitedSystemsRestored,
             areaHandedBackAndSafeguardsRestored,
-            evidenceReadable);
+            evidenceReadable,
+            normalizedIncompleteStatus);
         MoveTo(PermitStatus.Closed, "permit_closed", now, new
         {
             ClosedBy = actorId.Trim(),
@@ -840,6 +1067,8 @@ public sealed class Permit
             ClosureDecision.InhibitedSystemsRestored,
             ClosureDecision.AreaHandedBackAndSafeguardsRestored,
             ClosureDecision.EvidenceReadable,
+            ClosureDecision.IncompleteWorkStatus,
+            Section9 = ClosureRequest.Completion,
             ClosureRequest.PrintPackageId,
             ClosureRequest.AttachmentIds
         });
@@ -1091,6 +1320,105 @@ public sealed class Permit
             throw new DomainRuleViolationException(
                 "permit.renewal.request_missing",
                 "Permintaan perpanjangan yang menunggu review tidak tersedia.");
+        }
+    }
+
+    private static PermitWorkCompletionDeclaration NormalizeCompletion(PermitWorkCompletionDeclaration completion)
+    {
+        ArgumentNullException.ThrowIfNull(completion);
+        var performingAuthorityName = NormalizeOptionalWithMaxLength(
+            completion.PerformingAuthorityName,
+            100,
+            "permit.closure.performing_authority_too_long",
+            "Nama Pelaksana Pekerjaan maksimum 100 karakter.");
+        var performingAuthorityBadge = NormalizeOptionalWithMaxLength(
+            completion.PerformingAuthorityBadgeNumber,
+            40,
+            "permit.closure.badge_too_long",
+            "No. ID Badge maksimum 40 karakter.");
+        var sponsorBadge = NormalizeOptionalWithMaxLength(
+            completion.SponsorBadgeNumber,
+            40,
+            "permit.closure.badge_too_long",
+            "No. ID Badge maksimum 40 karakter.");
+        if (performingAuthorityName is null || performingAuthorityBadge is null || sponsorBadge is null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.section9_identity_required",
+                "Nama dan No. ID Badge Pelaksana Pekerjaan serta No. ID Badge Sponsor wajib diisi pada Bagian 9.");
+        }
+
+        var explanation = NormalizeOptionalWithMaxLength(
+            completion.Explanation,
+            800,
+            "permit.closure.explanation_too_long",
+            "Penjelasan Bagian 9 maksimum 800 karakter.");
+        if ((!completion.WorkCompleted || !completion.EquipmentAndMaterialsRemoved) && explanation is null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.closure.explanation_required",
+                "Penjelasan wajib diisi bila pekerjaan belum selesai atau peralatan/material belum dikeluarkan.");
+        }
+
+        return new PermitWorkCompletionDeclaration(
+            completion.WorkCompleted,
+            completion.EquipmentAndMaterialsRemoved,
+            explanation,
+            performingAuthorityName,
+            performingAuthorityBadge,
+            sponsorBadge);
+    }
+
+    private PermitInitiation EnsureInitiationOwnedBy(string actorId)
+    {
+        if (Initiation is null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.initiation.not_contractor_initiated",
+                "PTW ini tidak diinisiasi oleh Kontraktor.");
+        }
+
+        if (!string.Equals(Initiation.ContractorId, actorId?.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleViolationException(
+                "permit.initiation.contractor_mismatch",
+                "Hanya Kontraktor pengisi PTW awal yang dapat mengajukannya kepada Sponsor.");
+        }
+
+        return Initiation;
+    }
+
+    private PermitInitiation EnsureInitiationAwaitingSponsor(string actorId)
+    {
+        if (Initiation is null)
+        {
+            throw new DomainRuleViolationException(
+                "permit.initiation.not_contractor_initiated",
+                "PTW ini tidak diinisiasi oleh Kontraktor.");
+        }
+
+        if (Initiation.Status != PermitInitiationStatus.AwaitingSponsorApproval)
+        {
+            throw new DomainRuleViolationException(
+                "permit.initiation.invalid_state",
+                "PTW awal belum diajukan kepada Sponsor atau sudah diputuskan.");
+        }
+
+        if (!string.Equals(Draft.SponsorId, actorId?.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleViolationException(
+                "permit.initiation.sponsor_mismatch",
+                "Hanya Sponsor yang dipilih Kontraktor yang dapat memutuskan PTW awal ini.");
+        }
+
+        return Initiation;
+    }
+
+    private void EnsureNotSponsor(string actorId, string code, string message)
+    {
+        if (string.Equals(Draft.SponsorId, actorId?.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleViolationException(code, message);
         }
     }
 

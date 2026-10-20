@@ -15,7 +15,6 @@ public static class PermitMandatoryDocumentCatalog
     public const string IdentityCode = "ID";
     public const string BpjsTkCode = "BPJS_TK";
     public const string FtwCode = "FTW";
-    public const string ESimiCode = "ESIMI";
 
     private static readonly PermitMandatoryDocumentOption[] Options =
     [
@@ -23,8 +22,7 @@ public static class PermitMandatoryDocumentCatalog
         new(PermitSupportingDocumentCatalog.WorkProcedureCode, "Prosedur Pekerjaan"),
         new(IdentityCode, "ID"),
         new(BpjsTkCode, "BPJS TK"),
-        new(FtwCode, "FTW"),
-        new(ESimiCode, "E-SIMI")
+        new(FtwCode, "FTW")
     ];
 
     public static IReadOnlyList<PermitMandatoryDocumentOption> Resolve() => Options;

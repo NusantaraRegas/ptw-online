@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Ptw.Application;
 using Ptw.Contracts;
 using Ptw.Domain;
 
@@ -6,8 +7,15 @@ namespace Ptw.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/reference-data")]
-public sealed class PermitReferenceDataController : ControllerBase
+public sealed class PermitReferenceDataController(AttachmentPolicy attachmentPolicy) : ControllerBase
 {
+    [HttpGet("attachment-policy")]
+    public AttachmentPolicyResponse AttachmentPolicy() => new(
+        attachmentPolicy.MaxFileBytes,
+        attachmentPolicy.MaxFilesPerPermit,
+        AttachmentContentPolicy.AcceptedMediaTypes,
+        AttachmentContentPolicy.AcceptedExtensions);
+
     [HttpGet("mandatory-documents")]
     public IReadOnlyList<PermitMandatoryDocumentOptionResponse> MandatoryDocuments() =>
         PermitMandatoryDocumentCatalog.Resolve()

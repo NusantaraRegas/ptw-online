@@ -94,6 +94,9 @@
         <span class="approval-status">{{ approvalState() }}</span>
       </div>
       <strong>{{ workflow().approval.actorName || 'Belum ada approver' }}</strong>
+      @if (workflow().approval.capacity === 'ACTING_FOR_MANAGER') {
+        <span class="acting-badge">Bertindak sebagai PJS Manager Pemilik Wilayah</span>
+      }
       <span class="approval-role">Approval dan penerbitan atomik</span>
       @if (workflow().approval.approvedAt) {
         <time [attr.datetime]="workflow().approval.approvedAt">

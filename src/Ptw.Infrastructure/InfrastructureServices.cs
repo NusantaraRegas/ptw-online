@@ -39,7 +39,6 @@ public static class InfrastructureServices
             && (!bool.TryParse(configuration["DemoMode:EnabledByDefault"], out var configuredDemoMode)
                 || configuredDemoMode);
         services.AddSingleton(new DemoModeDefaults(demoModeEnabledByDefault));
-        services.AddSingleton<IPermitNumberGenerator, PermitNumberGenerator>();
         var portalAuthenticationSettings = PortalAuthenticationSettings.FromConfiguration(configuration, isDevelopment);
         services.AddSingleton(portalAuthenticationSettings);
         // Fail-safe: without a configured portal, login relies on local credentials only.
@@ -137,9 +136,4 @@ public static class InfrastructureServices
 internal sealed class SystemClock : IClock
 {
     public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
-}
-
-internal sealed class PermitNumberGenerator : IPermitNumberGenerator
-{
-    public string Generate(DateTimeOffset now) => $"PTW-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..21].ToUpperInvariant();
 }

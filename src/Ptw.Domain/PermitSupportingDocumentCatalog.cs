@@ -15,6 +15,7 @@ public sealed record PermitSupportingDocumentOption(
 public static class PermitSupportingDocumentCatalog
 {
     public const string JsaCode = "JSA";
+    public const string WorkCertificateCode = "WORK_CERTIFICATE";
     public const string WorkProcedureCode = "WORK_PROCEDURE";
 
     private static readonly PermitSupportingDocumentOption[] Options =
@@ -30,7 +31,7 @@ public static class PermitSupportingDocumentCatalog
         new("SEA_SURVIVAL_CERTIFICATE", "Sertifikat Training Sea Survival", 0, 8, Required: false),
         new("SAFETY_SYSTEM_DEACTIVATION_PERMIT", "Ijin Penon - aktifan Sistem / Alat pengaman", 0, 9, Required: false),
         new("EQUIPMENT_CERTIFICATE", "Sertifikat Peralatan", 0, 10, Required: false),
-        new("WORK_CERTIFICATE", "Sertifikat Pekerjaan", 1, 0, Required: false),
+        new("WORK_CERTIFICATE", "Sertifikat Pekerja", 1, 0, Required: false),
         new("LIFTING_PLAN", "Lifting Plan", 1, 1, Required: false),
         new("ROAD_CLOSURE", "Penutupan jalan", 1, 2, Required: false),
         new("MSDS", "MSDS", 1, 3, Required: false)

@@ -34,6 +34,8 @@ internal sealed class DevelopmentAuthenticationHandler(
         var roles = Split(Request.Headers["X-Dev-Roles"].FirstOrDefault() ?? "Sponsor,Administrator");
         var locations = Split(Request.Headers["X-Dev-Locations"].FirstOrDefault() ?? "*");
         var competencies = Split(Request.Headers["X-Dev-Competencies"].FirstOrDefault() ?? string.Empty);
+        // Roles the demo identity holds only as acting (PJS); the server treats them like delegations.
+        var actingRoles = Split(Request.Headers["X-Dev-Acting-Roles"].FirstOrDefault() ?? string.Empty);
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, userId),
@@ -43,6 +45,7 @@ internal sealed class DevelopmentAuthenticationHandler(
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
         claims.AddRange(locations.Select(location => new Claim("location_scope", location)));
         claims.AddRange(competencies.Select(competency => new Claim("competency", competency)));
+        claims.AddRange(actingRoles.Select(role => new Claim("acting_role", role)));
         var identity = new ClaimsIdentity(claims, SchemeName);
         return AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName));

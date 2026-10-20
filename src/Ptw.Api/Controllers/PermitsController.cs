@@ -181,6 +181,34 @@ public sealed class PermitsController(
         CancellationToken cancellationToken) =>
         PermitCommandAsync((etag, key) => service.SubmitAsync(id, request, etag, key, CorrelationId, cancellationToken));
 
+    [HttpPost("{id:guid}/initial-submit")]
+    public Task<ActionResult<PermitResponse>> SubmitInitiation(Guid id, CancellationToken cancellationToken) =>
+        PermitCommandAsync((etag, key) => service.SubmitInitiationAsync(id, etag, key, CorrelationId, cancellationToken));
+
+    [HttpPost("/api/v1/tasks/{taskId:guid}/approve-initial")]
+    public Task<ActionResult<PermitResponse>> ApproveInitiation(
+        Guid taskId,
+        InitialApprovalRequest request,
+        CancellationToken cancellationToken) =>
+        PermitCommandAsync((etag, key) => service.ApproveInitiationAsync(
+            taskId, request, etag, key, CorrelationId, cancellationToken));
+
+    [HttpPost("/api/v1/tasks/{taskId:guid}/return-initial")]
+    public Task<ActionResult<PermitResponse>> ReturnInitiation(
+        Guid taskId,
+        PermitReasonRequest request,
+        CancellationToken cancellationToken) =>
+        PermitCommandAsync((etag, key) => service.ReturnInitiationAsync(
+            taskId, request, etag, key, CorrelationId, cancellationToken));
+
+    [HttpPost("/api/v1/tasks/{taskId:guid}/safety-equipment")]
+    public Task<ActionResult<PermitResponse>> SaveSafetyEquipment(
+        Guid taskId,
+        SaveSafetyEquipmentRequest request,
+        CancellationToken cancellationToken) =>
+        PermitCommandAsync((etag, key) => service.SaveSafetyEquipmentAsync(
+            taskId, request, etag, key, CorrelationId, cancellationToken));
+
     [HttpPost("/api/v1/tasks/{taskId:guid}/validate")]
     public Task<ActionResult<PermitResponse>> Validate(
         Guid taskId,

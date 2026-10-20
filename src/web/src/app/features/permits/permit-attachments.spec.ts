@@ -44,13 +44,14 @@ const mandatoryDocuments = [
     requiresMetadata: false,
   },
   { code: 'FTW', label: 'FTW', uploadCategory: 'SUPPORTING', requiresMetadata: false },
-  {
-    code: 'ESIMI',
-    label: 'E-SIMI',
-    uploadCategory: 'SUPPORTING',
-    requiresMetadata: false,
-  },
 ];
+
+const attachmentPolicy = {
+  maxFileBytes: 10 * 1024 * 1024,
+  maxFilesPerPermit: 20,
+  acceptedMediaTypes: ['application/pdf', 'image/jpeg', 'image/png'],
+  acceptedExtensions: ['.pdf', '.jpg', '.jpeg', '.png'],
+};
 
 describe('PermitAttachments', () => {
   it('shows a readable category without exposing the internal scan status', async () => {
@@ -93,6 +94,7 @@ describe('PermitAttachments', () => {
           useValue: {
             listSupportingDocuments: () => of(supportingDocuments),
             listMandatoryDocuments: () => of(mandatoryDocuments),
+            getAttachmentPolicy: () => of(attachmentPolicy),
           },
         },
       ],
@@ -133,6 +135,7 @@ describe('PermitAttachments', () => {
           useValue: {
             listSupportingDocuments: () => of(supportingDocuments),
             listMandatoryDocuments: () => of(mandatoryDocuments),
+            getAttachmentPolicy: () => of(attachmentPolicy),
           },
         },
       ],
@@ -150,6 +153,8 @@ describe('PermitAttachments', () => {
     expect(fixture.nativeElement.querySelector('.empty-state')).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Belum ada lampiran');
     expect(fixture.nativeElement.textContent).toContain('Tambah lampiran');
+    expect(fixture.nativeElement.textContent).toContain('Maksimum 10 MB per file');
+    expect(fixture.nativeElement.querySelectorAll('.document-upload').length).toBeGreaterThan(0);
     expect((fixture.nativeElement.querySelector('select') as HTMLSelectElement).value).toBe('JSA');
     expect(fixture.nativeElement.textContent).not.toContain('Salinan lapangan bertanda tangan');
     const metadataValues = Array.from<HTMLInputElement>(
@@ -171,6 +176,7 @@ describe('PermitAttachments', () => {
           useValue: {
             listSupportingDocuments: () => of(supportingDocuments),
             listMandatoryDocuments: () => of(mandatoryDocuments),
+            getAttachmentPolicy: () => of(attachmentPolicy),
           },
         },
       ],
@@ -253,6 +259,7 @@ describe('PermitAttachments', () => {
           useValue: {
             listSupportingDocuments: () => of(supportingDocuments),
             listMandatoryDocuments: () => of(mandatoryDocuments),
+            getAttachmentPolicy: () => of(attachmentPolicy),
           },
         },
       ],

@@ -113,6 +113,7 @@ public interface IPermitStore
     Task<StoredPermit?> FindAsync(Guid id, CancellationToken cancellationToken);
     Task<StorePage<StoredPermit>> ListAsync(
         string? sponsorId,
+        string? initiatorId,
         IReadOnlySet<string> locationScopes,
         string? search,
         int offset,
@@ -143,6 +144,21 @@ public interface IPermitStore
         Actor actor,
         string correlationId,
         IdempotencyContext? idempotency,
+        PolicyAuthorizationEvidence? authorizationEvidence,
+        CancellationToken cancellationToken);
+    /// <summary>
+    /// Allocates the next official PTW number for the submission year inside the same transaction as the
+    /// permit update, invokes <paramref name="submitWithNumber"/> with it, and persists the result. A
+    /// permit that already holds a number is passed that number unchanged.
+    /// </summary>
+    Task<StoredPermit> UpdateWithPermitNumberAsync(
+        Permit permit,
+        Action<string> submitWithNumber,
+        DateTimeOffset submittedAt,
+        string expectedETag,
+        Actor actor,
+        string correlationId,
+        IdempotencyContext idempotency,
         PolicyAuthorizationEvidence? authorizationEvidence,
         CancellationToken cancellationToken);
     Task<StoredPermit?> FindIdempotentResultAsync(
@@ -235,7 +251,21 @@ public sealed record Actor(
     IReadOnlySet<string> Roles,
     IReadOnlySet<string> LocationScopes,
     IReadOnlySet<string> CompetencyCodes,
-    bool IsDevelopment = false);
+    bool IsDevelopment = false,
+    IReadOnlySet<string>? ActingRoles = null)
+{
+    private static readonly IReadOnlySet<string> NoRoles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Roles the actor holds only through a delegation assignment (acting / PJS).</summary>
+    public IReadOnlySet<string> ActingRoleSet => ActingRoles ?? NoRoles;
+}
+
+/// <summary>Attachment content types the upload pipeline verifies by signature; shared with the UI.</summary>
+public static class AttachmentContentPolicy
+{
+    public static readonly IReadOnlyList<string> AcceptedMediaTypes = ["application/pdf", "image/jpeg", "image/png"];
+    public static readonly IReadOnlyList<string> AcceptedExtensions = [".pdf", ".jpg", ".jpeg", ".png"];
+}
 
 public interface IActorContext
 {
@@ -245,11 +275,6 @@ public interface IActorContext
 public interface IClock
 {
     DateTimeOffset UtcNow { get; }
-}
-
-public interface IPermitNumberGenerator
-{
-    string Generate(DateTimeOffset now);
 }
 
 public sealed record IdempotencyContext(string ActorId, string Operation, string Key, string RequestHash);
