@@ -152,15 +152,41 @@ describe('PermitAttachments', () => {
 
     expect(fixture.nativeElement.querySelector('.empty-state')).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Belum ada lampiran');
-    expect(fixture.nativeElement.textContent).toContain('Tambah lampiran');
     expect(fixture.nativeElement.textContent).toContain('Maksimum 10 MB per file');
-    expect(fixture.nativeElement.querySelectorAll('.document-upload').length).toBeGreaterThan(0);
-    expect((fixture.nativeElement.querySelector('select') as HTMLSelectElement).value).toBe('JSA');
+    // One Unggah per card: JSA, four mandatory evidence documents, and the general card.
+    expect(fixture.nativeElement.querySelectorAll('.document-upload').length).toBe(6);
+    expect(fixture.nativeElement.textContent).toContain('Lampiran pendukung umum');
+    expect(fixture.nativeElement.textContent).not.toContain('Tambah lampiran');
+    expect(fixture.nativeElement.textContent).not.toContain('Jenis dokumen');
     expect(fixture.nativeElement.textContent).not.toContain('Salinan lapangan bertanda tangan');
-    const metadataValues = Array.from<HTMLInputElement>(
-      fixture.nativeElement.querySelectorAll('.upload-metadata input'),
-    ).map((input) => input.value);
-    expect(metadataValues).toEqual(['JSA-001', '2', '2026-09-16']);
+    expect(fixture.nativeElement.querySelector('.upload-button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('select')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.upload-metadata')).toBeNull();
+
+    const state = fixture.componentInstance as unknown as {
+      category(): string;
+      supportingDocumentCode(): string;
+      documentNumber(): string;
+      documentRevision(): string;
+      documentDate(): string;
+    };
+    const generalUpload = fixture.nativeElement.querySelector(
+      '[aria-label="Unggah lampiran pendukung umum"]',
+    ) as HTMLButtonElement;
+    generalUpload.click();
+    expect(state.category()).toBe('SUPPORTING');
+    expect(state.supportingDocumentCode()).toBe('');
+
+    const jsaUpload = fixture.nativeElement.querySelector(
+      '[aria-label="Unggah Job Safety Analisis (JSA)"]',
+    ) as HTMLButtonElement;
+    jsaUpload.click();
+    expect(state.category()).toBe('JSA');
+    expect([state.documentNumber(), state.documentRevision(), state.documentDate()]).toEqual([
+      'JSA-001',
+      '2',
+      '2026-09-16',
+    ]);
   });
 
   it('only offers signed field copy upload in the post-issuance field-copy mode', async () => {
@@ -192,8 +218,11 @@ describe('PermitAttachments', () => {
 
     expect(fixture.nativeElement.textContent).toContain('Dokumen lapangan');
     expect(fixture.nativeElement.textContent).toContain('Unggah salinan bertanda tangan');
+    expect(fixture.nativeElement.querySelector('.upload-button')).not.toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain('Kategori lampiran');
     expect(fixture.nativeElement.textContent).not.toContain('Dokumen wajib pengajuan');
+    expect(fixture.nativeElement.textContent).not.toContain('Lampiran pendukung umum');
+    expect(fixture.nativeElement.querySelector('.document-upload')).toBeNull();
     expect((fixture.nativeElement.querySelector('select') as HTMLSelectElement).value).toBe(
       'print-package-id',
     );

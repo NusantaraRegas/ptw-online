@@ -100,6 +100,12 @@ export class PermitAttachments {
       (left, right) => Number(primaryIds.has(right.id)) - Number(primaryIds.has(left.id)),
     );
   });
+  /** Supporting files not tied to any readiness card (photos, drawings, extra evidence). */
+  protected readonly generalAttachments = computed(() =>
+    this.attachments().filter(
+      (attachment) => attachment.category === 'SUPPORTING' && !attachment.supportingDocumentCode,
+    ),
+  );
   protected readonly jsaDocument = computed(
     () => this.mandatoryDocuments().find((option) => option.code === 'JSA') ?? null,
   );
@@ -187,7 +193,9 @@ export class PermitAttachments {
     const metadata = this.uploadMetadata();
     if (metadata === null) {
       this.error.set(
-        'JSA dan salinan lapangan bertanda tangan memerlukan nomor, revisi, dan tanggal dokumen.',
+        this.fieldCopyOnly()
+          ? 'Salinan lapangan bertanda tangan memerlukan nomor, revisi, dan tanggal dokumen.'
+          : 'Lengkapi nomor, revisi, dan tanggal JSA pada draft PTW sebelum mengunggah JSA.',
       );
       return;
     }
@@ -280,10 +288,14 @@ export class PermitAttachments {
     );
   }
 
+  /**
+   * JSA metadata always mirrors the draft: the server rejects a mismatch before submit, and the
+   * draft page no longer offers editable metadata fields.
+   */
   private prefillJsaMetadata(): void {
-    if (!this.documentNumber()) this.documentNumber.set(this.jsaDocumentNumber());
-    if (!this.documentRevision()) this.documentRevision.set(this.jsaRevision());
-    if (!this.documentDate()) this.documentDate.set(this.jsaDate().slice(0, 10));
+    this.documentNumber.set(this.jsaDocumentNumber());
+    this.documentRevision.set(this.jsaRevision());
+    this.documentDate.set(this.jsaDate().slice(0, 10));
   }
 
   /** Returns null when the chosen category is missing its mandatory document metadata. */

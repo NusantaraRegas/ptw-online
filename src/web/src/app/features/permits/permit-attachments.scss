@@ -177,7 +177,6 @@ h3 {
   outline: 3px solid rgb(0 119 182 / 16%);
 }
 
-.category-field,
 .print-package-field {
   grid-column: span 2;
 }
@@ -455,7 +454,6 @@ h3 {
     grid-template-columns: 1fr;
   }
 
-  .category-field,
   .print-package-field {
     grid-column: auto;
   }
@@ -497,7 +495,11 @@ h3 {
 }
 
 .document-readiness-list li .document-upload {
-  margin-left: 8px;
+  /* The li grid has three columns; the button is the fourth child and would otherwise wrap
+     into the 24px check column. */
+  grid-column: 2 / -1;
+  justify-self: start;
+  margin-top: 2px;
   padding: 5px 10px;
   border: 1px solid var(--nr-blue-dark);
   border-radius: 8px;
