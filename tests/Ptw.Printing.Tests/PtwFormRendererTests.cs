@@ -217,7 +217,11 @@ public sealed class PtwFormRendererTests
 
         Assert.Equal(new PdfPoint(282.25, 349.75), rule.Start);
         Assert.Equal(new PdfPoint(282.25, 454.25), rule.End);
-        Assert.Empty(TemplateOverlayCatalog.StructuralRepairRules(PermitClass.HotWork));
+
+        // HOT re-strokes the grid's bottom rule because its crop stops on the Bagian 9/10 band edge.
+        var hotRule = Assert.Single(TemplateOverlayCatalog.StructuralRepairRules(PermitClass.HotWork));
+        Assert.Equal(new PdfPoint(782.18, 463.7), hotRule.Start);
+        Assert.Equal(new PdfPoint(1174.82, 463.7), hotRule.End);
         Assert.Empty(TemplateOverlayCatalog.StructuralRepairRules(PermitClass.ConfinedSpaceEntry));
     }
 
@@ -329,13 +333,14 @@ public sealed class PtwFormRendererTests
         new(Snapshot(permitClass), "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false);
 
     [Theory]
-    [InlineData(PermitClass.HotWork, 452.1)]
-    [InlineData(PermitClass.ColdWork, 449.7)]
-    [InlineData(PermitClass.ConfinedSpaceEntry, 439.1)]
+    [InlineData(PermitClass.HotWork, 463.94)]
+    [InlineData(PermitClass.ColdWork, 461.78)]
+    [InlineData(PermitClass.ConfinedSpaceEntry, 451.22)]
     public void PageTwoCropStopsAtTheBottomRuleOfBagian8(PermitClass permitClass, double expectedBottom)
     {
-        // Measured from the controlled sheets: the Bagian 9/10 band starts right below this rule,
-        // so the daily revalidation sheet is the only content printed on page two (UAT no. 16).
+        // Measured from the controlled sheets: the grid's column rules end on this edge and the
+        // Bagian 9/10 band starts right below it, so the daily revalidation sheet is the only content
+        // printed on page two (UAT no. 16) and its last rows keep their closing rule.
         var pageTwo = TemplateOverlayCatalog.PageSplit(permitClass).PageTwo;
 
         Assert.Equal(expectedBottom, pageTwo.Y + pageTwo.Height, 1);
@@ -351,7 +356,7 @@ public sealed class PtwFormRendererTests
         Assert.Equal("2. PASTIKAN Pelaksana Pekerjaan/Kontraktor Memahami Semua Risiko serta Melaksanakan Tindakan Pengendaliannya.", HsseReminder.Lines[1]);
         Assert.Equal("3. PASTIKAN Pelaksana Pekerjaan/Kontraktor Bekerja Aman dengan Perilaku/Tindakan Aman dan Kondisi Aman.", HsseReminder.Lines[2]);
         Assert.Equal("4. PASTIKAN semua Pelaksana Pekerjaan Fit To Work.", HsseReminder.Lines[3]);
-        Assert.Equal("ptw-form-renderer/4.0.0", PtwFormRenderer.RendererVersion);
+        Assert.Equal("ptw-form-renderer/4.1.0", PtwFormRenderer.RendererVersion);
     }
 
     [Fact]

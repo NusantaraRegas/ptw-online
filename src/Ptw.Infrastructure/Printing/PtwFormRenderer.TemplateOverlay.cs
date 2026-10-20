@@ -559,6 +559,13 @@ internal static class TemplateOverlayCatalog
         new(new(282.25, 349.75), new(282.25, 454.25))
     ];
 
+    // Bottom rule of the HOT revalidation grid, re-stroked because the page-two crop ends on the
+    // Bagian 9/10 band's top edge and would otherwise show only the upper half of the rule.
+    private static readonly PdfLine[] HotWorkStructuralRepairRules =
+    [
+        new(new(782.18, 463.7), new(1174.82, 463.7))
+    ];
+
     private static readonly TemplateOverlayLayout HotWork = new(
         1,
         new(514, 198, 258, 7),
@@ -704,21 +711,24 @@ internal static class TemplateOverlayCatalog
         new(456.7, 345.5, 58, 8.6));
 
     // Tight vector crops measured from the controlled source pages. Page one ends after Bagian 7;
-    // page two starts at the left rule of Bagian 8 and ends at the bottom rule of the revalidation
-    // grid, so the Bagian 9/10 band below it is never printed (UAT-2026-10-12 no. 16). A small
-    // two-point padding keeps the outer rules intact without carrying fragments from the neighbouring
-    // half of the original A3 sheet.
+    // page two starts at the left rule of Bagian 8 and ends on the lower edge of the grid's bottom
+    // rule (the column rules end there and the Bagian 9/10 band starts immediately below), so the
+    // band is never printed (UAT-2026-10-12 no. 16) while the last two grid rows keep their closing
+    // rule. A small two-point padding keeps the outer rules intact without carrying fragments from
+    // the neighbouring half of the original A3 sheet.
+    // HOT: the red Bagian 9/10 band starts 0.24pt inside the grid's bottom rule, so the crop stops
+    // at the band's top edge and HotWorkStructuralRepairRules re-strokes that rule at full weight.
     private static readonly TemplatePageSplitLayout HotWorkPages = new(
         new(70, 172, 707, 497),
-        new(780, 172, 397, 280.1));
+        new(780, 172, 397, 291.94));
 
     private static readonly TemplatePageSplitLayout ColdWorkPages = new(
         new(54, 170, 705, 501),
-        new(762, 170, 398, 279.7));
+        new(762, 170, 398, 291.78));
 
     private static readonly TemplatePageSplitLayout ConfinedSpaceEntryPages = new(
         new(25, 171, 735, 502),
-        new(774, 171, 373, 268.1));
+        new(774, 171, 373, 280.22));
 
     internal static TemplateOverlayLayout Resolve(PermitClass permitClass) => permitClass switch
     {
@@ -739,7 +749,8 @@ internal static class TemplateOverlayCatalog
     internal static IReadOnlyList<PdfLine> StructuralRepairRules(PermitClass permitClass) => permitClass switch
     {
         PermitClass.ColdWork => ColdWorkStructuralRepairRules,
-        PermitClass.HotWork or PermitClass.ConfinedSpaceEntry => [],
+        PermitClass.HotWork => HotWorkStructuralRepairRules,
+        PermitClass.ConfinedSpaceEntry => [],
         _ => throw new ArgumentOutOfRangeException(nameof(permitClass), permitClass, "Template overlay PTW tidak tersedia.")
     };
 }

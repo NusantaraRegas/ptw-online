@@ -18,7 +18,7 @@ namespace Ptw.Infrastructure.Printing;
 /// </remarks>
 internal sealed partial class PtwFormRenderer : IPrintPackageRenderer
 {
-    internal const string RendererVersion = "ptw-form-renderer/4.0.0";
+    internal const string RendererVersion = "ptw-form-renderer/4.1.0";
 
     private const double PageWidth = 420;
     private const double PageHeight = 297;
