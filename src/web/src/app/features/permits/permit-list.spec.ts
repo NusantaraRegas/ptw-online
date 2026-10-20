@@ -41,7 +41,7 @@ describe('PermitList', () => {
     );
   });
 
-  it('keeps draft creation available for a Sponsor', async () => {
+  it('keeps draft creation available for a Contractor', async () => {
     await TestBed.configureTestingModule({
       imports: [PermitList],
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
@@ -51,9 +51,9 @@ describe('PermitList', () => {
     const http = TestBed.inject(HttpTestingController);
 
     http.expectOne('/api/v1/me').flush({
-      userId: 'sponsor.only.demo',
-      displayName: 'Sponsor Only Demo',
-      roles: ['Sponsor'],
+      userId: 'contractor.demo',
+      displayName: 'Kontraktor Demo',
+      roles: ['Contractor'],
       locationScopes: ['*'],
       competencyCodes: [],
       isDevelopmentIdentity: true,

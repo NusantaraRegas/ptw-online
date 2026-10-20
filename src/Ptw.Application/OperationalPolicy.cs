@@ -28,6 +28,7 @@ public static class PermitPolicyOperations
     public const string SubmitInitiation = "SubmitInitiation";
     public const string ApproveInitiation = "ApproveInitiation";
     public const string ReturnInitiation = "ReturnInitiation";
+    public const string RejectInitiation = "RejectInitiation";
 
     public static readonly IReadOnlyList<string> Required =
     [
@@ -56,7 +57,8 @@ public static class PermitPolicyOperations
         CreateInitialDraft,
         SubmitInitiation,
         ApproveInitiation,
-        ReturnInitiation
+        ReturnInitiation,
+        RejectInitiation
     ];
 }
 

@@ -382,9 +382,7 @@ export class PermitList {
     );
   });
   protected readonly canCreatePermit = computed(() =>
-    (this.identity()?.roles ?? []).some((role) =>
-      ['Sponsor', 'Administrator', 'Contractor'].includes(role),
-    ),
+    (this.identity()?.roles ?? []).some((role) => ['Contractor', 'Administrator'].includes(role)),
   );
 
   protected statusLabel(status: string): string {

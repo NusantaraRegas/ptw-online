@@ -189,11 +189,19 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
 
         var draft = await CreateAsync(sponsor, sponsorId, "ORF");
         draft = await UploadMandatoryDocumentsAsync(sponsor, draft);
+        using var handOver = await ContractorFor(sponsor).SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{draft.Id}/initial-submit",
+            draft.ETag,
+            new { }));
+        handOver.EnsureSuccessStatusCode();
+        var awaiting = Required(await handOver.Content.ReadFromJsonAsync<PermitResponse>());
+        var initialTask = await PendingTaskAsync(draft.Id, "SPONSOR_INITIAL_APPROVAL");
         using var submitResponse = await sponsor.SendAsync(Command(
             HttpMethod.Post,
-            $"/api/v1/permits/{draft.Id}/submit",
-            draft.ETag,
-            new SubmitPermitRequest(true, true, [])));
+            $"/api/v1/tasks/{initialTask.Id}/approve-initial",
+            awaiting.ETag,
+            new InitialApprovalRequest("PTW awal disetujui.", true)));
         submitResponse.EnsureSuccessStatusCode();
         var submitted = Required(await submitResponse.Content.ReadFromJsonAsync<PermitResponse>());
 
@@ -328,9 +336,15 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         return permit with { ETag = mutation.ETag, Version = mutation.PermitVersion };
     }
 
-    private static async Task<PermitResponse> CreateAsync(HttpClient client, string sponsorId, string location)
+    private HttpClient ContractorFor(HttpClient sponsor)
     {
-        using var response = await client.PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, location));
+        var sponsorId = sponsor.DefaultRequestHeaders.GetValues("X-Dev-User").Single();
+        return Client($"{sponsorId}.contractor", "Contractor", "*");
+    }
+
+    private async Task<PermitResponse> CreateAsync(HttpClient client, string sponsorId, string location)
+    {
+        using var response = await ContractorFor(client).PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, location));
         response.EnsureSuccessStatusCode();
         return Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
     }

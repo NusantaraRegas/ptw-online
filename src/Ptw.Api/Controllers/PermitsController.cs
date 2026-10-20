@@ -201,6 +201,14 @@ public sealed class PermitsController(
         PermitCommandAsync((etag, key) => service.ReturnInitiationAsync(
             taskId, request, etag, key, CorrelationId, cancellationToken));
 
+    [HttpPost("/api/v1/tasks/{taskId:guid}/reject-initial")]
+    public Task<ActionResult<PermitResponse>> RejectInitiation(
+        Guid taskId,
+        PermitReasonRequest request,
+        CancellationToken cancellationToken) =>
+        PermitCommandAsync((etag, key) => service.RejectInitiationAsync(
+            taskId, request, etag, key, CorrelationId, cancellationToken));
+
     [HttpPost("/api/v1/tasks/{taskId:guid}/safety-equipment")]
     public Task<ActionResult<PermitResponse>> SaveSafetyEquipment(
         Guid taskId,

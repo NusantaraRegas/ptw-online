@@ -604,6 +604,19 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                         domainEvent.OccurredAt,
                         cancellationToken);
                     break;
+                case "permit_initial_rejected":
+                    await CompleteTaskAsync(
+                        permit.Id,
+                        permit.Version,
+                        "SPONSOR_INITIAL_APPROVAL",
+                        actorId,
+                        domainEvent.OccurredAt,
+                        cancellationToken);
+                    await CancelPendingTasksAsync(
+                        permit.Id,
+                        domainEvent.OccurredAt,
+                        cancellationToken);
+                    break;
                 case "permit_initial_returned":
                     await CompleteTaskAsync(
                         permit.Id,

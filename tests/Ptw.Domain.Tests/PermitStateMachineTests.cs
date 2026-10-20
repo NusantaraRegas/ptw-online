@@ -958,6 +958,28 @@ public sealed class PermitStateMachineTests
     }
 
     [Fact]
+    public void SponsorCanRejectTheContractorInitialPermitWhichBecomesTerminal()
+    {
+        var permit = Permit.CreateDraft(
+            ValidDraft() with { SubmitterType = "CONTRACTOR" },
+            Now,
+            new PermitInitiation("contractor.demo", PermitInitiationStatus.Drafting, Now));
+        var early = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.RejectInitiation("sponsor.demo", "Tidak disetujui.", Now.AddMinutes(1)));
+        Assert.Equal("permit.initiation.invalid_state", early.Code);
+
+        permit.SubmitInitiationToSponsor("contractor.demo", Now.AddMinutes(1));
+        permit.RejectInitiation("sponsor.demo", "Pekerjaan tidak sesuai rencana.", Now.AddMinutes(2));
+
+        Assert.Equal(PermitStatus.Rejected, permit.Status);
+        Assert.Equal(PermitInitiationStatus.Rejected, permit.Initiation?.Status);
+        Assert.Contains(permit.Events, x => x.Type == "permit_initial_rejected");
+        var reopen = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.SubmitInitiationToSponsor("contractor.demo", Now.AddMinutes(3)));
+        Assert.Equal("permit.invalid_transition", reopen.Code);
+    }
+
+    [Fact]
     public void ClosureSection9DeclarationDrivesSection10Pairing()
     {
         var permit = IssuedPermit();

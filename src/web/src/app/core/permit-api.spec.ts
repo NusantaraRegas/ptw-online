@@ -280,13 +280,18 @@ describe('PermitApi', () => {
 
     api.approveInitiation('task-id', '"etag-value"', 'Disetujui.').subscribe();
     const approve = http.expectOne('/api/v1/tasks/task-id/approve-initial');
-    expect(approve.request.body).toEqual({ statement: 'Disetujui.' });
+    expect(approve.request.body).toEqual({ statement: 'Disetujui.', requirementsConfirmed: true });
     approve.flush({});
 
     api.returnInitiation('task-id', '"etag-value"', 'Lengkapi JSA.').subscribe();
     const back = http.expectOne('/api/v1/tasks/task-id/return-initial');
     expect(back.request.body).toEqual({ reason: 'Lengkapi JSA.' });
     back.flush({});
+
+    api.rejectInitiation('task-id', '"etag-value"', 'Pekerjaan tidak disetujui.').subscribe();
+    const reject = http.expectOne('/api/v1/tasks/task-id/reject-initial');
+    expect(reject.request.body).toEqual({ reason: 'Pekerjaan tidak disetujui.' });
+    reject.flush({});
   });
 
   it('loads the upload policy and the Sponsor options from reference endpoints', () => {

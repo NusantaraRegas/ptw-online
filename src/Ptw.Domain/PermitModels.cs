@@ -38,7 +38,8 @@ public enum PermitInitiationStatus
     Drafting,
     AwaitingSponsorApproval,
     Returned,
-    Approved
+    Approved,
+    Rejected
 }
 
 /// <summary>

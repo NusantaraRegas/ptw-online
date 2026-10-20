@@ -151,6 +151,27 @@ public sealed class Permit
         });
     }
 
+    /// <summary>Sponsor rejects the Contractor's initial PTW outright; the draft becomes terminal REJECTED.</summary>
+    public void RejectInitiation(string actorId, string reason, DateTimeOffset now)
+    {
+        EnsureStatus(PermitStatus.Draft);
+        EnsureEvidence(actorId, reason);
+        var initiation = EnsureInitiationAwaitingSponsor(actorId);
+        Initiation = initiation with
+        {
+            Status = PermitInitiationStatus.Rejected,
+            SponsorStatement = reason.Trim(),
+            DecidedAt = now.ToUniversalTime()
+        };
+        MoveTo(PermitStatus.Rejected, "permit_initial_rejected", now, new
+        {
+            RejectedBy = actorId.Trim(),
+            Reason = reason.Trim(),
+            ContractorId = Initiation.ContractorId,
+            PermitVersion = Version
+        });
+    }
+
     /// <summary>
     /// Stores the PIC HSE Bagian 5 choice without deciding the validation. The selection is reused by
     /// <see cref="ValidateSubmission"/> and is deliberately not cleared by revision requests.

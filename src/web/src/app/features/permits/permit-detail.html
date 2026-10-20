@@ -315,9 +315,11 @@
               @if (initiation.status === 'AWAITING_SPONSOR_APPROVAL') {
                 Sponsor meninjau isi dan lampiran sebelum menyetujui.
               } @else if (initiation.status === 'APPROVED') {
-                Sponsor dapat melengkapi draft lalu mengajukannya ke PIC HSE.
+                Persetujuan Sponsor sekaligus mengajukan PTW ke PIC HSE.
               } @else if (initiation.status === 'RETURNED') {
                 Perbaiki sesuai catatan Sponsor, lalu ajukan kembali.
+              } @else if (initiation.status === 'REJECTED') {
+                Sponsor menolak PTW awal ini; ajukan PTW baru bila pekerjaan tetap diperlukan.
               } @else {
                 Lengkapi data dan lampiran wajib, lalu ajukan ke Sponsor.
               }
@@ -708,10 +710,22 @@
                 <h2>Persetujuan Sponsor</h2>
                 <p>
                   Periksa isi dan lampiran PTW awal dari
-                  {{ initiation()?.contractorName || 'Kontraktor' }}. Setelah disetujui, Anda dapat
-                  mengedit draft lalu mengajukannya ke PIC HSE.
+                  {{ initiation()?.contractorName || 'Kontraktor' }}; gunakan
+                  <strong>Edit draft</strong>
+                  bila ada yang perlu diperbaiki. Persetujuan Anda sekaligus mengajukan PTW ke PIC
+                  HSE dan menerbitkan nomor resmi.
                 </p>
               </header>
+              <label class="check revision-self-check">
+                <input type="checkbox" [formControl]="initialRequirementsConfirmed" />
+                <span>
+                  <strong>Dokumen wajib dan persyaratan pengajuan telah saya periksa</strong>
+                  <small
+                    >JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, dan dokumen Bagian 4
+                    terlampir.</small
+                  >
+                </span>
+              </label>
             } @else if (canReviewAreaOperations()) {
               <header class="workflow-action-header">
                 <span class="workflow-action-kicker">Bagian 7</span>
@@ -1206,10 +1220,12 @@
                 <button
                   class="primary-button"
                   type="button"
-                  [disabled]="saving() || decisionStatement.invalid"
+                  [disabled]="
+                    saving() || decisionStatement.invalid || !initialRequirementsConfirmed.value
+                  "
                   (click)="approveInitiation()"
                 >
-                  Setujui PTW awal
+                  Setujui dan ajukan ke PIC HSE
                 </button>
                 <div class="disposition-actions">
                   <button
@@ -1218,7 +1234,15 @@
                     [disabled]="saving() || decisionStatement.invalid"
                     (click)="returnInitiation()"
                   >
-                    Kembalikan ke Kontraktor
+                    Minta revisi Kontraktor
+                  </button>
+                  <button
+                    class="danger-button"
+                    type="button"
+                    [disabled]="saving() || decisionStatement.invalid"
+                    (click)="rejectInitiation()"
+                  >
+                    Tolak PTW awal
                   </button>
                 </div>
               }

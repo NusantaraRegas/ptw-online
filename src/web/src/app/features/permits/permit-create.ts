@@ -30,7 +30,8 @@ function localDate(hoursFromNow: number): string {
         <h1>Buat draft PTW</h1>
         <p class="subtitle">
           @if (isContractor()) {
-            PTW awal akan ditinjau dan disetujui Sponsor NR sebelum diajukan ke PIC HSE.
+            PTW awal akan ditinjau dan disetujui Sponsor NR; persetujuan itu sekaligus mengajukan
+            PTW ke PIC HSE.
           } @else {
             Draft belum memiliki nomor resmi dan belum mengizinkan pekerjaan dimulai.
           }

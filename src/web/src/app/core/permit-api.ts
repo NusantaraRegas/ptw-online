@@ -130,7 +130,7 @@ export interface HseSafetyEquipmentSelection {
 }
 
 export type PermitInitiationStatus =
-  'DRAFTING' | 'AWAITING_SPONSOR_APPROVAL' | 'RETURNED' | 'APPROVED';
+  'DRAFTING' | 'AWAITING_SPONSOR_APPROVAL' | 'RETURNED' | 'APPROVED' | 'REJECTED';
 
 /** Contractor-initiated draft awaiting or holding the Sponsor's initial approval. */
 export interface PermitInitiation {
@@ -408,12 +408,22 @@ export class PermitApi {
     return this.command(id, 'initial-submit', eTag, {});
   }
 
-  approveInitiation(taskId: string, eTag: string, statement: string): Observable<Permit> {
-    return this.taskCommand(taskId, 'approve-initial', eTag, { statement });
+  /** Sponsor approval also submits the initial PTW to the PIC HSE. */
+  approveInitiation(
+    taskId: string,
+    eTag: string,
+    statement: string,
+    requirementsConfirmed = true,
+  ): Observable<Permit> {
+    return this.taskCommand(taskId, 'approve-initial', eTag, { statement, requirementsConfirmed });
   }
 
   returnInitiation(taskId: string, eTag: string, reason: string): Observable<Permit> {
     return this.taskCommand(taskId, 'return-initial', eTag, { reason });
+  }
+
+  rejectInitiation(taskId: string, eTag: string, reason: string): Observable<Permit> {
+    return this.taskCommand(taskId, 'reject-initial', eTag, { reason });
   }
 
   /** Saves the PIC HSE Bagian 5 choice without deciding the validation. */

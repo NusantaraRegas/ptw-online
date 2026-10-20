@@ -47,7 +47,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             IsolationPrecautionCodes = ["LOTO"]
         };
 
-        using var response = await sponsor.PostAsJsonAsync("/api/v1/permits", request);
+        using var response = await ContractorFor(sponsor).PostAsJsonAsync("/api/v1/permits", request);
 
         response.EnsureSuccessStatusCode();
         var permit = Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
@@ -98,11 +98,11 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var sponsorId = Unique("sponsor");
         var marker = $"cari-{Guid.NewGuid():N}";
         using var sponsor = Client(sponsorId, "Sponsor", "*");
-        using var createOrf = await sponsor.PostAsJsonAsync(
+        using var createOrf = await ContractorFor(sponsor).PostAsJsonAsync(
             "/api/v1/permits",
             Draft(sponsorId, "ORF") with { Title = $"Pengelasan {marker}" });
         createOrf.EnsureSuccessStatusCode();
-        using var createWaterBased = await sponsor.PostAsJsonAsync(
+        using var createWaterBased = await ContractorFor(sponsor).PostAsJsonAsync(
             "/api/v1/permits",
             Draft(sponsorId, "WATER_BASED") with { Title = $"Inspeksi {marker}" });
         createWaterBased.EnsureSuccessStatusCode();
@@ -125,7 +125,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
         for (var index = 0; index < 3; index++)
         {
-            using var response = await sponsor.PostAsJsonAsync(
+            using var response = await ContractorFor(sponsor).PostAsJsonAsync(
                 "/api/v1/permits",
                 Draft(sponsorId, "ORF") with { Title = $"{marker}-{index}" });
             response.EnsureSuccessStatusCode();
@@ -154,12 +154,12 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var siteSponsorId = Unique("sponsor-site");
         using var orfSponsor = Client(orfSponsorId, "Sponsor", "ORF");
         using var siteSponsor = Client(siteSponsorId, "Sponsor", "SITE_OFFICE");
-        using var createOrf = await orfSponsor.PostAsJsonAsync(
+        using var createOrf = await ContractorFor(orfSponsor).PostAsJsonAsync(
             "/api/v1/permits",
             Draft(orfSponsorId, "ORF") with { Title = $"ORF {marker}" });
         createOrf.EnsureSuccessStatusCode();
         var orfPermit = Required(await createOrf.Content.ReadFromJsonAsync<PermitResponse>());
-        using var createSite = await siteSponsor.PostAsJsonAsync(
+        using var createSite = await ContractorFor(siteSponsor).PostAsJsonAsync(
             "/api/v1/permits",
             Draft(siteSponsorId, "SITE_OFFICE") with { Title = $"Site {marker}" });
         createSite.EnsureSuccessStatusCode();
@@ -205,7 +205,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var permitIds = new List<Guid>();
         for (var index = 0; index < 3; index++)
         {
-            using var create = await sponsor.PostAsJsonAsync(
+            using var create = await ContractorFor(sponsor).PostAsJsonAsync(
                 "/api/v1/permits",
                 Draft(sponsorId, "ORF") with { Title = $"{marker}-{index}" });
             create.EnsureSuccessStatusCode();
@@ -242,12 +242,12 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var marker = $"admin-operations-{Guid.NewGuid():N}";
         var sponsorId = Unique("sponsor");
         using var sponsor = Client(sponsorId, "Sponsor", "*");
-        using var createClosed = await sponsor.PostAsJsonAsync(
+        using var createClosed = await ContractorFor(sponsor).PostAsJsonAsync(
             "/api/v1/permits",
             Draft(sponsorId, "ORF") with { Title = $"Ditutup {marker}" });
         createClosed.EnsureSuccessStatusCode();
         var closedPermit = Required(await createClosed.Content.ReadFromJsonAsync<PermitResponse>());
-        using var createDraft = await sponsor.PostAsJsonAsync(
+        using var createDraft = await ContractorFor(sponsor).PostAsJsonAsync(
             "/api/v1/permits",
             Draft(sponsorId, "SITE_OFFICE") with { Title = $"Draft {marker}" });
         createDraft.EnsureSuccessStatusCode();
@@ -289,7 +289,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var marker = $"orf-global-{Guid.NewGuid():N}";
         var sponsorId = Unique("sponsor-site");
         using var sponsor = Client(sponsorId, "Sponsor", "SITE_OFFICE");
-        using var create = await sponsor.PostAsJsonAsync(
+        using var create = await ContractorFor(sponsor).PostAsJsonAsync(
             "/api/v1/permits",
             Draft(sponsorId, "SITE_OFFICE") with { Title = marker });
         create.EnsureSuccessStatusCode();
@@ -397,7 +397,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var sponsorId = Unique("sponsor");
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
 
-        using var response = await sponsor.PostAsJsonAsync(
+        using var response = await ContractorFor(sponsor).PostAsJsonAsync(
             "/api/v1/permits",
             Draft(sponsorId, "ORF") with { RequiredDocumentCodes = ["JSA"] });
 
@@ -450,7 +450,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
             SafetyEquipmentCodes = ["SAFETY_FIRE_EXTINGUISHER"]
         };
 
-        using var response = await sponsor.PostAsJsonAsync("/api/v1/permits", request);
+        using var response = await ContractorFor(sponsor).PostAsJsonAsync("/api/v1/permits", request);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("permit.safety_equipment.hse_owned", await ProblemCodeAsync(response));
@@ -461,18 +461,14 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     {
         var sponsorId = Unique("sponsor");
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
-        using var createResponse = await sponsor.PostAsJsonAsync(
+        using var createResponse = await ContractorFor(sponsor).PostAsJsonAsync(
             "/api/v1/permits",
             Draft(sponsorId, "ORF") with { HeaderClassificationCodes = [] });
         createResponse.EnsureSuccessStatusCode();
         var draft = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
         draft = await UploadMandatoryDocumentsAsync(sponsor, draft);
 
-        using var response = await sponsor.SendAsync(Command(
-            HttpMethod.Post,
-            $"/api/v1/permits/{draft.Id}/submit",
-            draft.ETag,
-            ReadyToSubmit()));
+        using var response = await SubmitInitialAsync(sponsor, draft);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("permit.header_classification_required", await ProblemCodeAsync(response));
@@ -502,7 +498,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
         var request = Draft(sponsorId, "ORF") with { WorkTypeCodes = ["HOT_OTHER"] };
 
-        using var response = await sponsor.PostAsJsonAsync("/api/v1/permits", request);
+        using var response = await ContractorFor(sponsor).PostAsJsonAsync("/api/v1/permits", request);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("permit.work_type_other_detail_required", await ProblemCodeAsync(response));
@@ -515,11 +511,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
         var draft = await CreateAsync(sponsor, sponsorId, "ORF");
 
-        using var response = await sponsor.SendAsync(Command(
-            HttpMethod.Post,
-            $"/api/v1/permits/{draft.Id}/submit",
-            draft.ETag,
-            ReadyToSubmit()));
+        using var response = await SubmitInitialAsync(sponsor, draft);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal("permit.mandatory_document.evidence_required", await ProblemCodeAsync(response));
@@ -538,11 +530,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var draft = await CreateAsync(sponsor, sponsorId, "ORF");
         draft = await UploadMandatoryDocumentsAsync(sponsor, draft, omittedCode);
 
-        using var response = await sponsor.SendAsync(Command(
-            HttpMethod.Post,
-            $"/api/v1/permits/{draft.Id}/submit",
-            draft.ETag,
-            ReadyToSubmit()));
+        using var response = await SubmitInitialAsync(sponsor, draft);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal("permit.mandatory_document.evidence_required", await ProblemCodeAsync(response));
@@ -554,7 +542,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     {
         var sponsorId = Unique("sponsor");
         using var sponsor = Client(sponsorId, "Sponsor", "ORF");
-        using var createResponse = await sponsor.PostAsJsonAsync(
+        using var createResponse = await ContractorFor(sponsor).PostAsJsonAsync(
             "/api/v1/permits",
             Draft(sponsorId, "ORF") with
             {
@@ -564,11 +552,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         var draft = Required(await createResponse.Content.ReadFromJsonAsync<PermitResponse>());
         draft = await UploadMandatoryDocumentsAsync(sponsor, draft);
 
-        using var response = await sponsor.SendAsync(Command(
-            HttpMethod.Post,
-            $"/api/v1/permits/{draft.Id}/submit",
-            draft.ETag,
-            ReadyToSubmit()));
+        using var response = await SubmitInitialAsync(sponsor, draft);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal("permit.supporting_document.evidence_required", await ProblemCodeAsync(response));
@@ -582,11 +566,7 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         using var sponsor = Client(sponsorId, "Sponsor", "*");
         var draft = await CreateAsync(sponsor, sponsorId, "FSRU");
 
-        using var response = await sponsor.SendAsync(Command(
-            HttpMethod.Post,
-            $"/api/v1/permits/{draft.Id}/submit",
-            draft.ETag,
-            new SubmitPermitRequest(true, true, [])));
+        using var response = await SubmitInitialAsync(sponsor, draft);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal("permit.location.not_released", await ProblemCodeAsync(response));
@@ -1534,18 +1514,14 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         null,
         true);
 
-    private static async Task<PermitResponse> CreateAndSubmitAsync(
+    private async Task<PermitResponse> CreateAndSubmitAsync(
         HttpClient sponsor,
         string sponsorId,
         string location = "ORF")
     {
         var draft = await CreateAsync(sponsor, sponsorId, location);
         draft = await UploadMandatoryDocumentsAsync(sponsor, draft);
-        using var response = await sponsor.SendAsync(Command(
-            HttpMethod.Post,
-            $"/api/v1/permits/{draft.Id}/submit",
-            draft.ETag,
-            ReadyToSubmit()));
+        using var response = await SubmitInitialAsync(sponsor, draft);
         response.EnsureSuccessStatusCode();
         return Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
     }
@@ -1627,11 +1603,49 @@ public sealed class PermitApiTests(PtwApiFactory factory)
         return permit with { ETag = mutation.ETag, Version = mutation.PermitVersion };
     }
 
-    private static async Task<PermitResponse> CreateAsync(HttpClient client, string sponsorId, string location)
+    private async Task<PermitResponse> CreateAsync(HttpClient client, string sponsorId, string location)
     {
-        using var response = await client.PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, location));
+        using var response = await ContractorFor(client).PostAsJsonAsync("/api/v1/permits", Draft(sponsorId, location));
         response.EnsureSuccessStatusCode();
         return Required(await response.Content.ReadFromJsonAsync<PermitResponse>());
+    }
+
+    /// <summary>
+    /// Every PTW is filled by a Contractor; this derives the Contractor that works for the given
+    /// Sponsor client so existing scenarios keep their Sponsor-centric assertions.
+    /// </summary>
+    private HttpClient ContractorFor(HttpClient sponsor)
+    {
+        var sponsorId = sponsor.DefaultRequestHeaders.GetValues("X-Dev-User").Single();
+        return Client($"{sponsorId}.contractor", "Contractor", "*", "Kontraktor Uji");
+    }
+
+    /// <summary>
+    /// Contractor hands the initial PTW over, then the Sponsor approves it, which submits the PTW to
+    /// the PIC HSE. Returns the first failing response so negative scenarios keep their codes.
+    /// </summary>
+    private async Task<HttpResponseMessage> SubmitInitialAsync(HttpClient sponsor, PermitResponse draft)
+    {
+        var contractor = ContractorFor(sponsor);
+        var current = Required(await sponsor.GetFromJsonAsync<PermitResponse>($"/api/v1/permits/{draft.Id}"));
+        var handOver = await contractor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/permits/{draft.Id}/initial-submit",
+            current.ETag,
+            new { }));
+        if (!handOver.IsSuccessStatusCode)
+        {
+            return handOver;
+        }
+
+        var awaiting = Required(await handOver.Content.ReadFromJsonAsync<PermitResponse>());
+        handOver.Dispose();
+        var task = await PendingTaskAsync(draft.Id, "SPONSOR_INITIAL_APPROVAL");
+        return await sponsor.SendAsync(Command(
+            HttpMethod.Post,
+            $"/api/v1/tasks/{task.Id}/approve-initial",
+            awaiting.ETag,
+            new InitialApprovalRequest("PTW awal lengkap dan disetujui.", true)));
     }
 
     private async Task<PermitTaskRecord> PendingTaskAsync(Guid permitId, string type)

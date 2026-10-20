@@ -87,7 +87,7 @@ describe('Dashboard', () => {
     );
   });
 
-  it('shows the create action only for Sponsor or Administrator identities', async () => {
+  it('shows the create action only for Contractor or Administrator identities', async () => {
     await TestBed.configureTestingModule({
       imports: [Dashboard],
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
@@ -97,9 +97,9 @@ describe('Dashboard', () => {
     const http = TestBed.inject(HttpTestingController);
 
     http.expectOne('/api/v1/me').flush({
-      userId: 'sponsor.only.demo',
-      displayName: 'Sponsor Only Demo',
-      roles: ['Sponsor'],
+      userId: 'contractor.demo',
+      displayName: 'Kontraktor Demo',
+      roles: ['Contractor'],
       locationScopes: ['*'],
       competencyCodes: [],
       isDevelopmentIdentity: true,

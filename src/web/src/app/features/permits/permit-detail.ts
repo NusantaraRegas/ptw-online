@@ -143,7 +143,9 @@ export class PermitDetail {
       case 'RETURNED':
         return 'Dikembalikan kepada Kontraktor';
       case 'APPROVED':
-        return 'Disetujui Sponsor';
+        return 'Disetujui Sponsor dan diajukan ke PIC HSE';
+      case 'REJECTED':
+        return 'Ditolak Sponsor';
       default:
         return 'Sedang diisi Kontraktor';
     }
@@ -242,7 +244,9 @@ export class PermitDetail {
       this.canEdit() &&
       (this.roles().includes('Sponsor') || this.roles().includes('Administrator')) &&
       !this.editing() &&
-      (!this.initiation() || this.initiation()!.status === 'APPROVED'),
+      // Contractor-initiated PTWs are submitted by the Sponsor's approval; the direct submit
+      // only remains for resubmission after a revision (and for drafts without an initiator).
+      (!this.initiation() || this.permit()?.status === 'REVISION_REQUIRED'),
   );
   protected readonly currentTask = computed(() =>
     this.tasks().find((task) => task.permitId === this.permit()?.id),
@@ -379,6 +383,7 @@ export class PermitDetail {
     revisionSelfCheckConfirmed: [false],
   });
   protected readonly hseRevisionSelfCheck = this.fb.nonNullable.control(false);
+  protected readonly initialRequirementsConfirmed = this.fb.nonNullable.control(false);
   protected readonly decisionStatement = this.fb.nonNullable.control('', [
     Validators.required,
     Validators.pattern(/\S/),
@@ -1040,16 +1045,33 @@ export class PermitDetail {
   }
 
   protected approveInitiation(): void {
+    if (!this.initialRequirementsConfirmed.value) {
+      this.initialRequirementsConfirmed.markAsTouched();
+      return;
+    }
     this.runTaskDecision(
-      (task, permit, statement) => this.api.approveInitiation(task.id, permit.eTag, statement),
-      'PTW awal disetujui. Lengkapi draft bila perlu, lalu ajukan ke PIC HSE.',
+      (task, permit, statement) =>
+        this.api.approveInitiation(task.id, permit.eTag, statement, true),
+      'PTW awal disetujui dan diajukan ke PIC HSE dengan nomor resmi.',
     );
   }
 
   protected returnInitiation(): void {
     this.runTaskDecision(
       (task, permit, reason) => this.api.returnInitiation(task.id, permit.eTag, reason),
-      'PTW awal dikembalikan kepada Kontraktor dengan catatan.',
+      'PTW awal dikembalikan kepada Kontraktor dengan catatan revisi.',
+    );
+  }
+
+  protected rejectInitiation(): void {
+    if (
+      !globalThis.confirm('Tolak PTW awal ini secara permanen? Aksi ini tidak dapat dibatalkan.')
+    ) {
+      return;
+    }
+    this.runTaskDecision(
+      (task, permit, reason) => this.api.rejectInitiation(task.id, permit.eTag, reason),
+      'PTW awal ditolak; Kontraktor dapat mengajukan PTW baru bila diperlukan.',
     );
   }
 

@@ -36,6 +36,15 @@ public sealed class PermitService(
             return await CreateInitialDraftAsync(actor, request, correlationId, cancellationToken);
         }
 
+        // Every PTW is filled by a Contractor (UAT-2026-10-12 no. 14, clarified 20 Oct 2026): the
+        // Sponsor approves and may edit the initial PTW but never authors one. Administrators keep
+        // the direct path for operational maintenance only.
+        if (!actor.Roles.Contains("Administrator"))
+        {
+            throw new UnauthorizedAccessException(
+                "PTW diisi oleh Kontraktor; Sponsor hanya menyetujui dan mengedit PTW awal yang diajukan Kontraktor.");
+        }
+
         EnsureSponsorOrAdmin(actor);
         EnsureLocationScope(actor, request.LocationId);
         if (!string.Equals(actor.Id, request.SponsorId, StringComparison.OrdinalIgnoreCase)
@@ -105,8 +114,9 @@ public sealed class PermitService(
             return;
         }
 
-        // Demo identities are not registered accounts; Development keeps the flow demonstrable.
-        if (actor.IsDevelopment && sponsor is null)
+        // Demo identities carry their roles in headers rather than in stored assignments, so
+        // Development only insists that a registered Sponsor account, if any, is still active.
+        if (actor.IsDevelopment && (sponsor is null || sponsor.IsActive))
         {
             return;
         }
@@ -594,24 +604,95 @@ public sealed class PermitService(
             cancellationToken);
     }
 
-    public Task<PermitResponse> ApproveInitiationAsync(
+    /// <summary>
+    /// Sponsor approval of the Contractor's initial PTW. Approval is the submission: the official
+    /// number is allocated and the HSE validation task is created in the same transaction, so the
+    /// Sponsor never authors or separately submits a PTW (UAT-2026-10-12 no. 14).
+    /// </summary>
+    public async Task<PermitResponse> ApproveInitiationAsync(
         Guid taskId,
         InitialApprovalRequest request,
         string expectedETag,
         string idempotencyKey,
         string correlationId,
-        CancellationToken cancellationToken) =>
-        ExecuteTaskCommandAsync(
-            taskId,
-            "SPONSOR_INITIAL_APPROVAL",
-            request,
-            expectedETag,
-            idempotencyKey,
-            correlationId,
+        CancellationToken cancellationToken)
+    {
+        if (!request.RequirementsConfirmed)
+        {
+            throw new InvalidRequestException(
+                "permit.initiation.requirements_confirmation_required",
+                "Sponsor wajib mengonfirmasi dokumen dan persyaratan PTW awal sebelum menyetujuinya.");
+        }
+
+        EnsureIdempotencyKey(idempotencyKey);
+        var actor = actorContext.Current;
+        EnsureAnyRole(actor, ["Sponsor"]);
+        var requestHash = Hash(new { TaskId = taskId, Request = request });
+        var prior = await store.FindIdempotentResultAsync(
+            actor.Id,
             PermitPolicyOperations.ApproveInitiation,
-            ["Sponsor"],
-            (permit, actor, now, _) => permit.ApproveInitiation(actor.Id, request.Statement, now),
+            idempotencyKey,
+            requestHash,
             cancellationToken);
+        if (prior is not null)
+        {
+            return await ToResponseAsync(prior, cancellationToken);
+        }
+
+        var task = await GetPendingTaskAsync(taskId, cancellationToken);
+        if (!string.Equals(task.Type, "SPONSOR_INITIAL_APPROVAL", StringComparison.Ordinal))
+        {
+            throw new InvalidRequestException("task.type.invalid", "Task tidak sesuai dengan persetujuan PTW awal.");
+        }
+
+        var stored = await GetStoredAsync(task.PermitId, cancellationToken);
+        EnsureSponsorOwnership(actor, stored.Permit);
+        if (task.PermitVersion != stored.Permit.Version)
+        {
+            throw new ConcurrencyConflictException();
+        }
+
+        if (!locationRelease.TryGetAreaOwnerDepartment(stored.Permit.Draft.LocationId, out _))
+        {
+            throw new InvalidRequestException(
+                "permit.location.not_released",
+                $"Lokasi {stored.Permit.Draft.LocationId} belum memiliki release dan konfigurasi pemilik wilayah yang aktif.");
+        }
+
+        var attachments = await attachmentStore.ListActiveAsync(stored.Permit.Id, cancellationToken);
+        EnsureSupportingDocumentEvidence(stored.Permit, attachments);
+        if (attachmentPolicy.Enabled
+            && attachmentPolicy.RequireMalwareScan
+            && attachments.Any(x => !string.Equals(x.ScanStatus, "CLEAN", StringComparison.Ordinal)))
+        {
+            throw new InvalidRequestException(
+                "attachment.scan_incomplete",
+                "Seluruh lampiran wajib lulus malware scan sebelum PTW diajukan.");
+        }
+
+        var authorization = await operationalPolicyGate.AuthorizePermitCommandAsync(
+            actor,
+            PermitPolicyOperations.ApproveInitiation,
+            stored.Permit.Draft.LocationId,
+            cancellationToken);
+        var now = clock.UtcNow;
+        var readiness = new SubmissionReadiness(true, true, []);
+        var updated = await store.UpdateWithPermitNumberAsync(
+            stored.Permit,
+            number =>
+            {
+                stored.Permit.ApproveInitiation(actor.Id, request.Statement, now);
+                stored.Permit.Submit(number, readiness, now);
+            },
+            now,
+            expectedETag,
+            actor,
+            correlationId,
+            new IdempotencyContext(actor.Id, PermitPolicyOperations.ApproveInitiation, idempotencyKey, requestHash),
+            authorization,
+            cancellationToken);
+        return await ToResponseAsync(updated, cancellationToken);
+    }
 
     public Task<PermitResponse> ReturnInitiationAsync(
         Guid taskId,
@@ -630,6 +711,25 @@ public sealed class PermitService(
             PermitPolicyOperations.ReturnInitiation,
             ["Sponsor"],
             (permit, actor, now, _) => permit.ReturnInitiation(actor.Id, request.Reason, now),
+            cancellationToken);
+
+    public Task<PermitResponse> RejectInitiationAsync(
+        Guid taskId,
+        PermitReasonRequest request,
+        string expectedETag,
+        string idempotencyKey,
+        string correlationId,
+        CancellationToken cancellationToken) =>
+        ExecuteTaskCommandAsync(
+            taskId,
+            "SPONSOR_INITIAL_APPROVAL",
+            request,
+            expectedETag,
+            idempotencyKey,
+            correlationId,
+            PermitPolicyOperations.RejectInitiation,
+            ["Sponsor"],
+            (permit, actor, now, _) => permit.RejectInitiation(actor.Id, request.Reason, now),
             cancellationToken);
 
     /// <summary>Saves the PIC HSE Bagian 5 choice without deciding the validation (UAT-2026-10-12 no. 9).</summary>

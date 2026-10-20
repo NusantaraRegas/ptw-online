@@ -87,7 +87,11 @@ public sealed record ValidateSubmissionRequest(
 
 public sealed record SaveSafetyEquipmentRequest(IReadOnlyList<string> SafetyEquipmentCodes);
 
-public sealed record InitialApprovalRequest(string Statement);
+/// <summary>
+/// Sponsor approval of a Contractor's initial PTW. Approval also submits the PTW to the PIC HSE,
+/// so the Sponsor confirms the documents and requirements it reviewed.
+/// </summary>
+public sealed record InitialApprovalRequest(string Statement, bool RequirementsConfirmed = false);
 
 public sealed record AttachmentPolicyResponse(
     long MaxFileBytes,
