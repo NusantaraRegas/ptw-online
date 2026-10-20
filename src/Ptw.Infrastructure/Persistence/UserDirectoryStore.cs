@@ -298,7 +298,17 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         var record = await dbContext.UserAccounts.SingleOrDefaultAsync(x => x.SubjectId == subjectId, cancellationToken)
             ?? throw new ResourceNotFoundException("Pengguna", subjectId);
         ApplyConcurrency(record, expectedETag);
-        var credential = await dbContext.UserCredentials.SingleAsync(x => x.SubjectId == subjectId, cancellationToken);
+        // Accounts seeded by migration (and Portal-only accounts) have no local credential row yet;
+        // the first reset creates it so the documented bootstrap path works without a prior password.
+        var credential = await dbContext.UserCredentials.SingleOrDefaultAsync(
+            x => x.SubjectId == subjectId,
+            cancellationToken);
+        if (credential is null)
+        {
+            credential = new UserCredentialRecord { SubjectId = subjectId };
+            dbContext.UserCredentials.Add(credential);
+        }
+
         var (salt, hash) = HashPassword(password);
         credential.PasswordSalt = salt;
         credential.PasswordHash = hash;

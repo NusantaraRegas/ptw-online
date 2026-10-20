@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Ptw.Contracts;
+using Ptw.Domain;
+using Ptw.Infrastructure.Persistence;
 
 namespace Ptw.Api.IntegrationTests;
 
@@ -112,6 +115,54 @@ public sealed class UserDirectoryApiTests(PtwApiFactory factory)
         using var response = await admin.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PasswordResetBootstrapsASeededAccountThatHasNoLocalCredentialYet()
+    {
+        // Accounts seeded by migration (e.g. superadmin.local) carry no credential row; the
+        // documented bootstrap is the admin password reset followed by a local login.
+        var suffix = Guid.NewGuid().ToString("N");
+        var subjectId = $"seeded.{suffix}";
+        var userName = $"seeded-{suffix}";
+        const string password = "Bootstrap-Password-123!";
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PtwDbContext>();
+            var now = DateTimeOffset.UtcNow;
+            db.UserAccounts.Add(new UserAccountRecord
+            {
+                SubjectId = subjectId,
+                UserName = userName,
+                NormalizedUserName = userName.ToUpperInvariant(),
+                DisplayName = "Seeded Administrator",
+                Position = "System Administrator",
+                Department = "IT",
+                IsActive = true,
+                Version = 1,
+                CreatedAt = now,
+                UpdatedAt = now,
+                SecurityStamp = UserAccount.NewSecurityStamp()
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var admin = AdminClient($"admin.{suffix}");
+        using var account = await admin.GetAsync($"/api/v1/admin/users/{subjectId}");
+        account.EnsureSuccessStatusCode();
+        var etag = account.Headers.ETag?.ToString();
+        using var reset = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/admin/users/{subjectId}/password")
+        {
+            Content = JsonContent.Create(new ResetUserPasswordRequest(password))
+        };
+        reset.Headers.TryAddWithoutValidation("If-Match", etag);
+        reset.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+        using var resetResponse = await admin.SendAsync(reset);
+        Assert.True(resetResponse.IsSuccessStatusCode, await resetResponse.Content.ReadAsStringAsync());
+
+        using var local = factory.CreateClient();
+        using var login = await local.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest(userName, password));
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
     }
 
     private HttpClient AdminClient(string userId)
