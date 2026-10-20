@@ -188,10 +188,8 @@ public sealed class Permit
             throw new DomainRuleViolationException("permit.evidence_required", "Identitas aktor wajib dicatat.");
         }
 
-        EnsureNotSponsor(
-            actorId,
-            "permit.validation.self_validation_forbidden",
-            "Sponsor PTW tidak boleh menetapkan APD pada pengajuannya sendiri.");
+        // HSE-SPONSOR-SELF-VALIDATION (20 Oct 2026): a Sponsor holding PIC HSE may set Bagian 5 on
+        // their own PTW; separation of duties is kept at the Bagian 7 review and issuance stages.
         var selected = PermitSafetyEquipmentCatalog.NormalizeAndValidate(Draft.PermitClass, safetyEquipmentCodes);
         SafetyEquipmentSelection = new HseSafetyEquipmentSelection(
             actorId.Trim(),
@@ -586,10 +584,8 @@ public sealed class Permit
         EnsureStatus(PermitStatus.UnderValidation);
         EnsureOtherWorkTypeDetailIsComplete(Draft);
         EnsureEvidence(actorId, statement);
-        EnsureNotSponsor(
-            actorId,
-            "permit.validation.self_validation_forbidden",
-            "Sponsor PTW tidak boleh memvalidasi pengajuannya sendiri.");
+        // HSE-SPONSOR-SELF-VALIDATION (20 Oct 2026): the Sponsor may validate their own PTW when they
+        // hold PIC HSE; ReviewAreaOperations and ApproveAndIssue still exclude them.
         if (Version > 1 && !revisionSelfCheckConfirmed)
         {
             throw new DomainRuleViolationException(
@@ -1433,14 +1429,6 @@ public sealed class Permit
         }
 
         return Initiation;
-    }
-
-    private void EnsureNotSponsor(string actorId, string code, string message)
-    {
-        if (string.Equals(Draft.SponsorId, actorId?.Trim(), StringComparison.OrdinalIgnoreCase))
-        {
-            throw new DomainRuleViolationException(code, message);
-        }
     }
 
     private void MoveTo(PermitStatus status, string eventType, DateTimeOffset now, object? payload = null)

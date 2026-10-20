@@ -258,11 +258,10 @@ export class PermitDetail {
   protected readonly currentTask = computed(() =>
     this.tasks().find((task) => task.permitId === this.permit()?.id),
   );
+  // HSE-SPONSOR-SELF-VALIDATION (20 Oct 2026): the Sponsor may validate their own PTW when they
+  // hold PIC HSE; the server keeps separation of duties at the Bagian 7 review and issuance.
   protected readonly canValidateHse = computed(
-    () =>
-      this.currentTask()?.type === 'HSE_VALIDATION' &&
-      this.roles().includes('HSEValidator') &&
-      this.permit()?.draft.sponsorId !== this.actorId(),
+    () => this.currentTask()?.type === 'HSE_VALIDATION' && this.roles().includes('HSEValidator'),
   );
   protected readonly canApprove = computed(
     () =>

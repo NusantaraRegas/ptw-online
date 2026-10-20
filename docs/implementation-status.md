@@ -9,7 +9,7 @@ BRD/PRD/FSD v1.8 (diperbarui 24 September 2026) menggantikan v1.7 dan menyelaras
 | Prioritas/area | Status | Catatan |
 | --- | --- | --- |
 | P0 lifecycle dan explicit commands | Selesai untuk vertical slice | State lama dihapus dari domain/API/UI; migration kompatibel tersedia |
-| Satu validator PIC HSE dan SoD Sponsor | Selesai | Satu task exact PermitVersion; self-validation ditolak |
+| Satu validator PIC HSE dan SoD | Selesai | Satu task exact PermitVersion; Sponsor yang memegang PIC HSE boleh memvalidasi PTW-nya sendiri (HSE-SPONSOR-SELF-VALIDATION, 20 Okt 2026); SoD tetap pada review Bagian 7 dan penerbitan |
 | Versi bisnis PTW | Selesai | PTW tetap v1 selama edit draft, upload/hapus lampiran, dan perubahan status; versi naik tepat satu kali hanya saat submit ulang setelah revisi. Sequence perubahan legacy dipertahankan terpisah dan ETag tetap menjadi kontrol concurrency |
 | Approve-and-issue atomik | Selesai untuk Manager direct | Decision, status, audit, outbox, snapshot cetak atomik |
 | Pejabat pengganti (PJS) | Selesai sebagai label berbasis delegasi (UAT-2026-10-12 no. 13) | Administrator menetapkan PJS dari assignment Manager langsung (`kind=DELEGATION`, periode wajib); approver yang memegang `AreaOwnerManager` hanya lewat delegasi memperoleh claim `acting_role`, approval dicatat `ACTING_FOR_MANAGER` dengan `ActingAssignmentId` dan principal, serta berlabel PJS di UI dan paket cetak. Tanpa aturan approval tambahan |
@@ -123,7 +123,7 @@ BRD/PRD/FSD v1.8 (diperbarui 24 September 2026) menggantikan v1.7 dan menyelaras
    - no-op pada database sumber; setiap baris yang disisipkan mencatat audit konfigurasi dan outbox `location_seeded`/`user_signature_seeded`/`authorization_seeded` dengan actor `system:migration`.
 14. `20260925141908_SeedSponsorAssignmentsForAreaAndHsseStaff`
    - menambahkan enam assignment `Sponsor` `Approved` (`Direct`, tanpa lokasi, tanpa tanggal berakhir) beserta tiga versi snapshot masing-masing untuk staf non-manager hasil seed 11: SO/Officer ORF `ade.ruhimat`, `benny.sulistio`, `muhamad.ibrahim` dan staf HSSE `darsono4`, `aldi.setiawan`, `mk.ferry.febrian`; `yosep.zulkarnain` (`AreaOwnerManager`) dan `erwin.jonathan` (Manager HSSE) sengaja tidak diberi Sponsor;
-   - fail-closed per baris: dilewati dengan audit `authorization_seed_skipped` bila id sudah ada, akun tidak ada atau nonaktif, subject sudah memegang Sponsor `Approved`, atau subject memegang `AreaOwnerManager` `Approved` (`manager_role_exists`); rangkap role aman karena SoD per PTW dievaluasi pada identitas aktor (`permit.validation.self_validation_forbidden`, `permit.area_operations.separation_of_duty`, `permit.approval.separation_of_duty`);
+   - fail-closed per baris: dilewati dengan audit `authorization_seed_skipped` bila id sudah ada, akun tidak ada atau nonaktif, subject sudah memegang Sponsor `Approved`, atau subject memegang `AreaOwnerManager` `Approved` (`manager_role_exists`); rangkap role aman karena SoD per PTW dievaluasi pada identitas aktor (`permit.area_operations.separation_of_duty`, `permit.approval.separation_of_duty`; validasi HSE oleh Sponsor sendiri diizinkan sejak HSE-SPONSOR-SELF-VALIDATION);
    - mencatat audit konfigurasi dan outbox `authorization_seeded` dengan actor `system:migration`; `Down` no-op.
 15. `20260926034504_AddUserGuideSetting`
    - menambahkan pointer versi aktif `cfg.UserGuideSetting`, histori metadata PDF immutable `cfg.UserGuideVersion`, dan receipt idempotency `intg.UserGuideCommandReceipt`;

@@ -37,18 +37,24 @@ public sealed class PermitStateMachineTests
     }
 
     [Fact]
-    public void SponsorCannotValidateOwnPermit()
+    public void SponsorHoldingHseRoleCanValidateOwnPermitButRemainsBarredFromAreaReview()
     {
+        // HSE-SPONSOR-SELF-VALIDATION (20 Oct 2026) relaxes only the validation stage.
         var permit = SubmittedPermit();
-        var error = Assert.Throws<DomainRuleViolationException>(() =>
-            permit.ValidateSubmission(
-                "sponsor.demo",
-                "Valid.",
-                ["SAFETY_FIRE_EXTINGUISHER"],
-                Now.AddMinutes(2)));
+        permit.SaveSafetyEquipmentSelection("sponsor.demo", ["SAFETY_LOTO"], Now.AddMinutes(1));
+        permit.ValidateSubmission(
+            "sponsor.demo",
+            "Valid.",
+            ["SAFETY_FIRE_EXTINGUISHER"],
+            Now.AddMinutes(2));
 
-        Assert.Equal("permit.validation.self_validation_forbidden", error.Code);
-        Assert.Equal(PermitStatus.UnderValidation, permit.Status);
+        Assert.Equal(PermitStatus.AwaitingAreaApproval, permit.Status);
+        Assert.Equal("sponsor.demo", permit.HseValidation?.ActorId);
+
+        var reviewError = Assert.Throws<DomainRuleViolationException>(() =>
+            permit.ReviewAreaOperations(AreaReview() with { ActorId = "sponsor.demo" }, Now.AddMinutes(3)));
+        Assert.Equal("permit.area_operations.separation_of_duty", reviewError.Code);
+        Assert.Equal(PermitStatus.AwaitingAreaApproval, permit.Status);
     }
 
     [Fact]
@@ -889,10 +895,6 @@ public sealed class PermitStateMachineTests
         Assert.Contains(permit.Events, x => x.Type == "hse_safety_equipment_saved");
         Assert.Equal(PermitStatus.UnderValidation, permit.Status);
         Assert.Null(permit.HseValidation);
-
-        var sponsorError = Assert.Throws<DomainRuleViolationException>(() =>
-            permit.SaveSafetyEquipmentSelection("sponsor.demo", ["SAFETY_LOTO"], Now.AddMinutes(2)));
-        Assert.Equal("permit.validation.self_validation_forbidden", sponsorError.Code);
 
         permit.RequestRevision("Nomor JSA salah.", Now.AddMinutes(3));
         permit.UpdateDraft(ValidDraft() with { JsaDocumentNumber = "JSA-2" }, Now.AddMinutes(4));

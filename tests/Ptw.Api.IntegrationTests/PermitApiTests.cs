@@ -626,26 +626,17 @@ public sealed class PermitApiTests(PtwApiFactory factory)
     }
 
     [Fact]
-    public async Task SponsorCannotSelfValidateButAnotherHseValidatorCan()
+    public async Task SponsorHoldingHseRoleValidatesOwnSubmissionWithProfileIdentity()
     {
+        // HSE-SPONSOR-SELF-VALIDATION (20 Oct 2026): the Sponsor is also the PIC HSE of this PTW.
         var sponsorId = Unique("hse-sponsor");
-        using var sponsor = Client(sponsorId, "Sponsor,HSEValidator", "ORF");
+        const string validatorName = "Darsono";
+        using var sponsor = Client(sponsorId, "Sponsor,HSEValidator", "ORF", validatorName);
         var submitted = await CreateAndSubmitAsync(sponsor, sponsorId);
         var validationTask = await PendingTaskAsync(submitted.Id, "HSE_VALIDATION");
 
-        using var selfResponse = await sponsor.SendAsync(Command(
-            HttpMethod.Post,
-            $"/api/v1/tasks/{validationTask.Id}/validate",
-            submitted.ETag,
-            new ValidateSubmissionRequest(
-                "Saya memvalidasi sendiri.",
-                ["SAFETY_FIRE_EXTINGUISHER"])));
-        Assert.Equal(HttpStatusCode.Conflict, selfResponse.StatusCode);
-        Assert.Equal("permit.validation.self_validation_forbidden", await ProblemCodeAsync(selfResponse));
-
-        var validatorId = Unique("hse");
-        const string validatorName = "Darsono";
-        using var validator = Client(validatorId, "HSEValidator", "ORF", validatorName);
+        var validatorId = sponsorId;
+        using var validator = Client(validatorId, "Sponsor,HSEValidator", "ORF", validatorName);
         using var validateResponse = await validator.SendAsync(Command(
             HttpMethod.Post,
             $"/api/v1/tasks/{validationTask.Id}/validate",
