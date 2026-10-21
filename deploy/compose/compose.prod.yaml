@@ -127,6 +127,8 @@ services:
       # Optional online breached-password check (k-anonymity range API); https only.
       PasswordPolicy__BreachCheck__Enabled: ${PTW_PASSWORD_BREACH_CHECK_ENABLED:-false}
       PortalAuth__BaseUrl: ${PTW_PORTAL_API_BASE_URL:?set the Portal API base URL}
+      PortalAuth__ServiceUserName: ${PTW_PORTAL_API_SERVICE_USERNAME:?set the Portal API service username in .env}
+      PortalAuth__ServicePassword: ${PTW_PORTAL_API_SERVICE_PASSWORD:?set the Portal API service password in .env}
       # Literal `true` only when the OPN-007 amendment applies (internal-network portal without TLS);
       # any other value keeps the https-only startup check.
       PortalAuth__AllowInsecureHttp: ${PTW_PORTAL_API_ALLOW_INSECURE_HTTP:-false}
@@ -193,6 +195,8 @@ services:
       PTW_PUBLIC_HOST: ${PTW_PUBLIC_HOST:?set the public host name}
       PTW_UPLOAD_MAX_BODY: ${PTW_UPLOAD_MAX_BODY:-11m}
       PTW_ADMIN_ALLOW_CIDRS: ${PTW_ADMIN_ALLOW_CIDRS:-}
+      # Corporate reverse proxy that terminates TLS for PTW_PUBLIC_HOST (OPN-009 Amendemen 1).
+      PTW_TRUSTED_PROXY_CIDRS: ${PTW_TRUSTED_PROXY_CIDRS:-}
     volumes:
       # The template replaces the image's development server block: conf.d is a tmpfs below so
       # the envsubst step can write the rendered file although the root filesystem is read-only.

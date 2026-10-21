@@ -8,6 +8,25 @@
 
 server_tokens off;
 
+# Upstream reverse proxy (OPN-009 Amendemen 1): when PTW_TRUSTED_PROXY_CIDRS names the corporate
+# proxy that terminates TLS for the public host, its X-Forwarded-For becomes the client address and
+# its X-Forwarded-Proto decides whether a plain-HTTP request is really an https request. Any other
+# source is treated as clear text and redirected, so the headers cannot be spoofed from the LAN.
+include /tmp/ptw-trusted-proxies.conf;
+include /tmp/ptw-trusted-proxy-geo.conf;
+map "$ptw_trusted_proxy:$http_x_forwarded_proto" $ptw_forwarded_https {
+    default 0;
+    "1:https" 1;
+}
+map "$scheme:$ptw_forwarded_https" $ptw_scheme {
+    default $scheme;
+    "http:1" https;
+}
+map $ptw_scheme $ptw_needs_https_redirect {
+    default 1;
+    https 0;
+}
+
 # Per-address windows. An office NAT shares one address, so the general zones are generous; the
 # login zone is deliberately tight because each login is forwarded to Active Directory via the
 # Portal API and a burst of failures can lock staff accounts.
@@ -18,7 +37,9 @@ limit_conn_zone $binary_remote_addr zone=ptw_conn:10m;
 limit_req_status 429;
 limit_conn_status 429;
 
-# Plain HTTP only redirects to the canonical host; nothing is served in clear.
+# Plain HTTP for any other host name only redirects to the canonical host. The canonical host
+# itself is handled by the application server below, which serves a trusted-proxy request and
+# redirects everything else.
 server {
     listen 8080 default_server;
     listen [::]:8080 default_server;
@@ -44,6 +65,8 @@ server {
 }
 
 server {
+    listen 8080;
+    listen [::]:8080;
     listen 8443 ssl;
     listen [::]:8443 ssl;
     http2 on;
@@ -51,6 +74,12 @@ server {
     root /usr/share/nginx/html;
     index index.html;
     include /tmp/ptw-upload-limit.conf;
+
+    # Clear-text requests are served only when the trusted proxy vouches that the client used
+    # https; everything else on port 8080 is redirected exactly as before.
+    if ($ptw_needs_https_redirect) {
+        return 301 https://${PTW_PUBLIC_HOST}$request_uri;
+    }
 
     ssl_certificate /etc/nginx/tls/fullchain.pem;
     ssl_certificate_key /etc/nginx/tls/privkey.pem;
@@ -81,8 +110,10 @@ server {
     # Shared by every proxied location below (inherited unless a location sets its own).
     proxy_http_version 1.1;
     proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
+    # $remote_addr is already the real client when the request came through the trusted proxy
+    # (real_ip), so a single address is forwarded and the API never has to pick one from a list.
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $ptw_scheme;
     proxy_set_header X-Correlation-ID $request_id;
     proxy_connect_timeout 5s;
     proxy_read_timeout 60s;
