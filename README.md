@@ -152,7 +152,7 @@ src/Ptw.Api             mapping HTTP, Security/ (DevelopmentAuthenticationHandle
 src/Ptw.Worker          OutboxWorker dan PrintPackageRenderWorker
 src/web                 Angular: core/*-api.ts (HTTP) + features/* (komponen)
 tests/Ptw.Domain.Tests           unit state machine
-tests/Ptw.Api.IntegrationTests   end-to-end via PtwApiFactory + Testcontainers
+tests/Ptw.Api.IntegrationTests   end-to-end via PtwApiFactory + Testcontainers; PermitLifecycleEndToEndTests menjalankan satu PTW dari draft Kontraktor sampai CLOSED lewat endpoint publik
 tests/Ptw.Printing.Tests         regresi layout dokumen
 deploy/compose                   compose.dev.yaml (production-like), compose.hotreload.yaml (bind mount + dotnet watch/ng serve)
 deploy/nginx                     konfigurasi reverse proxy
