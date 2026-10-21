@@ -58,6 +58,9 @@ sebagai backlog: assignment acting/delegasi (fail-closed), SLA dan penerima eska
 dan angka RPO/RTO, klasifikasi data, observability/on-call, integrasi API E-SIMI, malware scanner,
 scope perusahaan Kontraktor, dan QR code. Ketiadaan keputusan tersebut tidak menghalangi pemakaian
 alur yang disahkan di atas, tetapi jalur yang memerlukannya tetap fail-closed sampai ada record baru.
+*Pembaruan Amendemen 3 (20 Oktober 2026):* PJS Manager berbasis assignment `Delegation` disahkan
+(UAT-2026-10-12 no. 13; model acting yang lebih lengkap tetap backlog) dan E-SIMI dihapus dari aplikasi
+(no. 1) sehingga integrasi API E-SIMI tidak lagi menjadi backlog; butir backlog lainnya tidak berubah.
 
 ## Konsekuensi dan kontrol
 

@@ -12,12 +12,12 @@ untuk perluasan di masa depan, bukan prasyarat baseline.
 | ID | Topik | Owner | Status | Memblokir |
 | --- | --- | --- | --- | --- |
 | [OPN-001](OPN-001.md) | Lokasi/fasilitas dan pemilik area | Operasi | ACCEPTED scope rilis awal (25 Sep 2026) | tidak ada; HO/FSRU dan sublokasi backlog |
-| [OPN-002](OPN-002.md) | Risiko, review, approval, delegasi, SoD | HSE/Operasi | ACCEPTED alur dan SoD baseline (25 Sep 2026) | tidak ada; pejabat pengganti/delegasi fail-closed (backlog) |
+| [OPN-002](OPN-002.md) | Risiko, review, approval, delegasi, SoD | HSE/Operasi | ACCEPTED alur dan SoD baseline (25 Sep 2026); diamendemen UAT-2026-10-12 no. 13 (PJS dari delegasi) dan HSE-SPONSOR-SELF-VALIDATION | tidak ada; model penugasan pengganti lengkap (dasar dokumen, batas risiko, pencabutan) backlog |
 | [OPN-003](OPN-003.md) | Checklist dan mapping formulir | HSE | ACCEPTED (25 Sep 2026) | tidak ada; master katalog effective-dated dan item khusus backlog |
 | [OPN-004](OPN-004.md) | Gas test dan monitoring | HSE | ACCEPTED hybrid/hardcopy (25 Sep 2026) | tidak ada |
 | [OPN-005](OPN-005.md) | Urutan review dan SLA | PO/HSE/Operasi | ACCEPTED urutan review (25 Sep 2026); SLA backlog | tidak ada; SLA/reminder/eskalasi backlog |
-| [OPN-006](OPN-006.md) | Acknowledgement dan onboarding kontraktor | Legal/HSE/Operasi | ACCEPTED baseline (25 Sep 2026) | tidak ada; scope perusahaan backlog |
-| [OPN-007](OPN-007.md) | Identitas produksi dan E-SIMI | TI | ACCEPTED (identitas 24 Sep 2026; E-SIMI berbasis bukti 25 Sep 2026) | tidak ada; integrasi API E-SIMI backlog |
+| [OPN-006](OPN-006.md) | Acknowledgement dan onboarding kontraktor | Legal/HSE/Operasi | ACCEPTED baseline (25 Sep 2026); diamendemen UAT-2026-10-12 no. 14 (role `Requester`) dan REQUESTER-PELAKSANA-SIGNATURE | tidak ada; scope perusahaan backlog |
+| [OPN-007](OPN-007.md) | Identitas produksi dan E-SIMI | TI | ACCEPTED identitas (24 Sep 2026; catatan kontrak Portal dua langkah 30 Sep 2026); bagian 2 E-SIMI dicabut UAT-2026-10-12 no. 1 | tidak ada |
 | [OPN-008](OPN-008.md) | Retensi, e-sign, klasifikasi, RPO/RTO | Legal/Records/TI | ACCEPTED sebagian (e-sign dan penanganan data, 25 Sep 2026) | tidak ada; periode retensi, klasifikasi, angka RPO/RTO backlog |
 | [OPN-009](OPN-009.md) | Topologi produksi dan HA | TI | ACCEPTED (24 Sep 2026) | observability/on-call belum diputuskan |
 | [HSE-SPONSOR-SELF-VALIDATION](HSE-SPONSOR-SELF-VALIDATION.md) | Sponsor yang memegang PIC HSE memvalidasi PTW-nya sendiri; SoD Bagian 7 dan penerbitan tetap | HSE/PO | ACCEPTED (20 Okt 2026) | tidak ada |

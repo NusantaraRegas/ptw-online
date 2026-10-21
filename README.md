@@ -62,7 +62,7 @@ Alur sistem yang berjalan saat ini disahkan pengguna sebagai baseline operasiona
 - Bagian 4 memakai 15 pilihan dokumen sesuai template resmi: JSA dan Prosedur Pekerjaan wajib serta otomatis dicentang pada template PDF dan tidak ditampilkan sebagai checkbox pada daftar dokumen tambahan, sedangkan pilihan lain opsional. Setiap pilihan harus memiliki lampiran yang tertaut sebelum submit, metadata lampiran JSA harus cocok dengan draft, dan hasil checklist dicetak dari immutable snapshot;
 - APD/perlengkapan safety Bagian 5 dipilih secara multi-select oleh PIC HSE pada tahap validasi dan tidak dapat diisi bebas oleh Sponsor; hasilnya tampil dengan nama katalog pada detail PTW serta dicetak pada paket resmi. Approval permit lama tanpa evidence Bagian 5 diblokir dan diarahkan melalui revisi; input hazards/controls bebas telah dihapus dari UI;
 - setiap keputusan validator/approver—validasi atau persetujuan, penolakan, serta permintaan revisi/tindak lanjut—mewajibkan komentar non-kosong. Komentar validasi HSE, review SO/Officer, dan approval Manager tampil langsung pada ringkasan workflow detail PTW; alasan revisi/penolakan tetap dapat dibaca pada riwayat aktivitas;
-- paket cetak resmi dirender Worker dari `PrintPackageSnapshot` yang immutable dengan halaman resmi FM-001/002/003-B-002-NR-B220 sebagai template vektor. Hasil unduhan terdiri dari dua halaman A3: halaman 1 landscape untuk Bagian 1-7 ditambah blok pengingat HSSE (empat kalimat PASTIKAN yang disepakati UAT) di bawah formulir, dan halaman 2 portrait yang hanya memuat Bagian 8 (revalidasi harian); Bagian 9 dan 10 tidak lagi dicetak karena dipindahkan ke workflow aplikasi. Sistem mengisi Bagian 1-5, termasuk profil/tanda tangan Sponsor pada Bagian 3, serta evidence Bagian 7 (checklist, nama, jabatan profil, tanda tangan, dan waktu keputusan SO/Officer serta Manager, dengan label PJS bila approver bertindak sebagai pengganti), sedangkan Bagian 6 dan Bagian 8 tetap kosong untuk diisi manual di lapangan; label Bagian 4 `Sertifikat Pekerja` ditimpa di atas teks template;
+- paket cetak resmi dirender Worker dari `PrintPackageSnapshot` yang immutable dengan halaman resmi FM-001/002/003-B-002-NR-B220 sebagai template vektor. Hasil unduhan terdiri dari dua halaman A3: halaman 1 landscape untuk Bagian 1-7 ditambah blok pengingat HSSE (empat kalimat PASTIKAN yang disepakati UAT) di bawah formulir, dan halaman 2 portrait yang hanya memuat Bagian 8 (revalidasi harian); Bagian 9 dan 10 tidak lagi dicetak karena dipindahkan ke workflow aplikasi. Sistem mengisi Bagian 1-5, termasuk profil/tanda tangan Sponsor pada Bagian 3 dan spesimen serta waktu pengajuan akun Pemohon pada slot tanda tangan Pelaksana Pekerjaan (kosong bila PTW tidak diinisiasi Pemohon), serta evidence Bagian 7 (checklist, nama, jabatan profil, tanda tangan, dan waktu keputusan SO/Officer serta Manager, dengan label PJS bila approver bertindak sebagai pengganti), sedangkan Bagian 6 dan Bagian 8 tetap kosong untuk diisi manual di lapangan; label Bagian 4 `Sertifikat Pekerja` ditimpa di atas teks template;
 - kegagalan render tidak membatalkan keputusan penerbitan: status paket menjadi `RETRYING` dengan exponential backoff, lalu `FAILED` setelah batas percobaan, dan Administrator dapat menjadwalkan render ulang secara idempotent;
 - hanya paket berstatus `READY` yang dapat diunduh; setiap unduhan menghasilkan audit event, dan pratinjau draft selalu diberi watermark `DRAFT / TIDAK BERLAKU` serta tidak pernah disimpan.
 - deploy web menjaga `index.html` tetap tervalidasi, tidak mengalihkan chunk JavaScript yang hilang ke SPA shell, dan melakukan satu reload terbatas ketika lazy chunk lama gagal dimuat.
@@ -85,7 +85,7 @@ Ruleset resmi, malware scanner produksi, scope perusahaan Kontraktor (`ExternalU
 
 ### Topologi runtime
 
-Compose development menjalankan lima service dan tiga volume. Nginx melayani SPA dan menjadi reverse proxy ke API; `migrate` menjalankan EF Core migration satu kali sebelum `api` dan `worker` dimulai. Service `api` bergabung ke network `frontend` dan `backend` karena login memerlukan dua panggilan HTTP keluar ke Portal API: service login ke `POST /api/v1/User/SecureAuth`, lalu verifikasi kredensial pengguna ke bearer-protected `POST /api/v1/User/ADAuth`; network `backend` bersifat internal sehingga tanpa `frontend` seluruh login jatuh ke password lokal. Portal API pada workstation adalah site IIS `local.api.portal.com`, sehingga compose memetakan nama host itu ke `host-gateway` (`extra_hosts`, variabel `PTW_PORTAL_API_HOST`/`PTW_PORTAL_API_BASE_URL` di `.env`).
+Compose development menjalankan lima service dan empat volume (`sql-data`, `attachment-data`, `generated-document-data`, `data-protection-keys`). Nginx melayani SPA dan menjadi reverse proxy ke API; `migrate` menjalankan EF Core migration satu kali sebelum `api` dan `worker` dimulai. Service `api` bergabung ke network `frontend` dan `backend` karena login memerlukan dua panggilan HTTP keluar ke Portal API: service login ke `POST /api/v1/User/SecureAuth`, lalu verifikasi kredensial pengguna ke bearer-protected `POST /api/v1/User/ADAuth`; network `backend` bersifat internal sehingga tanpa `frontend` seluruh login jatuh ke password lokal. Portal API pada workstation adalah site IIS `local.api.portal.com`, sehingga compose memetakan nama host itu ke `host-gateway` (`extra_hosts`, variabel `PTW_PORTAL_API_HOST`/`PTW_PORTAL_API_BASE_URL` di `.env`).
 
 ```mermaid
 flowchart LR
@@ -100,6 +100,7 @@ flowchart LR
     Db[("db<br/>SQL Server 2025")]
     Att[/"attachment-data<br/>volume lampiran"/]
     Gen[/"generated-document-data<br/>volume paket cetak"/]
+    Dpk[/"data-protection-keys<br/>volume key ring cookie"/]
   end
 
   Portal["Portal API<br/>SecureAuth → bearer<br/>ADAuth → verifikasi AD"]
@@ -110,6 +111,7 @@ flowchart LR
   Api --> Db
   Api --> Att
   Api -->|"baca dokumen READY"| Gen
+  Api -->|"kunci cookie sesi"| Dpk
   Worker --> Db
   Worker -->|"tulis hasil render"| Gen
   Migrate -->|"migrasi skema"| Db
@@ -144,30 +146,33 @@ flowchart TB
 ### Struktur repository
 
 ```text
-src/Ptw.Domain          aggregate, state machine, invariant, katalog checklist formulir — tanpa EF/ASP.NET/IO
+src/Ptw.Domain          aggregate, state machine, invariant, katalog checklist formulir, UserAccount/UserAuthorizationAssignment — tanpa EF/ASP.NET/IO
 src/Ptw.Contracts       DTO netral — tanpa domain behavior
-src/Ptw.Application     use case, authorization, ports (IPermitStore, IPrintPackage...), profil role assignment langsung
-src/Ptw.Infrastructure  EF Core, storage, audit, outbox, Printing/ (renderer + template)
-src/Ptw.Api             mapping HTTP, Security/ (DevelopmentAuthenticationHandler, HttpActorContext), login cookie lokal, ApiExceptionHandler
+src/Ptw.Application     use case, authorization, ports (IPermitStore, IPrintPackage...), profil role assignment langsung, DemoModeService
+src/Ptw.Infrastructure  EF Core, storage, audit, outbox, Printing/ (renderer + template), Security/ (Portal API authenticator), DevelopmentDirectorySeeder
+src/Ptw.Api             mapping HTTP, Security/ (DevelopmentAuthenticationHandler, HttpActorContext), login cookie lokal, ApiExceptionHandler, BootstrapCommand (--migrate, --reset-password)
 src/Ptw.Worker          OutboxWorker dan PrintPackageRenderWorker
 src/web                 Angular: core/*-api.ts (HTTP) + features/* (komponen)
 tests/Ptw.Domain.Tests           unit state machine
 tests/Ptw.Api.IntegrationTests   end-to-end via PtwApiFactory + Testcontainers; PermitLifecycleEndToEndTests menjalankan satu PTW dari draft Kontraktor sampai CLOSED lewat endpoint publik
 tests/Ptw.Printing.Tests         regresi layout dokumen
-deploy/compose                   compose.dev.yaml (production-like), compose.hotreload.yaml (bind mount + dotnet watch/ng serve)
-deploy/nginx                     konfigurasi reverse proxy
-docs/                            BRD/PRD/FSD v1.8, status implementasi
-docs/decisions/                  register OPN-001..009, PROD-UPLOAD-SCAN, PTW-RENEWAL, PTW-WORKFLOW-BASELINE (alur disahkan stakeholder 25 Sep 2026; OPN yang tersisa adalah backlog)
-.github/workflows/ci.yml         CI: build/test backend, build/test frontend, validasi compose config
+deploy/compose                   compose.dev.yaml (production-like), compose.hotreload.yaml (bind mount + dotnet watch/ng serve), compose.prod.yaml + prod.env.example (produksi satu host, OPN-009)
+deploy/nginx                     default.conf (dev) dan prod.conf.template (TLS, limit_req, trusted proxy, allow-list admin)
+deploy/sql                       create-app-logins.sql (login SQL least-privilege ptw_app/ptw_backup)
+docs/                            BRD/PRD/FSD v1.8 (+ amendemen pasca-UAT), status implementasi; Panduan-Pengguna-* diabaikan Git
+docs/decisions/                  register OPN-001..009, PROD-UPLOAD-SCAN, PTW-RENEWAL, PTW-WORKFLOW-BASELINE (alur disahkan stakeholder 25 Sep 2026; Amendemen 3 = UAT-2026-10-12), HSE-SPONSOR-SELF-VALIDATION (20 Okt 2026), REQUESTER-PELAKSANA-SIGNATURE (21 Okt 2026); OPN yang tersisa adalah backlog
+.github/workflows/ci.yml         CI: build/test backend + audit NuGet (high/critical), build/test frontend + npm audit, validasi compose config dev/prod
 ```
 
 ## Lifecycle PTW
 
 ```mermaid
 stateDiagram-v2
-  [*] --> DRAFT: create draft
-  DRAFT --> UNDER_VALIDATION: submit
-  REVISION_REQUIRED --> UNDER_VALIDATION: submit
+  [*] --> DRAFT: create draft (Pemohon)
+  DRAFT --> DRAFT: initial-submit (Pemohon) / return-initial (Sponsor)
+  DRAFT --> UNDER_VALIDATION: approve-initial (Sponsor) / submit (draft renewal)
+  DRAFT --> REJECTED: reject-initial (Sponsor)
+  REVISION_REQUIRED --> UNDER_VALIDATION: submit (self check Sponsor)
   UNDER_VALIDATION --> REVISION_REQUIRED: revision (PIC HSE)
   UNDER_VALIDATION --> AWAITING_AREA_APPROVAL: validate (PIC HSE)
   UNDER_VALIDATION --> REJECTED: reject
@@ -189,6 +194,7 @@ stateDiagram-v2
 ```
 
 - `CLOSED`, `REJECTED`, `CANCELLED`, dan `EXPIRED` bersifat terminal.
+- Alur inisial Pemohon (Kontraktor) dan persetujuan awal Sponsor berjalan di dalam `DRAFT` sebagai task `SPONSOR_INITIAL_APPROVAL`/`REQUESTER_INITIAL_REVISION`, bukan status baru; `approve-initial` sekaligus mengajukan PTW ke PIC HSE dan mengalokasikan nomor resmi `PTW/NNNN/DD/MM/YYYY` ([UAT-2026-10-12](docs/decisions/UAT-2026-10-12.md) no. 14-15).
 - Suspend menghentikan hak kerja seketika; resolve hanya kembali ke `ISSUED`.
 - Renewal tidak memperpanjang permit lama. Sponsor mengajukan hardcopy hasil verifikasi lapangan, Pemilik Wilayah meninjau melalui task khusus, lalu approval membuat aggregate draft baru tanpa overlap. Draft penerus tetap mengikuti submit, validasi HSE, dan approval penerbitan normal.
 - Istilah UI untuk `ISSUED` adalah **Diterbitkan**.
@@ -202,6 +208,7 @@ Setiap transition adalah command eksplisit yang membawa `If-Match` (versi aggreg
 ```mermaid
 sequenceDiagram
   autonumber
+  actor Req as Pemohon (Requester)
   actor Sponsor
   actor HSE as PIC HSE (HSEValidator)
   actor SO as SO/Officer pemilik wilayah
@@ -211,20 +218,34 @@ sequenceDiagram
   participant SVC as PermitService
   participant DB as SQL Server
 
-  Sponsor->>SPA: Lengkapi draft dan submit
-  SPA->>API: POST /api/v1/permits/{id}/submit<br/>If-Match, Idempotency-Key
-  API->>SVC: SubmitAsync
-  SVC->>DB: validasi versi dan idempotency
-  SVC->>DB: status UNDER_VALIDATION, task HSE_VALIDATION,<br/>audit, outbox (satu transaction)
+  Req->>SPA: Buat draft, pilih Sponsor, unggah dokumen dasar
+  SPA->>API: POST /api/v1/permits/{id}/initial-submit<br/>If-Match, Idempotency-Key
+  SVC->>DB: tetap DRAFT, task SPONSOR_INITIAL_APPROVAL<br/>assigned ke Sponsor, audit, outbox
+
+  Sponsor->>SPA: Tinjau/edit draft Pemohon
+  alt dikembalikan
+    SPA->>API: POST /api/v1/tasks/{taskId}/return-initial
+    SVC->>DB: tetap DRAFT, task REQUESTER_INITIAL_REVISION
+  else ditolak
+    SPA->>API: POST /api/v1/tasks/{taskId}/reject-initial
+    SVC->>DB: status REJECTED (terminal, tanpa nomor)
+  else disetujui
+    SPA->>API: POST /api/v1/tasks/{taskId}/approve-initial<br/>requirementsConfirmed
+    SVC->>DB: nomor PTW/NNNN/DD/MM/YYYY, status UNDER_VALIDATION,<br/>task HSE_VALIDATION, audit, outbox (satu transaction)
+  end
   API-->>SPA: 200 + ETag baru
 
-  HSE->>SPA: Tinjau task validasi
+  HSE->>SPA: Tinjau task validasi (boleh Sponsor yang memegang HSEValidator)
+  opt simpan APD tanpa memutuskan
+    SPA->>API: POST /api/v1/tasks/{taskId}/safety-equipment
+    SVC->>DB: HseSafetyEquipmentSelection (bertahan melewati revisi)
+  end
   alt perlu perbaikan
     SPA->>API: POST /api/v1/tasks/{taskId}/revision
     SVC->>DB: status REVISION_REQUIRED,<br/>task SPONSOR_REVISION untuk Sponsor
-    Note over Sponsor,SPA: Sponsor memperbaiki draft lalu submit ulang
+    Note over Sponsor,SPA: Sponsor memperbaiki draft lalu submit ulang<br/>dengan revisionSelfCheckConfirmed (POST /permits/{id}/submit)
   else valid
-    SPA->>API: POST /api/v1/tasks/{taskId}/validate
+    SPA->>API: POST /api/v1/tasks/{taskId}/validate<br/>(self check PIC HSE untuk versi > 1)
     SVC->>DB: status AWAITING_AREA_APPROVAL,<br/>task AREA_OPERATION_REVIEW
   end
 
@@ -232,7 +253,7 @@ sequenceDiagram
   SPA->>API: POST /api/v1/tasks/{taskId}/review-area-operations
   SVC->>DB: evidence reviewer SO/Officer,<br/>task AREA_APPROVE_AND_ISSUE
 
-  Mgr->>SPA: Tinjau task persetujuan
+  Mgr->>SPA: Tinjau task persetujuan (Manager langsung atau PJS dari assignment Delegation)
   alt ditolak
     SPA->>API: POST /api/v1/tasks/{taskId}/reject
     SVC->>DB: status REJECTED (terminal)
@@ -304,8 +325,13 @@ Pratinjau draft (`GET .../print-packages/preview`) merender langsung dari state 
 
 | Method | Endpoint | Command |
 | --- | --- | --- |
-| `POST` | `/api/v1/permits/{id}/submit` | `SubmitPermit` |
-| `POST` | `/api/v1/tasks/{taskId}/validate` | `ValidateSubmission` |
+| `POST` | `/api/v1/permits/{id}/initial-submit` | `SubmitInitiation` oleh Pemohon (role `Requester`); PTW tetap `DRAFT`, task `SPONSOR_INITIAL_APPROVAL` untuk Sponsor terpilih |
+| `POST` | `/api/v1/tasks/{taskId}/approve-initial` | `ApproveInitiation` oleh Sponsor (wajib `requirementsConfirmed`); sekaligus mengajukan ke PIC HSE dan mengalokasikan nomor resmi |
+| `POST` | `/api/v1/tasks/{taskId}/return-initial` | `ReturnInitiation`: kembali ke Pemohon (task `REQUESTER_INITIAL_REVISION`) |
+| `POST` | `/api/v1/tasks/{taskId}/reject-initial` | `RejectInitiation`: `REJECTED` terminal tanpa nomor PTW |
+| `POST` | `/api/v1/permits/{id}/submit` | `SubmitPermit` oleh Sponsor: pengajuan ulang setelah revisi (wajib `revisionSelfCheckConfirmed`) dan draft renewal |
+| `POST` | `/api/v1/tasks/{taskId}/safety-equipment` | `SaveSafetyEquipmentSelection`: PIC HSE menyimpan pilihan APD Bagian 5 tanpa memutuskan validasi |
+| `POST` | `/api/v1/tasks/{taskId}/validate` | `ValidateSubmission` (self check PIC HSE wajib untuk versi > 1) |
 | `POST` | `/api/v1/tasks/{taskId}/review-area-operations` | `ReviewAreaOperations` oleh SO/Officer pemilik wilayah; reviewer pertama menyelesaikan satu task |
 | `POST` | `/api/v1/tasks/{taskId}/escalate` | eskalasi HSE dengan catatan |
 | `POST` | `/api/v1/tasks/{taskId}/revision` | `RequestRevision` |
@@ -330,7 +356,7 @@ Pratinjau draft (`GET .../print-packages/preview`) merender langsung dari state 
 
 Task command memakai `taskId`, bukan permit ID. Semua transition memerlukan `If-Match` dan `Idempotency-Key`. Tidak ada endpoint generik `setStatus`.
 
-Endpoint baca/create draft (`GET /api/v1/permits?search=&offset=&limit=` untuk pencarian dan pagination berscope; pencarian maksimum 100 karakter dan limit 1–100), attachment (multipart dengan `supportingDocumentCode` untuk dokumen wajib dan Bagian 4), history, master lokasi, authorization, dan health tetap tersedia. Katalog dokumen wajib dibaca dari `GET /api/v1/reference-data/mandatory-documents`; katalog checklist formulir dibaca dari `/header-classifications`, `/work-types`, `/supporting-documents`, `/safety-equipment`, dan `/operational-conditions`. Nilai dikontrol dan divalidasi ulang di server. Panduan pengguna dibaca dan diunduh semua akun melalui `GET /api/v1/user-guide` (`available=false`, versi 0, ETag `"0"` sebelum unggahan pertama) dan `/content` (`404` selama belum ada PDF); Administrator menerbitkannya lewat multipart `POST /api/v1/admin/settings/user-guide` dengan `If-Match` dan `Idempotency-Key`. Mode demo dibaca publik lewat `GET /api/v1/auth/options` dan dikelola Administrator lewat `GET /api/v1/admin/settings/demo-mode` serta `POST .../demo-mode/enable|disable` (hanya Development, memerlukan `If-Match` dan `Idempotency-Key`). Assignment role langsung memakai `GET /api/v1/admin/authorizations/direct-role-options`, `POST /api/v1/admin/authorizations/direct`, , `PATCH /api/v1/admin/authorizations/{id}/direct-draft`, dan `POST /api/v1/admin/authorizations/{id}/revise-direct`; action code dan kompetensi selalu diturunkan server dari profil role, bukan diterima dari klien. Modul kesiapan/simulasi/UAT policy tidak lagi diekspos. OpenAPI hanya diekspos pada Development melalui `/openapi/v1.json`.
+Endpoint baca/create draft (`POST /api/v1/permits` hanya untuk pemegang role `Requester` atau Administrator; `GET /api/v1/permits?search=&offset=&limit=` untuk pencarian dan pagination berscope; pencarian maksimum 100 karakter dan limit 1–100), daftar Sponsor NR untuk Pemohon (`GET /api/v1/sponsors`), task pool dan task assigned (`GET /api/v1/tasks`), attachment (multipart dengan `supportingDocumentCode` untuk dokumen wajib dan Bagian 4; batas ukuran/jumlah/format dari `GET /api/v1/reference-data/attachment-policy`), history, master lokasi, authorization, dan health tetap tersedia. Katalog dokumen wajib dibaca dari `GET /api/v1/reference-data/mandatory-documents`; katalog checklist formulir dibaca dari `/header-classifications`, `/work-types`, `/supporting-documents`, `/safety-equipment`, dan `/operational-conditions`. Nilai dikontrol dan divalidasi ulang di server. Panduan pengguna dibaca dan diunduh semua akun melalui `GET /api/v1/user-guide` (`available=false`, versi 0, ETag `"0"` sebelum unggahan pertama) dan `/content` (`404` selama belum ada PDF); Administrator menerbitkannya lewat multipart `POST /api/v1/admin/settings/user-guide` dengan `If-Match` dan `Idempotency-Key`. Mode demo dibaca publik lewat `GET /api/v1/auth/options` dan dikelola Administrator lewat `GET /api/v1/admin/settings/demo-mode` serta `POST .../demo-mode/enable|disable` (hanya Development, memerlukan `If-Match` dan `Idempotency-Key`). Assignment role langsung memakai `GET /api/v1/admin/authorizations/direct-role-options`, `POST /api/v1/admin/authorizations/direct`, `PATCH /api/v1/admin/authorizations/{id}/direct-draft`, dan `POST /api/v1/admin/authorizations/{id}/revise-direct`; action code dan kompetensi selalu diturunkan server dari profil role, bukan diterima dari klien. Modul kesiapan/simulasi/UAT policy tidak lagi diekspos. OpenAPI hanya diekspos pada Development melalui `/openapi/v1.json`.
 
 Renewal tidak mengubah status PTW asal. Request Sponsor membuat task `AREA_RENEWAL_REVIEW` untuk Manager pemilik area; permit penerus (`DRAFT`, terhubung lewat `RenewedFromPermitId`) baru dibuat secara atomik saat task tersebut disetujui, dan selama review masih `PENDING` lampiran PTW asal tidak dapat diubah serta closure tidak dapat diajukan.
 
@@ -380,7 +406,9 @@ Provisioning awal: buat akun Administrator break-glass melalui `POST /api/v1/adm
 printf '%s\n' "$NEW_PASSWORD" | docker compose --env-file .env -f deploy/compose/compose.prod.yaml run --rm -T --no-deps migrate --reset-password superadmin.local
 ```
 
-Perintah ini hanya menerima akun aktif yang memegang assignment `Administrator` approved dan berlaku, menerapkan kebijakan password yang sama dengan API, mencatat audit `user_password_reset` dan outbox dengan actor `system:bootstrap`, memutar security stamp (sesi lama berakhir), dan mencatat warning `AdministratorPasswordBootstrapped` di log; password tidak pernah dicatat. Exit code `0` berhasil, `1` ditolak (bukan Administrator, password lemah/bocor, akun tidak ada), `2` salah pemakaian. Setelah login, ganti password itu lewat **Administrasi > Pengguna** dan buat Administrator kedua. Backup: sistem backup internal menarik database melalui `PTW_SQL_BIND_ADDRESS` (dipublikasikan lewat network `sql-export`, karena Docker tidak mempublikasikan port container yang hanya berada di network internal; firewall host harus membatasi port itu ke host backup); volume `attachment-data`, `generated-document-data`, `data-protection-keys`, dan file `.env` harus ditarik terpisah karena tidak tercakup dump database. Rate limit nginx disetel di `deploy/nginx/prod.conf.template` (umum 30 r/s, login 20 r/menit, statis 100 r/s per alamat; NAT kantor berbagi satu alamat). `PTW_ADMIN_ALLOW_CIDRS` wajib berisi subnet administrasi TI saja karena `/api/v1/admin/` ditolak untuk alamat lain di nginx. `PTW_DATA_PROTECTION_CERT_DIR` menampung `keyring.pfx` yang mengenkripsi key ring Data Protection (lihat contoh pembuatan di `prod.env.example`); cadangkan bersama `.env`. CSP nginx memakai nonce per request (`style-src 'self' 'nonce-$request_id'`): `sub_filter` mengganti placeholder `ngCspNonce` pada `index.html`, sehingga `'unsafe-inline'` tidak lagi dipakai. Di produksi Nusantara Regas, nama publik `ptw.nusantararegas.com` diarahkan ke reverse proxy korporat `10.10.10.150` yang memegang TLS dan meneruskan HTTP polos ke host PTW ([OPN-009 Amendemen 1](docs/decisions/OPN-009.md)); `PTW_TRUSTED_PROXY_CIDRS=10.10.10.150/32` membuat nginx PTW melayani permintaan tersebut (bukan mengalihkan ke https) dan memakai `X-Forwarded-For` proxy sebagai alamat klien untuk rate limit, allow-list, dan jurnal login. Sumber lain yang mengirim HTTP polos tetap dialihkan ke https. Jangan pernah menjalankan stack produksi dengan `ASPNETCORE_ENVIRONMENT=Development`: nilai itu mengaktifkan OpenAPI, header identitas demo, self-approval Administrator, dan Portal `http://` tanpa opt-in. Portal API produksi saat ini hanya tersedia lewat `http://` di jaringan internal, sehingga `.env` produksi mengisi `PTW_PORTAL_API_ALLOW_INSECURE_HTTP=true` sebagai risiko yang diterima ([amendemen OPN-007](docs/decisions/OPN-007.md)); container `api` mencatat warning pada setiap start selama nilai itu aktif.
+Perintah ini hanya menerima akun aktif yang memegang assignment `Administrator` approved dan berlaku, menerapkan kebijakan password yang sama dengan API, mencatat audit `user_password_reset` dan outbox dengan actor `system:bootstrap`, memutar security stamp (sesi lama berakhir), dan mencatat warning `AdministratorPasswordBootstrapped` di log; password tidak pernah dicatat. Exit code `0` berhasil, `1` ditolak (bukan Administrator, password lemah/bocor, akun tidak ada), `2` salah pemakaian. Setelah login, ganti password itu lewat **Administrasi > Pengguna** dan buat Administrator kedua.
+
+Di produksi Nusantara Regas, nama publik `ptw.nusantararegas.com` diarahkan ke reverse proxy korporat `10.10.10.150` yang memegang TLS dan meneruskan HTTP polos ke host PTW ([OPN-009 Amendemen 1](docs/decisions/OPN-009.md)); `PTW_TRUSTED_PROXY_CIDRS=10.10.10.150/32` membuat nginx PTW melayani permintaan tersebut (bukan mengalihkan ke https) dan memakai `X-Forwarded-For` proxy sebagai alamat klien untuk rate limit, allow-list, dan jurnal login. Sumber lain yang mengirim HTTP polos tetap dialihkan ke https dan tidak dapat memalsukan alamat klien.
 
 ### Docker Compose dengan hot reload
 
@@ -421,7 +449,7 @@ npm ci
 npm start
 ```
 
-Development identity hanya aktif pada environment `Development`. Profil yang relevan untuk flow v1.8 adalah Sponsor, PIC HSE (`HSEValidator`), pool SO/Officer pemilik wilayah (kode kompatibilitas `AreaOwnerSeniorOfficer`, termasuk review Bagian 7 dan penutupan), dan Manager pemilik area (`AreaOwnerManager`). Manager maupun pool SO/Officer dapat menindak satu task penutupan sesuai scope; penerbitan tetap khusus Manager. Identitas dan Sponsor aktif berasal dari `/api/v1/me`; header development diabaikan di luar Development.
+Development identity hanya aktif pada environment `Development`. Profil yang relevan untuk flow v1.8 adalah Pemohon (`Requester`; satu-satunya role yang membuat PTW, akun Kontraktor hanya memegang role ini), Sponsor (menyetujui PTW awal Pemohon dan mengajukan ulang setelah revisi), PIC HSE (`HSEValidator`), pool SO/Officer pemilik wilayah (kode kompatibilitas `AreaOwnerSeniorOfficer`, termasuk review Bagian 7 dan penutupan), dan Manager pemilik area (`AreaOwnerManager`, termasuk PJS lewat assignment `Delegation` yang dinyatakan header demo `X-Dev-Acting-Roles`). Manager maupun pool SO/Officer dapat menindak satu task penutupan sesuai scope; penerbitan tetap khusus Manager. Identitas dan Sponsor aktif berasal dari `/api/v1/me`; header development diabaikan di luar Development.
 
 Administrator dapat membuat dan mengedit profil akun melalui **Administrasi > Pengguna**; form edit juga menerima password lokal baru (opsional) yang dikirim ke `POST /api/v1/admin/users/{subjectId}/password` dengan `If-Match` hasil update profil, menampilkan syarat password (12-128 karakter, huruf besar, huruf kecil, angka, tanpa username; daftar kebocoran diperiksa server), dan mengakhiri semua sesi aktif pengguna karena security stamp diputar. Administrator lalu menetapkan assignment role melalui **Otorisasi pengguna** tanpa alur approval terpisah ([OPN-007 Amendemen 2](docs/decisions/OPN-007.md), 28 September 2026): assignment berlaku segera setelah disimpan, dan Administrator yang sama tercatat sebagai maker dan checker pada audit. Subject ID/username tetap immutable. Edit assignment yang sudah berlaku membuat versi baru secara atomik dan mempertahankan snapshot versi lama; baris `Belum berlaku` peninggalan alur lama (Draft/PendingApproval) dapat diberlakukan lewat tombol **Berlakukan**; seluruh perubahan memakai `If-Match`. Layar login memakai cookie HTTP-only; role dan scope tidak disimpan di cookie sebagai authority, tetapi dihitung ulang dari assignment approved/effective pada setiap request. Login Portal memakai dua langkah: service credential dari environment dikirim ke `SecureAuth` untuk memperoleh bearer, lalu bearer tersebut mengotorisasi `ADAuth` yang memeriksa username/password pengguna terhadap Active Directory. Hasil boolean `true` berarti kredensial sah, `false` berarti salah, sedangkan respons lain, timeout, atau kegagalan koneksi dianggap Portal tidak tersedia dan dilanjutkan ke password lokal. Bearer tidak disimpan atau dipakai sebagai authority identitas PTW. Kedua jalur mewajibkan akun yang sudah didaftarkan Administrator dan aktif; Portal API tidak memprovisikan user, role, atau scope. Konfigurasi Portal yang aktif mewajibkan `PortalAuth:BaseUrl`, `PortalAuth:ServiceUserName`, dan `PortalAuth:ServicePassword`; path default adalah `api/v1/User/SecureAuth` dan `api/v1/User/ADAuth`. Framework HTTP logging dihapus khusus client ini karena kontrak `ADAuth` menempatkan password pada query string. Di luar environment `Development`, endpoint login hanya aktif dengan `Authentication:LoginEnabled=true`; Portal http hanya diterima dengan opt-in `PortalAuth:AllowInsecureHttp=true`, dan cookie sesi wajib `Secure`. Login dibatasi per alamat klien (`RateLimiting:LoginPermitLimit`, default 10 per menit) di samping lockout akun lokal. Mode demo dapat diaktifkan atau dinonaktifkan oleh Administrator melalui **Administrasi > Pengaturan aplikasi**; perubahan memakai concurrency, idempotency, audit, dan outbox. Saat nonaktif, tombol login disembunyikan dan autentikasi identitas demo ditolak server.
 
@@ -434,7 +462,7 @@ Hardening sesi dan kredensial lokal (25 September 2026):
 - **Key ring Data Protection terenkripsi**: di luar Development, `Authentication:DataProtectionPath` mewajibkan `Authentication:DataProtectionCertificatePath` (PFX di luar repository, `PTW_DATA_PROTECTION_CERT_DIR`/`PTW_DATA_PROTECTION_CERT_PASSWORD`); tanpa sertifikat startup gagal sehingga kunci penandatangan cookie tidak pernah tersimpan sebagai XML polos.
 - **Batas body Kestrel** mengikuti nginx (`Attachments:MaxFileBytes` + 1 MiB; 1 MiB bila lampiran nonaktif) sehingga proxy yang salah konfigurasi tidak memperlebar batas unggahan.
 
-Form assignment langsung hanya meminta pengguna, role, area kewenangan bila role bersifat area-scoped, waktu mulai, dan tanggal akhir opsional. Checkbox **Tanpa tanggal berakhir** disimpan sebagai `EffectiveUntil = null`; akun masih dapat dinonaktifkan, sedangkan command pencabutan assignment eksplisit belum tersedia. Action code dan kompetensi tidak diterima dari form sederhana, tetapi diturunkan server dari `UserAuthorizationRoleProfiles`. Profil yang tersedia saat ini hanya konfigurasi Development untuk UX/UAT dan bukan matriks produksi OPN-002. Endpoint assignment generik tetap tersedia untuk kompatibilitas serta framework delegasi yang masih fail-closed.
+Form assignment langsung hanya meminta pengguna, role, area kewenangan bila role bersifat area-scoped, waktu mulai, dan tanggal akhir opsional. Checkbox **Tanpa tanggal berakhir** disimpan sebagai `EffectiveUntil = null`; akun masih dapat dinonaktifkan, sedangkan command pencabutan assignment eksplisit belum tersedia. Action code dan kompetensi tidak diterima dari form sederhana, tetapi diturunkan server dari `UserAuthorizationRoleProfiles`. Profil yang tersedia saat ini hanya konfigurasi Development untuk UX/UAT dan bukan matriks produksi OPN-002. Endpoint assignment generik tetap tersedia untuk kompatibilitas data dan untuk assignment `Delegation`: Administrator menetapkan PJS Manager Pemilik Wilayah dari assignment Manager langsung (tombol **Tetapkan PJS**, periode wajib, scope tidak boleh lebih luas dari sumber); pemegangnya memperoleh claim `acting_role` dan approval-nya dicatat sebagai `ActingForManager` berlabel PJS ([UAT-2026-10-12](docs/decisions/UAT-2026-10-12.md) no. 13). Model penugasan pengganti yang lebih lengkap (dasar dokumen, batas risiko, siklus pencabutan) tetap backlog OPN-002.
 
 Migration `20260925004624_SeedUserAccountsAndRoleAssignments` membawa snapshot direktori pengguna Development per 25 September 2026 ke setiap database baru: sepuluh `UserAccount` aktif dan sepuluh assignment `Approved` (satu Administrator `superadmin.local`, satu Sponsor, empat `HSEValidator`, tiga `AreaOwnerSeniorOfficer` ORF, dan satu `AreaOwnerManager` ORF) beserta riwayat versi assignment-nya. Password lokal dan spesimen tanda tangan sengaja tidak ikut dalam migration ini: di luar Development, setel password lewat `POST /api/v1/admin/users/{subjectId}/password` (reset pertama membuat baris credential lokal bila akun seed belum memilikinya) dan unggah spesimen per environment; spesimen bawaan dan password bersama Development diisi oleh migration dan seeder yang dijelaskan di bawah. Setiap insert dijaga `NOT EXISTS`, sehingga migration menjadi no-op pada database sumber dan tidak menimpa akun atau assignment yang sudah dibuat operator (subject dengan role approved yang sama dilewati). Assignment area-scoped dipetakan ke lokasi berkode `ORF` pada database target; bila lokasi itu belum ada saat `migrate` berjalan, assignment tersebut dilewati dengan audit `authorization_seed_skipped` (`reason: location_not_found`) dan harus dibuat manual melalui **Otorisasi pengguna**. Setiap baris yang disisipkan meninggalkan audit konfigurasi dan outbox (`user_account_seeded`, `authorization_seeded`) dengan actor `system:migration`.
 
@@ -487,7 +515,7 @@ npm audit --audit-level=high
 
 Jika .NET 10 hanya tersedia melalui Docker, mount Docker socket dan set `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal` agar integration test dapat menjalankan SQL Server disposable. Set `PTW_USE_ARTIFACTS_OUTPUT=true` dan shadow `artifacts/` dengan named volume agar output build Linux tidak bertabrakan dengan `bin/obj` host (lihat [AGENTS.md](AGENTS.md)).
 
-Workflow GitHub Actions di [ci.yml](.github/workflows/ci.yml) menjalankan build/test backend, build/test frontend, dan validasi `compose config` pada setiap push dan pull request. Formatter, Prettier, dan audit dependency belum dijalankan CI sehingga wajib dijalankan lokal sebelum commit.
+Workflow GitHub Actions di [ci.yml](.github/workflows/ci.yml) menjalankan build/test backend beserta audit NuGet (high/critical menggagalkan job), build/test frontend beserta `npm audit --audit-level=high`, dan validasi `compose config` dev dan prod pada setiap push dan pull request. `dotnet format` dan Prettier belum dijalankan CI sehingga wajib dijalankan lokal sebelum commit. `src/web/package.json` memakai `overrides` untuk mem-pin `vite` ke versi yang sudah dipatch (advisory launch-editor pada vite 8.3.0 yang di-pin `@angular/build` 22.2.3); hapus override itu ketika `@angular/build` menaikkan pin-nya sendiri.
 
 ## Dokumentasi dan decision record
 
@@ -497,7 +525,7 @@ Workflow GitHub Actions di [ci.yml](.github/workflows/ci.yml) menjalankan build/
 | [PRD v1.8](docs/PRD-NR-PTW-Online-v1.8-ID.md) | kebutuhan produk |
 | [FSD v1.8](docs/FSD-NR-PTW-Online-v1.8-ID.md) | spesifikasi fungsional |
 | [Status implementasi](docs/implementation-status.md) | traceability requirement → komponen → endpoint → migration → test |
-| [Decision records](docs/decisions/README.md) | register OPN-001..009, PROD-UPLOAD-SCAN, PTW-RENEWAL, dan PTW-WORKFLOW-BASELINE; alur disahkan stakeholder 25 September 2026, backlog tercatat per record |
+| [Decision records](docs/decisions/README.md) | register OPN-001..009, PROD-UPLOAD-SCAN, PTW-RENEWAL, PTW-WORKFLOW-BASELINE (Amendemen 1-3), UAT-2026-10-12, HSE-SPONSOR-SELF-VALIDATION, dan REQUESTER-PELAKSANA-SIGNATURE; alur disahkan stakeholder 25 September 2026 dan tindak lanjut UAT 20-21 Oktober 2026, backlog tercatat per record |
 | [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) | panduan kerja dan aturan normatif untuk kontributor dan agen |
 
 Urutan rujukan ketika ambigu: permintaan pengguna, decision record yang disahkan, invariant dan kontrak yang sudah diuji, BRD/PRD/FSD v1.8, lalu asumsi teknis yang dinyatakan eksplisit. Kebijakan OPN yang belum disahkan tidak boleh dikarang; jalur tersebut fail-closed.

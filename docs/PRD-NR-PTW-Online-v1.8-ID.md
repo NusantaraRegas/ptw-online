@@ -4,8 +4,8 @@
 | Atribut | Nilai |
 | --- | --- |
 | Versi | 1.8 — penyelarasan flow dengan sistem berjalan: review Bagian 7 SO/Officer, pembagian pengisian formulir, renewal dan closure berbasis hardcopy terverifikasi |
-| Tanggal | 25 September 2026 |
-| Status | Draft untuk validasi Product Owner dan SME |
+| Tanggal | 25 September 2026; Amendemen 1: 21 Oktober 2026 (lihat Bagian 0.1) |
+| Status | Disahkan sebagai baseline 25 September 2026; diamendemen 21 Oktober 2026 mengikuti UAT-2026-10-12, HSE-SPONSOR-SELF-VALIDATION, dan REQUESTER-PELAKSANA-SIGNATURE |
 | Acuan bisnis | [BRD v1.8](BRD-NR-PTW-Online-v1.8-ID.md) |
 | Acuan desain | [FSD v1.8](FSD-NR-PTW-Online-v1.8-ID.md) |
 | Menggantikan | PRD v1.7 (16 September 2026) |
@@ -15,28 +15,37 @@
 
 Lihat BRD v1.8 Bagian 0 untuk ringkasan bisnis. Dampak pada requirement produk:
 
-- Epic F memperkenalkan task review Bagian 7 (`AREA_OPERATION_REVIEW`) untuk pool SO/Officer pemilik wilayah di antara validasi HSE dan approval Manager, serta pemisahan tugas empat aktor.
+- Epic F memperkenalkan task review Bagian 7 (`AREA_OPERATION_REVIEW`) untuk pool SO/Officer pemilik wilayah di antara validasi HSE dan approval Manager, serta pemisahan tugas empat aktor (dilonggarkan 20 Okt 2026: Sponsor yang memegang PIC HSE boleh memvalidasi PTW-nya sendiri; lihat Bagian 0.1).
 - Epic C membatasi input Sponsor pada header klasifikasi dan Bagian 1–4; Bagian 5 milik PIC HSE (Epic F); checklist kondisi operasi Bagian 7 milik SO/Officer. Input CLSR, SIMOPS, dan isolasi/precaution bebas dihapus dari form Sponsor.
-- Epic E mewajibkan lampiran JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, dan E-SIMI sebelum submit; JSA dan Prosedur Pekerjaan otomatis dipilih pada Bagian 4, dan setiap pilihan Bagian 4 ditautkan ke lampiran.
+- Epic E mewajibkan lampiran JSA, Prosedur Pekerjaan, ID, BPJS TK, dan FTW sebelum submit (E-SIMI dihapus oleh UAT-2026-10-12 no. 1); JSA dan Prosedur Pekerjaan otomatis dipilih pada Bagian 4, dan setiap pilihan Bagian 4 ditautkan ke lampiran.
 - Epic H mengganti "renewal draft langsung" dengan permintaan renewal yang ditinjau Manager pemilik wilayah, dan menambahkan verifikasi Bagian 10 terstruktur serta jalur tindak lanjut closure.
 - Epic G menetapkan paket cetak dua halaman A3 yang setia pada formulir terkontrol; QR dan halaman kampanye menjadi backlog.
 - Epic A menetapkan login melalui Portal API (Active Directory) dengan fallback akun lokal, cookie HTTP-only, assignment role dengan action code turunan server, dan spesimen tanda tangan berversi; identitas produksi disahkan OPN-007 bagian 1.
 - Epic D (rules engine) diturunkan menjadi backlog; rilis awal memakai katalog formulir terkontrol statis.
 
+## 0.1 Amendemen pasca-v1.8 (21 Oktober 2026)
+
+Record berikut disahkan setelah baseline 25 September 2026 dan telah diimplementasikan; bila teks tubuh PRD bertentangan, record ini yang berlaku (DEC-129 sampai DEC-131 pada BRD Bagian 2.2):
+
+- [UAT-2026-10-12](decisions/UAT-2026-10-12.md) / [PTW-WORKFLOW-BASELINE Amendemen 3](decisions/PTW-WORKFLOW-BASELINE.md) (12 dan 20 Oktober 2026): E-SIMI dihapus (Epic B menjadi inisiasi PTW); role `Requester` (Pemohon) mengisi setiap PTW dan Sponsor menyetujui, mengembalikan, atau menolak PTW awal di dalam `DRAFT`, dengan persetujuan yang sekaligus mengajukan ke PIC HSE; nomor `PTW/NNNN/DD/MM/YYYY` reset tahunan; Bagian 9 (Sponsor) dan Bagian 10 (Pemilik Wilayah) digital sehingga halaman 2 paket cetak hanya Bagian 8; blok pengingat HSSE pada halaman 1; label PJS Manager dari assignment `Delegation`; self check revisi Sponsor dan PIC HSE; pilihan APD tersimpan (`POST /tasks/{taskId}/safety-equipment`); label `Sertifikat Pekerja`; pagination, unggah per dokumen, batas ukuran (`GET /reference-data/attachment-policy`), pratinjau lampiran.
+- [HSE-SPONSOR-SELF-VALIDATION](decisions/HSE-SPONSOR-SELF-VALIDATION.md) (20 Oktober 2026): Sponsor yang memegang `HSEValidator` boleh memvalidasi PTW-nya sendiri; SoD tetap untuk review Bagian 7 dan penerbitan.
+- [REQUESTER-PELAKSANA-SIGNATURE](decisions/REQUESTER-PELAKSANA-SIGNATURE.md) (21 Oktober 2026): slot tanda tangan Pelaksana Pekerjaan Bagian 3 diisi spesimen dan waktu pengajuan akun Pemohon; kosong bila PTW tidak diinisiasi Pemohon.
+- [OPN-007](decisions/OPN-007.md), kontrak Portal dua langkah (diverifikasi live 30 September 2026): `SecureAuth` dengan kredensial service menghasilkan bearer, lalu `ADAuth` memeriksa kredensial pengguna (hasil boolean); keputusan identitas tidak berubah.
+
 ## 1. Definisi produk
 
-NR PTW Online adalah aplikasi web terkontrol untuk Kontraktor dan pengguna internal NR. Kontraktor atau User Sponsor mengajukan PTW beserta dokumen dasar wajib; setiap submission divalidasi oleh tepat satu validator, yaitu PIC HSE, yang menetapkan Bagian 5. SO/Officer departemen pemilik wilayah memverifikasi kondisi operasi Bagian 7. Manager departemen pemilik wilayah memberikan approval penerbitan, dan sistem secara atomik menetapkan **DITERBITKAN (`ISSUED`)**, mengunci snapshot, dan menghasilkan paket PDF resmi dua halaman A3 yang setia pada formulir FM-001/002/003-B-002-NR-B220.
+NR PTW Online adalah aplikasi web terkontrol untuk Kontraktor dan pengguna internal NR. Pemohon (role `Requester`; akun Kontraktor hanya memegang role ini) mengisi PTW beserta dokumen dasar wajib dan mengajukannya ke Sponsor NR; Sponsor mengedit bila perlu lalu menyetujui (sekaligus mengajukan ke PIC HSE), mengembalikan, atau menolak (UAT-2026-10-12 no. 14). Setiap submission divalidasi oleh tepat satu validator, yaitu PIC HSE, yang menetapkan Bagian 5. SO/Officer departemen pemilik wilayah memverifikasi kondisi operasi Bagian 7. Manager departemen pemilik wilayah memberikan approval penerbitan, dan sistem secara atomik menetapkan **DITERBITKAN (`ISSUED`)**, mengunci snapshot, dan menghasilkan paket PDF resmi dua halaman A3 yang setia pada formulir FM-001/002/003-B-002-NR-B220.
 
-Rilis awal mencakup ORF, Site Office, dan Water-Based Activity serta menggunakan proses hibrida. ORF dirutekan ke Departemen Distribusi Gas dan Pengelolaan ORF; Site Office ke Departemen General Affair; dan Water-Based Activity ke Departemen Transport & Operasi FSRU. Data pengajuan dan keputusan berada di aplikasi, sedangkan gas test, revalidasi harian, pembukaan/penutupan harian, serta tanda tangan lapangan berada pada hardcopy yang dicetak dari sistem. Sponsor mengunggah hardcopy final sebagai evidence close; salinan terpilih menjadi unduhan utama PTW, lalu Manager atau SO/Officer pemilik wilayah memverifikasi Bagian 10 dan menutup PTW; PIC HSE memperoleh rekap tanpa approval close. Renewal diajukan Sponsor dengan hardcopy hasil verifikasi lapangan dan ditinjau Manager pemilik wilayah sebelum draft penerus dibuat. Status `ISSUED` tidak menghapus kewajiban prasyarat lapangan pada hardcopy.
+Rilis awal mencakup ORF, Site Office, dan Water-Based Activity serta menggunakan proses hibrida. ORF dirutekan ke Departemen Distribusi Gas dan Pengelolaan ORF; Site Office ke Departemen General Affair; dan Water-Based Activity ke Departemen Transport & Operasi FSRU. Data pengajuan dan keputusan berada di aplikasi, sedangkan gas test, revalidasi harian, pembukaan/penutupan harian, serta tanda tangan lapangan berada pada hardcopy yang dicetak dari sistem. Sponsor mengunggah hardcopy final sebagai evidence close dan mengisi Bagian 9 secara digital; salinan terpilih menjadi unduhan utama PTW, lalu Manager atau SO/Officer pemilik wilayah memverifikasi Bagian 10 di sistem dan menutup PTW; PIC HSE memperoleh rekap tanpa approval close. Renewal diajukan Sponsor dengan hardcopy hasil verifikasi lapangan dan ditinjau Manager pemilik wilayah sebelum draft penerus dibuat. Status `ISSUED` tidak menghapus kewajiban prasyarat lapangan pada hardcopy.
 
 ### 1.1 Prinsip produk
 
 1. Keselamatan direpresentasikan sebagai state digital dan kontrol hardcopy yang eksplisit; batas keduanya tidak boleh ambigu.
 2. Server, bukan UI, menjadi otoritas untuk seluruh transisi, authorization, dan validasi katalog.
 3. Formulir terkontrol adalah sumber kebenaran isi: katalog Bagian 1/4/5/7 dan layout cetak ditranskripsi dari template, bukan dirancang ulang.
-4. Setiap bagian formulir memiliki satu pengisi yang berwenang: Sponsor (Bagian 1–4), PIC HSE (Bagian 5), SO/Officer (checklist Bagian 7), Manager (baris approval Bagian 7), lapangan (Bagian 6, 8–10).
+4. Setiap bagian formulir memiliki satu pengisi yang berwenang: Pemohon lalu Sponsor (Bagian 1–4), PIC HSE (Bagian 5), SO/Officer (checklist Bagian 7), Manager (baris approval Bagian 7), lapangan (Bagian 6 dan 8), Sponsor di sistem (Bagian 9), Pemilik Wilayah di sistem (Bagian 10).
 5. Bukti lapangan dicatat pada hardcopy dan direkonsiliasi ke paket cetak resmi serta versi PTW yang sama saat renewal dan close.
-6. Satu PTW memiliki sejarah lengkap; renewal membuat nomor baru dan lineage setelah disetujui pemilik wilayah.
+6. Satu PTW memiliki sejarah lengkap; nomor resmi `PTW/NNNN/DD/MM/YYYY` (urutan reset tahunan) dialokasikan saat submit pertama; renewal membuat nomor baru dan lineage setelah disetujui pemilik wilayah.
 7. Identitas aktor pada evidence berasal dari profil akun server, bukan klien.
 8. Modular monolith dipilih untuk scope NR; bukan microservices prematur.
 
@@ -45,7 +54,7 @@ Rilis awal mencakup ORF, Site Office, dan Water-Based Activity serta menggunakan
 ### 2.1 Sasaran
 
 - pengguna dapat menyusun PTW lengkap sesuai formulir terkontrol dengan validasi kelengkapan server-side;
-- task tiba pada orang yang benar (Sponsor, PIC HSE, pool SO/Officer, Manager) dan keputusan dapat diaudit;
+- task tiba pada orang yang benar (Sponsor, Pemohon, PIC HSE, pool SO/Officer, Manager) dan keputusan dapat diaudit;
 - approval penerbitan hanya dapat dilakukan setelah validasi PIC HSE dan review Bagian 7 lengkap pada versi yang sama;
 - paket cetak identik dengan formulir terkontrol dan mengisi Bagian 1–5 serta evidence Bagian 7 dari snapshot;
 - dashboard menampilkan state digital dan mengingatkan bahwa kontrol harian berada pada hardcopy;
@@ -53,11 +62,11 @@ Rilis awal mencakup ORF, Site Office, dan Water-Based Activity serta menggunakan
 
 ### 2.2 Non-sasaran MVP
 
-Registrasi kontraktor mandiri, authoring JSA/MOC/LOTO, pengisian gas test/revalidasi harian online, integrasi sensor/gate, microservices, penggantian E-SIMI, aktivasi HO/FSRU, rules engine deklaratif, QR dan halaman kampanye pada paket cetak, dan tanda tangan tersertifikasi PSrE.
+Registrasi kontraktor mandiri, authoring JSA/MOC/LOTO, pengisian gas test/revalidasi harian online, integrasi sensor/gate, microservices, keterkaitan atau integrasi E-SIMI dalam bentuk apa pun (dihapus UAT-2026-10-12 no. 1), aktivasi HO/FSRU, rules engine deklaratif, QR dan halaman kampanye pada paket cetak, dan tanda tangan tersertifikasi PSrE.
 
 ### 2.3 Personas
 
-Kontraktor/Pengaju Eksternal dan User Sponsor (role `Sponsor`), Performing Authority/crew (tanpa akun), PIC HSE (`HSEValidator`), SO/Officer Pemilik Wilayah (`AreaOwnerSeniorOfficer`), Manager Pemilik Wilayah (`AreaOwnerManager`), petugas lapangan/Gas Tester (hardcopy), Administrator, dan Auditor mengikuti definisi pada BRD. Departemen pemilik wilayah menyediakan SO/Officer dan Manager; bukan validator.
+Pemohon/Kontraktor (role `Requester`), User Sponsor (role `Sponsor`), Performing Authority/crew (tanpa akun; slot tanda tangannya pada Bagian 3 diisi spesimen akun Pemohon), PIC HSE (`HSEValidator`), SO/Officer Pemilik Wilayah (`AreaOwnerSeniorOfficer`), Manager Pemilik Wilayah (`AreaOwnerManager`), petugas lapangan/Gas Tester (hardcopy), Administrator, dan Auditor mengikuti definisi pada BRD. Departemen pemilik wilayah menyediakan SO/Officer dan Manager; bukan validator.
 
 ### 2.4 Routing pemilik area
 
@@ -69,7 +78,7 @@ Kontraktor/Pengaju Eksternal dan User Sponsor (role `Sponsor`), Performing Autho
 | FSRU | Departemen Transport & Operasi FSRU | Tidak aktif |
 | Water-Based Activity | Departemen Transport & Operasi FSRU | **Aktif pada rilis awal** |
 
-Task review Bagian 7, approval penerbitan, review renewal, dan verifikasi closure dirutekan ke role pemilik wilayah dengan scope lokasi yang cocok. Keputusan approval menerbitkan snapshot PTW; tidak ada task penerbitan digital kedua. Penggantian tidak boleh dilakukan hanya dengan meneruskan task atau memilih nama secara bebas.
+Task review Bagian 7, approval penerbitan, review renewal, dan verifikasi closure dirutekan ke role pemilik wilayah dengan scope lokasi yang cocok. Keputusan approval menerbitkan snapshot PTW; tidak ada task penerbitan digital kedua. Penggantian tidak boleh dilakukan hanya dengan meneruskan task atau memilih nama secara bebas; PJS Manager hanya lahir dari assignment `Delegation` yang ditetapkan Administrator (UAT-2026-10-12 no. 13).
 
 ## 3. Arsitektur informasi dan navigasi
 
@@ -99,10 +108,12 @@ Detail PTW menampilkan ringkasan pekerjaan, header klasifikasi, Bagian 1–4, Ba
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Draft
-    Draft --> UnderValidation: submit + satu task HSE_VALIDATION
+    [*] --> Draft: Pemohon membuat draft
+    Draft --> Draft: initial-submit (task SPONSOR_INITIAL_APPROVAL) / return-initial (task REQUESTER_INITIAL_REVISION)
+    Draft --> Rejected: Sponsor reject-initial
+    Draft --> UnderValidation: Sponsor approve-initial (nomor resmi) atau submit draft renewal + satu task HSE_VALIDATION
     UnderValidation --> RevisionRequired: PIC HSE minta revisi + task SPONSOR_REVISION
-    RevisionRequired --> UnderValidation: submit ulang (versi naik) + task HSE baru
+    RevisionRequired --> UnderValidation: submit ulang dengan self check Sponsor (versi naik) + task HSE baru
     UnderValidation --> Rejected: PIC HSE menolak
     UnderValidation --> AwaitingAreaApproval: PIC HSE valid + Bagian 5 → task AREA_OPERATION_REVIEW
     AwaitingAreaApproval --> AwaitingAreaApproval: SO/Officer menetapkan Bagian 7 → task AREA_APPROVE_AND_ISSUE
@@ -111,11 +122,11 @@ stateDiagram-v2
     AwaitingAreaApproval --> Issued: Manager approve-and-issue + snapshot cetak
     Issued --> Suspended: PIC HSE / Manager suspend
     Suspended --> Issued: Manager resolve; revalidasi hardcopy tetap wajib
-    Issued --> ClosureRequested: Sponsor upload hardcopy final + request close
+    Issued --> ClosureRequested: Sponsor upload hardcopy final + Bagian 9 + request close
     Suspended --> ClosureRequested: Sponsor request close
     Expired --> ClosureRequested: Sponsor request close
     ClosureRequested --> ClosureRequested: Manager minta tindak lanjut / Sponsor ajukan ulang
-    ClosureRequested --> Closed: Manager verifikasi Bagian 10
+    ClosureRequested --> Closed: Manager/SO/Officer verifikasi Bagian 10 di sistem
     Issued --> Expired: expire setelah masa berlaku
     Suspended --> Expired: expire setelah masa berlaku
     Draft --> Cancelled: Sponsor cancel
@@ -133,44 +144,45 @@ Tidak ada state digital `APPROVED`, `READY_FOR_ISSUE`, `WORK_PERIOD_ACTIVE`, ata
 
 | ID | Requirement / acceptance utama |
 | --- | --- |
-| FR-AUT-001 | Login memverifikasi kredensial melalui Portal API (`POST /api/v1/User/SecureAuth`, bind Active Directory) lalu fallback ke password akun lokal; kedua jalur mewajibkan akun terdaftar dan aktif. Sesi memakai cookie HTTP-only (`Secure` di luar Development) dengan security stamp; di luar Development login hanya aktif dengan `Authentication:LoginEnabled=true` dan Portal terkonfigurasi. Halaman awal adalah layar login; route aplikasi memerlukan sesi. |
+| FR-AUT-001 | Login memverifikasi kredensial melalui Portal API dua langkah: kredensial service memperoleh bearer dari `POST api/v1/User/SecureAuth`, lalu bearer mengotorisasi `POST api/v1/User/ADAuth` yang memeriksa username/password pengguna terhadap Active Directory (`true` sah, `false` salah, status lain/timeout = Portal tidak tersedia; bearer tidak pernah disimpan), lalu fallback ke password akun lokal; kedua jalur mewajibkan akun terdaftar dan aktif. Sesi memakai cookie HTTP-only (`Secure` di luar Development) dengan security stamp; di luar Development login hanya aktif dengan `Authentication:LoginEnabled=true` dan Portal terkonfigurasi. Halaman awal adalah layar login; route aplikasi memerlukan sesi. |
 | FR-AUT-002 | UI menampilkan identitas, role efektif, dan scope lokasi dari `/api/v1/me`; klien tidak menyimpan token di `localStorage`. |
 | FR-AUT-003 | API mengevaluasi role, scope lokasi, kepemilikan Sponsor, dan status PTW pada setiap query dan command; role/scope dihitung ulang dari assignment yang disetujui dan efektif. |
 | FR-AUT-004 | Session kedaluwarsa aman; reauthentication tidak mengulang command sebelumnya. |
-| FR-AUT-005 | Administrator mengelola akun (profil, jabatan, departemen, status aktif, password) dan assignment role dengan maker-checker serta effective dates; Development boleh mengizinkan Administrator menyetujui pengajuannya sendiri, produksi tidak. |
+| FR-AUT-005 | Administrator mengelola akun (profil, jabatan, departemen, status aktif, password) dan assignment role dengan effective dates; assignment ditetapkan dan disetujui Administrator yang sama dalam satu simpan tanpa alur approval terpisah (OPN-007 Amendemen 2, 28 Sep 2026). |
 | FR-AUT-006 | Assignment langsung hanya meminta pengguna, role, area kewenangan bila role area-scoped, waktu mulai, dan tanggal akhir opsional; action code dan kompetensi diturunkan server dari profil role. Input action code dari klien diabaikan; tanpa profil terkonfigurasi jalur ini fail-closed. |
-| FR-AUT-007 | Assignment pengganti Manager wajib memuat principal, acting user, dasar dokumen, scope, risk limit, effective dates, issuer/approver, alasan, dan status; sampai tersedia, approval dengan `ActingAssignmentId` ditolak. |
+| FR-AUT-007 | PJS Manager ditentukan server dari assignment `Delegation` (Administrator menetapkannya dari assignment Manager sumber dengan periode wajib): aktor yang memegang `AreaOwnerManager` hanya lewat delegasi memperoleh claim `acting_role`, approval dicatat `ActingForManager` dengan `ActingAssignmentId` dan principal dari assignment sumber, dan berlabel "PJS Manager Pemilik Wilayah" pada halaman approval, ringkasan workflow, dan paket cetak; payload `actingAssignmentId` klien diabaikan dan tidak ada aturan approval tambahan (UAT-2026-10-12 no. 13). Model penugasan pengganti lengkap (dasar dokumen, risk limit, lifecycle pencabutan) tetap backlog. |
 | FR-AUT-008 | Administrator mengunggah spesimen tanda tangan PNG (maksimum 256 KB, 2000×2000 piksel) berversi; versi lama tidak ditimpa dan versi exact dibekukan pada evidence. |
 | FR-AUT-009 | Pengguna tanpa scope tidak dapat menemukan data melalui URL, daftar, task, attachment, atau paket cetak. |
-| FR-AUT-010 | Akun Kontraktor terkait Sponsor NR dan masa aktif (OPN-006 ACCEPTED baseline); scope perusahaan eksplisit adalah backlog. |
+| FR-AUT-010 | Akun Kontraktor hanya memegang role `Requester` dan hanya melihat/mengedit PTW yang ia inisiasi (`InitiatedBy`); Sponsor NR dipilih per PTW dari `GET /api/v1/sponsors` (hanya Requester/Sponsor/Administrator). Scope perusahaan eksplisit adalah backlog (OPN-006). |
 | FR-AUT-011 | Nama dan jabatan aktor pada evidence dan UI berasal dari profil akun server; username/ID tidak dipakai sebagai fallback nama. Evidence lama tanpa nama diperkaya saat dibaca. |
-| FR-AUT-012 | Sponsor tidak dapat memvalidasi PTW miliknya; Sponsor dan validator HSE tidak dapat menjadi reviewer Bagian 7; Manager penerbit harus berbeda dari Sponsor, validator HSE, dan reviewer. |
+| FR-AUT-012 | Sponsor yang memegang `HSEValidator` boleh memvalidasi PTW miliknya sendiri dan menetapkan Bagian 5 (HSE-SPONSOR-SELF-VALIDATION, 20 Okt 2026); Sponsor dan validator HSE tidak dapat menjadi reviewer Bagian 7; Manager penerbit harus berbeda dari Sponsor, validator HSE, dan reviewer. |
 
-### 5.2 Epic B — E-SIMI
+### 5.2 Epic B — Inisiasi PTW oleh Pemohon (E-SIMI dihapus)
 
-| ID | Requirement / acceptance utama |
-| --- | --- |
-| FR-INT-001 | Draft menyimpan nomor/external ID E-SIMI; submit mewajibkan lampiran bertaut dengan kode dokumen `ESIMI`. |
-| FR-INT-002 | Saat API tersedia, sistem mengisi otomatis nomor, status, orang/perusahaan, lokasi, tujuan, dan periode (backlog). |
-| FR-INT-003 | PTW menampilkan mode tautan dan status sinkronisasi saat adapter tersedia (backlog). |
-| FR-INT-004 | Perubahan material E-SIMI memicu evaluasi suspend sesuai SOP (backlog). |
-| FR-INT-006 | Tidak ada penulisan langsung dari PTW ke tabel E-SIMI. |
-
-### 5.3 Epic C — Penyusunan PTW (Sponsor)
+Seluruh requirement E-SIMI (FR-INT-001 sampai FR-INT-006) dihapus oleh UAT-2026-10-12 no. 1: draft tidak menyimpan nomor E-SIMI, kode dokumen `ESIMI` dihapus, dan integrasi tidak lagi menjadi backlog. Epic ini kini memuat alur inisial PTW (UAT-2026-10-12 no. 14).
 
 | ID | Requirement / acceptance utama |
 | --- | --- |
-| FR-PTW-001 | Sponsor membuat draft dengan judul, uraian, lokasi aktif, kelas izin, tipe pengaju, perusahaan, pelaksana, masa berlaku, dan referensi E-SIMI. Sponsor aktif berasal dari `/api/v1/me`. |
+| FR-INI-001 | Hanya pemegang role `Requester` (atau Administrator) yang dapat `POST /permits`; Sponsor tanpa role `Requester` memperoleh `403`. Pemohon memilih Sponsor NR dari `GET /api/v1/sponsors`. |
+| FR-INI-002 | Pemohon melengkapi Bagian 1–4 dan lampiran, lalu `POST /permits/{id}/initial-submit` membuat task `SPONSOR_INITIAL_APPROVAL` yang ditugaskan langsung ke Sponsor terpilih; status tetap `DRAFT`. Pemohon tidak dapat submit ke PIC HSE dan hanya melihat PTW yang ia inisiasi. |
+| FR-INI-003 | Sponsor dapat mengedit draft yang diajukan, lalu `POST /tasks/{taskId}/approve-initial` (wajib `requirementsConfirmed` dan komentar) yang menyetujui **dan** mengajukan ke PIC HSE dalam satu transaksi (nomor resmi, task `HSE_VALIDATION`), `return-initial` (task `REQUESTER_INITIAL_REVISION` untuk Pemohon; siklus kembalikan–ajukan ulang boleh berulang pada versi draft yang sama), atau `reject-initial` (`REJECTED` terminal, tanpa nomor). |
+| FR-INI-004 | `POST /permits/{id}/submit` oleh Sponsor hanya untuk pengajuan ulang setelah `REVISION_REQUIRED` dan draft renewal. |
+
+### 5.3 Epic C — Penyusunan PTW (Pemohon dan Sponsor)
+
+| ID | Requirement / acceptance utama |
+| --- | --- |
+| FR-PTW-001 | Pemohon membuat draft dengan judul, uraian, lokasi aktif, kelas izin, tipe pengaju, perusahaan, pelaksana, masa berlaku, dan Sponsor NR terpilih; Sponsor dapat mengedit draft sebelum menyetujuinya. Identitas aktor berasal dari `/api/v1/me`. Saat masuk lewat identitas demo Development, tombol **Isi otomatis (demo)** mengisi form dengan nilai acak dari katalog. |
 | FR-PTW-002 | Form Sponsor memuat: klasifikasi header (HOT multi-select `Api Terbuka`/`Percikan Api`; COLD tepat satu `Low Risk`/`High Risk`; CSE tanpa pilihan), Bagian 1 multi-select dari katalog per kelas dengan detail `Lain-lain` maksimum 80 karakter, Bagian 2 (nomor/nama equipment, Work Order No., plant/area, referensi bahaya tambahan opsional), Bagian 3 (Sponsor/pelaksana/perusahaan), dan Bagian 4 (15 pilihan dokumen; JSA dan Prosedur Pekerjaan wajib serta otomatis terpilih; JSA membawa nomor/revisi/tanggal). |
 | FR-PTW-003 | Form tidak menyediakan Bagian 5, CLSR, SIMOPS, isolasi/precaution, atau kolom bebas bahaya/pengendalian; payload yang membawa Bagian 5 ditolak dan field legacy dikosongkan server. |
-| FR-PTW-004 | Nomor resmi baru dibuat saat submit; draft memakai ID internal. |
+| FR-PTW-004 | Nomor resmi `PTW/NNNN/DD/MM/YYYY` (`NNNN` urutan yang direset tiap tahun kalender WIB, `DD/MM/YYYY` tanggal submit WIB) dialokasikan di dalam transaksi submit pertama dari `ptw.PermitNumberSequence`; tidak dipakai ulang, submit ulang mempertahankan nomor, PTW yang ditolak/dibatalkan tetap memegang nomornya; draft memakai ID internal; nomor lama `PTW-YYYYMMDD-XXXX` tidak diubah (UAT-2026-10-12 no. 15). |
 | FR-PTW-005 | Validity maksimum tujuh hari dan awal < akhir divalidasi server. |
-| FR-PTW-006 | Halaman lampiran menampilkan kesiapan dokumen dasar (JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, E-SIMI) dan pilihan Bagian 4 yang belum berlampiran sebelum submit; server mengulang validasi. |
+| FR-PTW-006 | Halaman lampiran menampilkan kesiapan dokumen dasar (JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW) dan pilihan Bagian 4 yang belum berlampiran sebelum submit, dengan tombol unggah per dokumen yang langsung memilih jenisnya, batas ukuran/jumlah/format dari `GET /api/v1/reference-data/attachment-policy` (file melebihi batas ditolak sebelum dikirim), dan pratinjau lampiran `CLEAN` (PDF/JPEG/PNG) di dalam aplikasi; server mengulang validasi (UAT-2026-10-12 no. 4–6). |
 | FR-PTW-007 | Draft penerus renewal memuat data perencanaan Bagian 1–4 dari PTW asal dengan periode yang disetujui; Sponsor dapat mengeditnya dan wajib mengunggah ulang lampiran. |
-| FR-PTW-008 | Submit ulang setelah revisi menaikkan versi PTW dan menginvalidasi evidence Bagian 5/7 versi lama. |
+| FR-PTW-008 | Submit ulang setelah revisi mewajibkan `revisionSelfCheckConfirmed=true` (`permit.submit.revision_self_check_required`; pernyataan dan catatan revisi tercatat pada audit `permit_submitted`), menaikkan versi PTW, dan menginvalidasi evidence Bagian 5/7 versi lama; pilihan APD yang disimpan PIC HSE tidak dihapus (UAT-2026-10-12 no. 7–8). |
 | FR-PTW-009 | Draft menyimpan submitter type (`CONTRACTOR`/`USER_SPONSOR`), perusahaan, pelaksana, dan Sponsor accountable. |
 | FR-PTW-010 | Pengguna melihat identitas/revisi JSA dan dapat membuka lampirannya; JSA tetap sumber bahaya/pengendalian. |
-| FR-PTW-011 | Sponsor merekam pelaksana dan mengakui mewakili crew pada sistem; tanda tangan pelaksana pada hardcopy. |
+| FR-PTW-011 | Sponsor merekam pelaksana dan mengakui mewakili crew pada sistem; slot tanda tangan Pelaksana Pekerjaan pada paket cetak diisi spesimen dan waktu pengajuan akun Pemohon (REQUESTER-PELAKSANA-SIGNATURE), kosong bila PTW tidak diinisiasi Pemohon. |
 | FR-PTW-012 | Submit hanya diterima untuk `ORF`, `SITE_OFFICE`, dan `WATER_BASED`; lokasi lain ditolak dengan pesan lokasi belum diaktifkan. |
 | FR-PTW-013 | Sponsor dapat membatalkan PTW miliknya dari `DRAFT`, `UNDER_VALIDATION`, atau `REVISION_REQUIRED` dengan alasan; task tertunda dibatalkan. |
 | FR-PTW-014 | Wizard multi-langkah, autosave, dan diff antarversi menjadi backlog; form saat ini satu halaman reactive form dengan ringkasan error dan asosiasi error per field. |
@@ -193,7 +205,7 @@ Tidak ada state digital `APPROVED`, `READY_FOR_ISSUE`, `WORK_PERIOD_ACTIVE`, ata
 | FR-DOC-003 | Lampiran menyimpan kode dokumen (`supportingDocumentCode` untuk dokumen dasar dan Bagian 4), nomor/revisi/tanggal untuk JSA dan hardcopy, uploader, timestamp, target versi PTW, PrintPackage untuk hardcopy, dan lineage penggantian. |
 | FR-DOC-004 | File tidak diberikan lewat public path; download memakai endpoint terotorisasi; file selain `CLEAN` tidak dapat diunduh. |
 | FR-DOC-005 | Penggantian/penghapusan file bersifat logis; versi yang menjadi dasar keputusan tidak dihapus. Sponsor hanya dapat menambah/menghapus saat `DRAFT`/`REVISION_REQUIRED` dan saat lampiran tidak terkunci oleh review renewal. |
-| FR-DOC-006 | Submit mewajibkan lampiran untuk JSA, Prosedur Pekerjaan, ID, BPJS TK, FTW, dan E-SIMI, serta untuk setiap pilihan Bagian 4; JSA dan Prosedur Pekerjaan wajib ada pada pilihan Bagian 4, dan metadata lampiran JSA harus sama dengan nomor/revisi/tanggal JSA pada draft. |
+| FR-DOC-006 | Submit mewajibkan lampiran untuk JSA, Prosedur Pekerjaan, ID, BPJS TK, dan FTW, serta untuk setiap pilihan Bagian 4; JSA dan Prosedur Pekerjaan wajib ada pada pilihan Bagian 4, dan metadata lampiran JSA harus sama dengan nomor/revisi/tanggal JSA pada draft. |
 | FR-DOC-007 | Item khusus pekerjaan di luar katalog adalah backlog (OPN-003 ACCEPTED untuk katalog baseline). |
 | FR-DOC-008 | Draft penerus renewal tidak menyalin file; UI menampilkan daftar dokumen yang harus diunggah ulang. |
 | FR-DOC-009 | `SIGNED_FIELD_COPY` wajib merujuk PrintPackage `READY`, membawa nomor/revisi/tanggal, dan hanya dapat diunggah saat `ISSUED`, `SUSPENDED`, `EXPIRED`, atau saat tindak lanjut closure diminta. |
@@ -205,13 +217,14 @@ Tidak ada state digital `APPROVED`, `READY_FOR_ISSUE`, `WORK_PERIOD_ACTIVE`, ata
 | --- | --- |
 | FR-RVW-001 | Submit membuat tepat satu task `HSE_VALIDATION` pada versi PTW yang sama untuk pool PIC HSE. |
 | FR-RVW-002 | PIC HSE melihat ringkasan pengajuan, klasifikasi, Bagian 1–4, lampiran, dan riwayat keputusan. |
-| FR-RVW-003 | Validate mewajibkan pernyataan dan minimal satu pilihan Bagian 5 dari katalog per kelas; request revision, reject, dan escalate mewajibkan alasan. Escalate mencatat audit tanpa mengubah status. |
+| FR-RVW-003 | Validate mewajibkan pernyataan dan minimal satu pilihan Bagian 5 dari katalog per kelas; validasi versi di atas 1 mewajibkan satu self check PIC HSE (`revisionSelfCheckConfirmed`) yang dibekukan pada evidence; request revision, reject, dan escalate mewajibkan alasan. Escalate mencatat audit tanpa mengubah status. |
+| FR-RVW-003a | PIC HSE dapat menyimpan pilihan APD terpisah dari keputusan melalui `POST /api/v1/tasks/{taskId}/safety-equipment` (`If-Match`, `Idempotency-Key`, audit `hse_safety_equipment_saved`, outbox); pilihan tersimpan bertahan melewati revisi/edit/submit ulang dan dipakai validasi bila payload tidak membawa pilihan baru (UAT-2026-10-12 no. 8–9). |
 | FR-RVW-004 | Request revision membatalkan task tertunda dan membuat satu task `SPONSOR_REVISION` yang ditugaskan langsung ke Sponsor PTW; task mengikuti versi draft saat draft/lampiran berubah, selesai saat submit ulang, dan dibatalkan saat cancel/reject. |
 | FR-RVW-005 | Setelah validasi valid, sistem membuat tepat satu task `AREA_OPERATION_REVIEW` untuk pool SO/Officer pemilik wilayah dengan scope lokasi PTW. |
 | FR-RVW-006 | SO/Officer menetapkan checklist kondisi operasi Bagian 7 (`Isolasi` + rincian, `Depressurized`, `Drained`, `Ventilated`, `Bilas` + rincian, `Lainnya` + penjelasan ≤ 200 karakter), mengonfirmasi kondisi telah diperiksa, dan memberi pernyataan. Reviewer pertama yang menyelesaikan task menang; reviewer berikutnya memperoleh `404`. |
 | FR-RVW-007 | Task `AREA_APPROVE_AND_ISSUE` untuk Manager pemilik wilayah hanya dibuat setelah review Bagian 7 selesai pada versi yang sama. |
 | FR-RVW-008 | Request revision dan reject tersedia pada task validasi (PIC HSE), task review (SO/Officer), dan task approval (Manager). |
-| FR-APR-001 | Approver harus Manager pemilik wilayah dengan scope lokasi cocok dan assignment terverifikasi server; pengganti resmi ditolak sampai model penugasan lengkap. |
+| FR-APR-001 | Approver harus Manager pemilik wilayah dengan scope lokasi cocok dan assignment terverifikasi server; PJS Manager berbasis assignment `Delegation` diterima dan dicatat sesuai FR-AUT-007. |
 | FR-APR-002 | Approval menyimpan pernyataan, aktor, nama/jabatan dari profil, kapasitas, ID otorisasi, versi PTW, versi ruleset/template/campaign, spesimen tanda tangan, dan waktu. |
 | FR-APR-003 | Approval yang berhasil membuat decision dan `PERMIT_ISSUED` dalam satu transaksi serta mengantrekan render paket dari versi yang disetujui. |
 | FR-APR-004 | Routing pemilik area diturunkan dari lokasi dan konfigurasi release; tidak dapat diubah pengaju. |
@@ -244,8 +257,8 @@ sequenceDiagram
 | FR-ISS-001 | Aksi **Setujui & Terbitkan PTW** hanya tersedia bagi Manager pemilik area setelah validasi PIC HSE dan review Bagian 7 pada versi yang sama. |
 | FR-ISS-002 | API mengulang guard lokasi aktif, pemilik wilayah, assignment, SoD, evidence Bagian 5/7, validity, dan versi; mismatch menghasilkan 403/409/422. |
 | FR-ISS-003 | Keputusan, `ISSUED`, audit, outbox, `PrintPackageSnapshot`, dan antrean `GeneratedDocument` dicommit atomik. Kegagalan renderer memberi status `RETRYING` dengan backoff lalu `FAILED`; Administrator dapat render ulang secara idempotent. |
-| FR-PRN-001 | PDF resmi terdiri dari dua halaman A3: halaman 1 landscape Bagian 1–7 dan halaman 2 portrait mulai Bagian 8, di atas template vektor formulir terkontrol sesuai kelas izin (HOT merah, COLD biru, CSE hijau). |
-| FR-PRN-002 | Sistem mengisi header klasifikasi, Bagian 1 (termasuk detail `Lain-lain`), Bagian 2, Bagian 3 (nama, jabatan, departemen, spesimen tanda tangan berversi, waktu submit Sponsor; tanda tangan pelaksana kosong), Bagian 4 (checklist), Bagian 5 (pilihan PIC HSE), dan Bagian 7 (checklist kondisi operasi, masa berlaku, baris SO/Officer dan Manager dengan nama, jabatan, spesimen, waktu). Bagian 6 dan 8–10 kosong. |
+| FR-PRN-001 | PDF resmi terdiri dari dua halaman A3: halaman 1 landscape Bagian 1–7 (formulir diskalakan proporsional) dengan blok pengingat HSSE empat kalimat PASTIKAN di bawah formulir, dan halaman 2 portrait yang hanya memuat Bagian 8 dan berakhir pada rule bawah grid revalidasi; Bagian 9 dan 10 tidak dicetak (UAT-2026-10-12 no. 11–12, 16). Template vektor formulir terkontrol sesuai kelas izin (HOT merah, COLD biru, CSE hijau); renderer `ptw-form-renderer/4.2.0`. |
+| FR-PRN-002 | Sistem mengisi header klasifikasi, Bagian 1 (termasuk detail `Lain-lain`), Bagian 2, Bagian 3 (nama, jabatan, departemen, spesimen tanda tangan berversi, waktu submit Sponsor; slot Pelaksana Pekerjaan diisi spesimen dan waktu pengajuan akun Pemohon, kosong bila tidak ada inisiasi), Bagian 4 (checklist; label `Sertifikat Pekerja`), Bagian 5 (pilihan PIC HSE), dan Bagian 7 (checklist kondisi operasi, masa berlaku, baris SO/Officer dan Manager dengan nama, jabatan, spesimen, waktu; label PJS bila `ActingForManager`). Bagian 6 dan 8 kosong. |
 | FR-PRN-003 | Halaman kampanye 10 CLSR/8 Arahan Direksi/9 Perilaku Wajib dan QR/reference tidak termasuk rilis awal; backlog OPN-011/012. |
 | FR-PRN-004 | Teks, urutan, kolom, dan kotak centang mengikuti formulir; perubahan output menaikkan versi renderer dan disertai regresi visual. |
 | FR-PRN-005 | Hanya paket `READY` dari versi `ISSUED` yang resmi dan dapat diunduh dengan audit; pratinjau draft ber-watermark `DRAFT / TIDAK BERLAKU` dan tidak disimpan. |
@@ -282,9 +295,9 @@ sequenceDiagram
 | FR-REN-002 | Permintaan membuat task `AREA_RENEWAL_REVIEW` untuk Manager pemilik wilayah tanpa mengubah status PTW asal; selama tertunda, lampiran PTW asal terkunci dan closure ditolak. |
 | FR-REN-003 | Manager dapat **Minta hardcopy ulang** (Sponsor wajib mengganti evidence sebelum mengajukan lagi), **Tolak**, atau **Setujui** setelah mengonfirmasi verifikasi lapangan dan keterbacaan hardcopy. |
 | FR-REN-004 | Approval membuat PTW penerus `DRAFT` secara atomik dengan Sponsor dan lokasi sama, periode yang disetujui, lineage `RenewedFromPermitId`, tanpa lampiran/Bagian 5/Bagian 7; penerus menjalani submit, validasi HSE, review Bagian 7, dan approval penerbitan normal. Satu PTW asal hanya memiliki satu penerus. |
-| FR-CLO-001 | Sponsor mengunggah `SIGNED_FIELD_COPY` untuk paket cetak `READY`, memberi pernyataan penyelesaian, lalu mengajukan close dari `ISSUED`, `SUSPENDED`, atau `EXPIRED`. |
+| FR-CLO-001 | Sponsor mengunggah `SIGNED_FIELD_COPY` untuk paket cetak `READY`, memberi pernyataan penyelesaian dan mengisi Bagian 9 digital (status pekerjaan selesai/belum selesai dalam 7 hari, peralatan dan material sudah/belum dikeluarkan, penjelasan, nama dan No. ID Badge Pelaksana Pekerjaan, No. ID Badge Sponsor), lalu mengajukan close dari `ISSUED`, `SUSPENDED`, atau `EXPIRED`; Bagian 9 wajib juga pada pengajuan ulang dan masuk payload audit `closure_requested`/`closure_resubmitted` (UAT-2026-10-12 no. 17–18). |
 | FR-CLO-002 | API menolak request close tanpa file `CLEAN`, bermetadata lengkap, tidak superseded, dan cocok dengan PrintPackage/PermitVersion; juga ditolak selama review renewal aktif atau setelah penerus dibuat. |
-| FR-CLO-003 | Manager atau SO/Officer pemilik wilayah dengan scope lokasi cocok membuka satu task pool `AREA_CLOSE_VERIFICATION`, mengunduh signed field copy pilihan Sponsor sebagai dokumen utama PTW, lalu memilih **Tutup PTW** dengan verifikasi Bagian 10 terstruktur (nama Officer ≤ 100 karakter, area diinspeksi dan bersih, pekerjaan selesai, Pemilik Wilayah setuju selesai, sistem inhibited dipulihkan, handback dan pengaman dipulihkan, hardcopy terbaca) atau **Minta tindak lanjut** dengan alasan. |
+| FR-CLO-003 | Manager atau SO/Officer pemilik wilayah dengan scope lokasi cocok membuka satu task pool `AREA_CLOSE_VERIFICATION`, mengunduh signed field copy pilihan Sponsor sebagai dokumen utama PTW, lalu memilih **Tutup PTW** dengan verifikasi Bagian 10 terstruktur (nama Officer ≤ 100 karakter, area diinspeksi dan bersih, pekerjaan selesai, Pemilik Wilayah setuju selesai, sistem inhibited dipulihkan, handback dan pengaman dipulihkan, hardcopy terbaca) atau **Minta tindak lanjut** dengan alasan. Bila Sponsor menyatakan pekerjaan belum selesai pada Bagian 9, close mewajibkan `incompleteWorkStatus` dan menolak pernyataan "pekerjaan selesai" (`permit.closure.completion_mismatch`); seluruh Bagian 9/10 masuk payload audit `permit_closed` dan tampil pada riwayat PTW. |
 | FR-CLO-004 | Setelah tindak lanjut diminta, close terkunci; Sponsor mengunggah hardcopy pengganti untuk paket cetak yang sama dan mengajukan ulang dengan evidence berbeda; task mengikuti versi baru; status tetap `CLOSURE_REQUESTED`. |
 | FR-CLO-005 | PIC HSE tidak menerima task approval close; PIC HSE melihat status dan bukti sesuai scope. |
 | FR-CLO-006 | `CLOSED` immutable; addendum koreksi tidak mengubah event, approval, atau file dasar close. |
@@ -296,7 +309,7 @@ sequenceDiagram
     participant API as PTW API
     actor M as Manager pemilik wilayah
     S->>API: Upload SIGNED_FIELD_COPY (PrintPackage READY)
-    S->>API: POST /permits/{id}/closure-requests
+    S->>API: POST /permits/{id}/closure-requests + Bagian 9
     API-->>M: CLOSURE_REQUESTED + task AREA_CLOSE_VERIFICATION
     M->>API: Buka evidence dan bandingkan dengan paket cetak
     alt Bagian 10 lengkap
@@ -318,7 +331,7 @@ sequenceDiagram
 | FR-TSK-002 | Shell aplikasi memuat ulang daftar task setiap 30 detik untuk ikon lonceng; error ditelan. |
 | FR-DSH-001 | Dashboard peran menampilkan hitungan dan daftar per status: Draft, Menunggu Validasi, Perlu Revisi, Menunggu Persetujuan Wilayah, Diterbitkan, Ditangguhkan, Penutupan Diminta, Ditutup, Ditolak, Dibatalkan, Kedaluwarsa. |
 | FR-DSH-002 | Angka dashboard dapat ditelusuri ke daftar PTW. |
-| FR-REP-001 | Daftar PTW terpaginasi server-side (`offset`/`limit` 1–100, pilihan 10/25/50/100) dengan pencarian nomor/judul/perusahaan/lokasi yang diterapkan setelah filter Sponsor/role dan scope baca; Papan Operasi read-only tersedia untuk Administrator, PIC HSE, SO/Officer, dan Manager Pemilik Wilayah. SO/Officer dan Manager berscope ORF memperoleh scope baca lintas lokasi (Amendemen 1 PTW-WORKFLOW-BASELINE). Filter lanjutan dan ekspor menjadi backlog. |
+| FR-REP-001 | Daftar PTW terpaginasi server-side (`offset`/`limit` 1–100, pilihan 10/25/50/100, teks rentang dan "Halaman X dari Y") dengan pencarian nomor/judul/perusahaan/lokasi yang diterapkan setelah filter Sponsor/role dan scope baca; Papan Operasi read-only tersedia untuk Administrator, PIC HSE, SO/Officer, dan Manager Pemilik Wilayah. SO/Officer dan Manager berscope ORF memperoleh scope baca lintas lokasi (Amendemen 1 PTW-WORKFLOW-BASELINE). Filter lanjutan dan ekspor menjadi backlog. |
 | FR-NOT-001 | Notifikasi in-app melalui task; kanal email/webhook melalui outbox menjadi backlog. |
 | FR-AUD-001 | Riwayat PTW menggabungkan perubahan status, keputusan, evidence, lampiran, unduhan dokumen resmi, dan versi. |
 
@@ -327,11 +340,11 @@ sequenceDiagram
 | ID | Requirement / acceptance utama |
 | --- | --- |
 | FR-ADM-001 | Master lokasi effective-dated dengan draft, submit, approve, dan return-for-changes (maker-checker). |
-| FR-ADM-002 | Perubahan kritis membutuhkan maker-checker; produksi tidak mengizinkan self-approval. |
+| FR-ADM-002 | Master lokasi membutuhkan maker-checker; assignment role ditetapkan dan berlaku dalam satu simpan Administrator (OPN-007 Amendemen 2), termasuk **Tetapkan PJS** yang membuat assignment `Delegation` berperiode wajib dari assignment Manager sumber. |
 | FR-ADM-003 | Halaman kesiapan policy menampilkan status referensi keputusan OPN dan versi policy; simulasi policy dan suite UAT policy tersedia untuk Administrator. |
 | FR-ADM-004 | Administrator melihat status render paket dan dapat menjadwalkan render ulang. |
 | FR-ADM-005 | Konfigurasi release lokasi ada di server: konfigurasi dasar tidak merilis lokasi, sedangkan Development dan Production membuka ORF, Site Office, dan Water-Based Activity (PTW-WORKFLOW-BASELINE). Master lokasi effective-dated dan ConfigurationBundle adalah backlog OPN-001/002. |
-| FR-ADM-006 | Profil role (`Administrator`, `Sponsor`, `HSEValidator`, `AreaOwnerSeniorOfficer`, `AreaOwnerManager`, `Auditor`) dikonfigurasi server dengan action code dan flag `LocationRequired`; profil Development bukan matriks OPN-002. |
+| FR-ADM-006 | Profil role (`Administrator`, `Requester`, `Sponsor`, `HSEValidator`, `AreaOwnerSeniorOfficer`, `AreaOwnerManager`, `Auditor`) dikonfigurasi server dengan action code dan flag `LocationRequired`; `Requester` (`permit.initial.create/update/submit`) tanpa lokasi dan dapat diberikan ke akun mana pun, tetapi akun Kontraktor hanya memegang role ini; profil Development bukan matriks OPN-002. |
 
 ## 6. Validasi dan pengalaman pengguna
 
@@ -350,7 +363,7 @@ sequenceDiagram
 
 ### 6.2 Validasi umum
 
-Validasi client hanya membantu; API mengulang semua rule. Request yang basi mengembalikan `409` dengan ETag terbaru. Field terkontrol memakai kode katalog; free text dibatasi panjang dan di-output-encode. Sebelum submit, Sponsor melihat daftar dokumen dasar dan pilihan Bagian 4 yang belum berlampiran. Sebelum renewal atau close, Sponsor memilih paket cetak dan hardcopy yang cocok; Manager tetap menjadi verifier akhir.
+Validasi client hanya membantu; API mengulang semua rule. Request yang basi mengembalikan `409` dengan ETag terbaru. Field terkontrol memakai kode katalog; free text dibatasi panjang dan di-output-encode. Sebelum mengajukan ke Sponsor atau ke PIC HSE, Pemohon/Sponsor melihat daftar dokumen dasar dan pilihan Bagian 4 yang belum berlampiran. Sebelum renewal atau close, Sponsor memilih paket cetak dan hardcopy yang cocok; Manager tetap menjadi verifier akhir.
 
 ## 7. Model informasi logis
 
@@ -406,7 +419,7 @@ Data rinci, tipe, constraint, index, dan schema terdapat pada FSD.
 
 ## 10. Analitik dan event produk
 
-Event domain tanpa isi sensitif: `permit_submitted`, `hse_validation_completed`, `hse_validation_escalated`, `revision_requested`, `area_operations_review_completed`, `permit_issued`, `permit_rejected`, `permit_cancelled`, `permit_suspended`, `permit_suspension_resolved`, `permit_renewal_requested`, `renewal_evidence_replacement_requested`, `renewal_rejected`, `renewal_approved`, `closure_requested`, `closure_evidence_replacement_requested`, `closure_resubmitted`, `permit_closed`, `permit_expired`, dan event render paket. Setiap event memuat permit ID, versi, aktor, timestamp, dan correlation ID.
+Event domain tanpa isi sensitif: `permit_initial_submitted`, `permit_initial_approved`, `permit_initial_returned`, `permit_initial_rejected`, `permit_submitted`, `hse_safety_equipment_saved`, `hse_validation_completed`, `hse_validation_escalated`, `revision_requested`, `area_operations_review_completed`, `permit_issued`, `permit_rejected`, `permit_cancelled`, `permit_suspended`, `permit_suspension_resolved`, `permit_renewal_requested`, `renewal_evidence_replacement_requested`, `renewal_rejected`, `renewal_approved`, `closure_requested`, `closure_evidence_replacement_requested`, `closure_resubmitted`, `permit_closed`, `permit_expired`, dan event render paket. Setiap event memuat permit ID, versi, aktor, timestamp, dan correlation ID.
 
 ## 11. Strategi delivery dan feature flag
 
@@ -417,6 +430,7 @@ Event domain tanpa isi sensitif: `permit_submitted`, `hse_validation_completed`,
 | I3 Review & Terbit | Review Bagian 7 SO/Officer, approve-and-issue Manager, paket cetak A3 dua halaman | Tersedia |
 | I4 Renewal & Penutupan | Renewal berbasis review, closure dengan verifikasi Bagian 10 dan tindak lanjut | Tersedia |
 | I5 Produksi | Identitas Portal API, topologi satu host, hardening sesi/kredensial, Papan Operasi, dan pengesahan alur (24–25 Sep 2026) | Selesai |
+| I5a Tindak lanjut UAT | 18 temuan UAT-2026-10-12 (Pemohon dan persetujuan awal Sponsor, nomor tahunan, Bagian 9/10 digital, PJS, self check, APD tersimpan, pengingat HSSE, UX unggah/pratinjau), self-validation Sponsor, tanda tangan Pemohon (12–21 Okt 2026) | Selesai |
 | I6 Backlog | Scanner produksi, scope Kontraktor, expiry otomatis, notifikasi eksternal, laporan/ekspor lanjutan, observability/on-call | Backlog |
 
 Feature flag/release lokasi hanya untuk rollout aman; tidak boleh melewati safety guard.
@@ -432,11 +446,12 @@ Feature flag/release lokasi hanya untuk rollout aman; tidak boleh melewati safet
 
 ### 12.1 Skenario UAT minimum
 
-1. Hot Work ORF: klasifikasi header multi-select, Bagian 1–4 lengkap, dokumen dasar, validasi PIC HSE + Bagian 5, review Bagian 7 SO/Officer, approval Manager ORF, `ISSUED`, PDF dua halaman A3 benar.
+1. Hot Work ORF: Pemohon membuat draft dan mengajukan ke Sponsor, Sponsor menyetujui (nomor `PTW/NNNN/DD/MM/YYYY`), klasifikasi header multi-select, Bagian 1–4 lengkap, dokumen dasar, validasi PIC HSE + Bagian 5, review Bagian 7 SO/Officer, approval Manager ORF, `ISSUED`, PDF dua halaman A3 benar (halaman 2 hanya Bagian 8, pengingat HSSE halaman 1, spesimen Pemohon pada slot Pelaksana Pekerjaan).
 2. Cold Work Site Office: tepat satu klasifikasi risiko, routing ke SO/Officer dan Manager General Affair.
 3. CSE Water-Based Activity: tanpa klasifikasi header, routing ke Transport & Operasi FSRU, Bagian 6 kosong pada cetak.
 4. Submit ditolak tanpa salah satu dokumen dasar, bila JSA atau Prosedur Pekerjaan tidak terpilih pada Bagian 4, tanpa lampiran pilihan Bagian 4, atau bila metadata JSA tidak cocok.
-5. Sponsor yang juga PIC HSE tidak dapat memvalidasi; validator lain dapat.
+5. Sponsor yang juga PIC HSE dapat memvalidasi PTW-nya sendiri (HSE-SPONSOR-SELF-VALIDATION) dan setelah itu ditolak sebagai reviewer Bagian 7 maupun Manager penerbit.
+5a. Sponsor tanpa role `Requester` tidak melihat tombol `Buat PTW baru`; Sponsor mengembalikan PTW awal ke Pemohon, Pemohon mengajukan ulang, lalu Sponsor menolak (`REJECTED`) pada skenario terpisah. Submit ulang setelah revisi memerlukan self check Sponsor; validasi versi 2 memerlukan self check PIC HSE; `Simpan Pilihan APD` bertahan melewati revisi; PJS Manager demo menerbitkan PTW dengan label PJS pada ringkasan workflow dan paket cetak.
 6. Reviewer SO/Officer pertama menang; reviewer kedua memperoleh `404`; Sponsor/validator ditolak sebagai reviewer.
 7. Manager yang sama dengan Sponsor/validator/reviewer ditolak; Manager wilayah lain ditolak; approval tanpa Bagian 5 atau 7 ditolak.
 8. Revisi dari PIC HSE, SO/Officer, dan Manager membuat task Sponsor; submit ulang menaikkan versi dan membuat task validasi baru.
@@ -444,7 +459,7 @@ Feature flag/release lokasi hanya untuk rollout aman; tidak boleh melewati safet
 10. HO/FSRU ditolak `permit.location.not_released`.
 11. Suspend oleh PIC HSE/Manager, resolve oleh Manager dengan peringatan revalidasi.
 12. Renewal: request tanpa hardcopy `CLEAN` ditolak; overlap ditolak; Manager minta hardcopy ulang, tolak, lalu setujui; draft penerus lahir hanya setelah approval dan menjalani workflow penuh.
-13. Closure happy path dengan verifikasi Bagian 10; jalur pekerjaan belum selesai: close terkunci, upload pengganti paket sama, ajukan ulang, lalu tutup.
+13. Closure happy path dengan Bagian 9 Sponsor dan verifikasi Bagian 10; jalur pekerjaan belum selesai: close terkunci, upload pengganti paket sama, ajukan ulang, lalu tutup; Bagian 9 "belum selesai" ditutup dengan `incompleteWorkStatus` yang tampil pada riwayat.
 14. Request closure ditolak saat review renewal aktif, evidence bukan `CLEAN`, atau paket belum `READY`.
 15. Cancel oleh Sponsor dari `DRAFT`/`UNDER_VALIDATION`/`REVISION_REQUIRED`; ditolak dari status lain.
 16. Paket `READY` dapat diunduh dengan audit; pratinjau ber-watermark; paket `FAILED` dapat dirender ulang Administrator.
@@ -460,7 +475,7 @@ Sebuah requirement selesai apabila acceptance telah diuji positif dan negatif; a
 | PRD | BRD | FSD |
 | --- | --- | --- |
 | FR-AUT | BR-AUT | Identity, role profiles, assignment, sec schema |
-| FR-INT | BR-INT | Evidence E-SIMI; adapter backlog |
+| FR-INI | BR-INI | Inisiasi Pemohon, task `SPONSOR_INITIAL_APPROVAL`/`REQUESTER_INITIAL_REVISION`, `PermitInitiation` |
 | FR-PTW/FR-RUL/FR-DOC | BR-INI/CLS/RSK/DOC | Permit aggregate, katalog, attachment service |
 | FR-RVW/FR-APR | BR-RVW/APR | Workflow tasks, decision evidence |
 | FR-ISS/PRN | BR-ISS/PRN | Issuance transaction, print snapshot/renderer |
@@ -470,7 +485,7 @@ Sebuah requirement selesai apabila acceptance telah diuji positif dan negatif; a
 
 ## 15. Isu produk terbuka
 
-PRD mengikuti OPN-001 sampai OPN-012 pada BRD Bagian 13. Keadaan sistem dan alur disahkan stakeholder pada 25 September 2026 (PTW-WORKFLOW-BASELINE Amendemen 2): OPN-001 sampai OPN-007, OPN-009, OPN-010, dan OPN-011 ACCEPTED sejauh keadaan sistem menjawabnya, OPN-008 dan OPN-012 ACCEPTED sebagian. Backlog yang tersisa tidak menahan alur: pejabat pengganti/delegasi (fail-closed), SLA dan eskalasi, master lokasi/katalog effective-dated, scope perusahaan Kontraktor, integrasi API E-SIMI, periode retensi dan angka RPO/RTO, observability/on-call, halaman kampanye, dan QR/reference.
+PRD mengikuti OPN-001 sampai OPN-012 pada BRD Bagian 13. Keadaan sistem dan alur disahkan stakeholder pada 25 September 2026 (PTW-WORKFLOW-BASELINE Amendemen 2): OPN-001 sampai OPN-007, OPN-009, OPN-010, dan OPN-011 ACCEPTED sejauh keadaan sistem menjawabnya, OPN-008 dan OPN-012 ACCEPTED sebagian. Tindak lanjut UAT 12 Oktober 2026 (UAT-2026-10-12, Amendemen 3), HSE-SPONSOR-SELF-VALIDATION (20 Oktober 2026), dan REQUESTER-PELAKSANA-SIGNATURE (21 Oktober 2026) telah disahkan dan diimplementasikan. Backlog yang tersisa tidak menahan alur: model pejabat pengganti lengkap di luar label PJS berbasis delegasi, SLA dan eskalasi, master lokasi/katalog effective-dated, scope perusahaan Kontraktor, periode retensi dan angka RPO/RTO, observability/on-call, halaman kampanye, dan QR/reference.
 
 ## 16. Referensi versi platform resmi
 
