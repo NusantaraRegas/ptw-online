@@ -21,6 +21,19 @@ public sealed record SponsorPrintEvidence(
     VisualSignatureEvidence? Signature);
 
 /// <summary>
+/// Pemohon (Requester) account frozen at issuance so Bagian 3 prints the Pelaksana Pekerjaan signature
+/// from the account that handed the PTW to the Sponsor (REQUESTER-PELAKSANA-SIGNATURE). Null for
+/// drafts without an initiation (Sponsor-created or renewal drafts), which keep the slot blank.
+/// </summary>
+public sealed record RequesterPrintEvidence(
+    string ActorId,
+    string? ActorName,
+    string? ActorPosition,
+    string? Department,
+    DateTimeOffset SubmittedAt,
+    VisualSignatureEvidence? Signature);
+
+/// <summary>
 /// Canonical content of an immutable <c>doc.PrintPackageSnapshot</c>. The renderer consumes only this
 /// payload, never live permit tables, so a retry always reproduces the approved document (FSD ADR-010).
 /// </summary>
@@ -38,7 +51,8 @@ public sealed record PrintPackageSnapshotPayload(
     DateTimeOffset CreatedAt,
     IReadOnlyList<SupportingDocumentEvidenceSnapshot>? SupportingDocuments = null,
     AreaOperationsReviewEvidence? AreaOperationsReview = null,
-    SponsorPrintEvidence? Sponsor = null);
+    SponsorPrintEvidence? Sponsor = null,
+    RequesterPrintEvidence? Requester = null);
 
 public sealed record PrintPackageDocumentEntry(
     Guid PrintPackageId,

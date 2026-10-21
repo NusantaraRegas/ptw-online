@@ -840,6 +840,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
                 attachment.DocumentDate))
             .ToArray();
         var sponsor = await ResolveSponsorPrintEvidenceAsync(permit, cancellationToken);
+        var requester = await ResolveRequesterPrintEvidenceAsync(permit, cancellationToken);
 
         var snapshotJson = JsonSerializer.Serialize(new
         {
@@ -856,7 +857,8 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             approval.CampaignAssetVersion,
             CreatedAt = occurredAt,
             SupportingDocuments = supportingDocuments,
-            Sponsor = sponsor
+            Sponsor = sponsor,
+            Requester = requester
         }, JsonOptions);
         var snapshotId = Guid.CreateVersion7();
         dbContext.PrintPackageSnapshots.Add(new PrintPackageSnapshotRecord
@@ -888,10 +890,7 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
     {
         var account = await dbContext.UserAccounts.AsNoTracking()
             .SingleOrDefaultAsync(x => x.SubjectId == permit.Draft.SponsorId, cancellationToken);
-        var signature = await dbContext.UserSignatureVersions.AsNoTracking()
-            .SingleOrDefaultAsync(
-                x => x.SubjectId == permit.Draft.SponsorId && x.IsActive,
-                cancellationToken);
+        var signature = await LoadActiveSignatureAsync(permit.Draft.SponsorId, cancellationToken);
         var submittedAt = await dbContext.AuditEvents.AsNoTracking()
             .Where(x => x.PermitId == permit.Id && x.EventType == "permit_submitted")
             .OrderByDescending(x => x.OccurredAt)
@@ -905,14 +904,51 @@ public sealed class PermitStore(PtwDbContext dbContext) : IPermitStore
             account?.Position,
             account?.Department,
             submittedAt,
-            signature is null
-                ? null
-                : new VisualSignatureEvidence(
-                    signature.Id,
-                    signature.Version,
-                    signature.MediaType,
-                    signature.Content,
-                    signature.Sha256));
+            signature);
+    }
+
+    /// <summary>
+    /// Freezes the Pemohon who handed the PTW to the Sponsor so Bagian 3 prints the Pelaksana Pekerjaan
+    /// signature from that account (REQUESTER-PELAKSANA-SIGNATURE). The signed-at time is the last
+    /// hand-over the Sponsor approved, not the Sponsor's own submission. Drafts without an initiation
+    /// (Sponsor-created or renewal drafts) return null and keep the slot blank for hardcopy.
+    /// </summary>
+    private async Task<RequesterPrintEvidence?> ResolveRequesterPrintEvidenceAsync(
+        Permit permit,
+        CancellationToken cancellationToken)
+    {
+        if (permit.Initiation is not { Status: PermitInitiationStatus.Approved, SubmittedToSponsorAt: { } submittedAt } initiation)
+        {
+            return null;
+        }
+
+        var account = await dbContext.UserAccounts.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.SubjectId == initiation.RequesterId, cancellationToken);
+        var signature = await LoadActiveSignatureAsync(initiation.RequesterId, cancellationToken);
+
+        return new RequesterPrintEvidence(
+            initiation.RequesterId,
+            account?.DisplayName ?? initiation.RequesterName,
+            account?.Position,
+            account?.Department,
+            submittedAt,
+            signature);
+    }
+
+    private async Task<VisualSignatureEvidence?> LoadActiveSignatureAsync(
+        string subjectId,
+        CancellationToken cancellationToken)
+    {
+        var signature = await dbContext.UserSignatureVersions.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.SubjectId == subjectId && x.IsActive, cancellationToken);
+        return signature is null
+            ? null
+            : new VisualSignatureEvidence(
+                signature.Id,
+                signature.Version,
+                signature.MediaType,
+                signature.Content,
+                signature.Sha256);
     }
 
     private async Task AddAreaOperationsReviewDecisionAsync(

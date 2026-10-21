@@ -129,7 +129,7 @@ Printing:
 - `PtwFormRenderer` memotong halaman 2 pada rule bawah Bagian 8 (`TemplateOverlayCatalog.PageSplit`) dan mencetak blok `HsseReminder` (wording verbatim UAT no. 12) di bawah formulir halaman 1; label Bagian 4 `Sertifikat Pekerja` ditimpa di atas template. Jangan mengembalikan Bagian 9/10 ke cetakan tanpa decision record baru.
 - `PtwFormRenderer.RendererVersion` harus dinaikkan bila output dokumen berubah.
 - Font dan logo di-embed sebagai `EmbeddedResource` agar render deterministik pada image runtime tanpa font sistem.
-- `SponsorPrintEvidence` (nama, jabatan, departemen, waktu submit, dan spesimen tanda tangan berversi Sponsor) dibekukan ke `PrintPackageSnapshotPayload.Sponsor` saat penerbitan dan dicetak pada Bagian 3; snapshot lama tanpa field ini tetap dirender dengan Subject ID Sponsor.
+- `SponsorPrintEvidence` (nama, jabatan, departemen, waktu submit, dan spesimen tanda tangan berversi Sponsor) dibekukan ke `PrintPackageSnapshotPayload.Sponsor` saat penerbitan dan dicetak pada Bagian 3; snapshot lama tanpa field ini tetap dirender dengan Subject ID Sponsor. `RequesterPrintEvidence` (akun Pemohon yang mengajukan PTW ke Sponsor: nama, jabatan, departemen, `SubmittedToSponsorAt`, spesimen berversi) dibekukan ke `PrintPackageSnapshotPayload.Requester` dan mengisi slot tanda tangan dan tanggal Pelaksana Pekerjaan (REQUESTER-PELAKSANA-SIGNATURE, 21 Okt 2026); baris nama tetap `PerformingAuthority`, dan PTW tanpa inisiasi Pemohon membiarkan slot kosong.
 
 ## 5. Autoreview
 
@@ -212,7 +212,7 @@ Jika salah satu gate ini berpotensi melemah, hentikan pekerjaan dan minta keputu
 ### Gate E — Paket cetak
 
 - [ ] Output tetap setia pada formulir terkontrol FM-001/002/003-B-002-NR-B220 sebagai dua halaman A3: halaman 1 landscape untuk Bagian 1–7 dan halaman 2 portrait yang dimulai pada Bagian 8. Jangan mengganti dengan layout digital yang lebih rapi, template placeholder, atau menunda layout.
-- [ ] Sistem mengisi Bagian 1–5 (termasuk nama, jabatan, departemen, spesimen tanda tangan, dan waktu submit Sponsor pada Bagian 3; tanda tangan Pelaksana Pekerjaan tetap kosong) dan evidence Bagian 7 (checklist kondisi operasi reviewer SO/Officer serta baris keputusan SO/Officer dan Manager, dengan nama/jabatan aktor dari profil akun dan spesimen tanda tangan berversi bila ada) dari snapshot immutable; Bagian 6 dan Bagian 8 dicetak kosong dengan ruang tulis yang memadai, Bagian 9–10 tidak dicetak (digital), dan blok pengingat HSSE tercetak di bawah halaman 1.
+- [ ] Sistem mengisi Bagian 1–5 (termasuk nama, jabatan, departemen, spesimen tanda tangan, dan waktu submit Sponsor pada Bagian 3; slot tanda tangan Pelaksana Pekerjaan memakai spesimen dan waktu pengajuan akun Pemohon bila PTW diinisiasi Pemohon, kosong bila tidak) dan evidence Bagian 7 (checklist kondisi operasi reviewer SO/Officer serta baris keputusan SO/Officer dan Manager, dengan nama/jabatan aktor dari profil akun dan spesimen tanda tangan berversi bila ada) dari snapshot immutable; Bagian 6 dan Bagian 8 dicetak kosong dengan ruang tulis yang memadai, Bagian 9–10 tidak dicetak (digital), dan blok pengingat HSSE tercetak di bawah halaman 1.
 - [ ] Perubahan output menaikkan `RendererVersion` dan disertai test regresi di `tests/Ptw.Printing.Tests`.
 - [ ] Kegagalan render tidak membatalkan keputusan penerbitan: `RETRYING` dengan backoff, lalu `FAILED`, dengan retry administrator yang idempotent.
 - [ ] Pratinjau draft selalu ber-watermark `DRAFT / TIDAK BERLAKU` dan tidak pernah disimpan; setiap unduhan dokumen resmi menghasilkan audit event.

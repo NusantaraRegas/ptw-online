@@ -148,6 +148,32 @@ public sealed class PtwFormRendererTests
         DumpForVisualReview(signed.Content, "SPONSOR-EVIDENCE");
     }
 
+    [Theory]
+    [InlineData(PermitClass.HotWork)]
+    [InlineData(PermitClass.ColdWork)]
+    [InlineData(PermitClass.ConfinedSpaceEntry)]
+    public void RequesterSignatureAndHandOverDateFillThePelaksanaPekerjaanSlot(PermitClass permitClass)
+    {
+        var renderer = new PtwFormRenderer();
+        var populated = Snapshot(permitClass);
+        var withoutRequesterEvidence = populated with { Requester = null };
+        var withoutSpecimen = populated with
+        {
+            Requester = populated.Requester! with { Signature = null }
+        };
+
+        var signed = renderer.Render(new(populated, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var repeat = renderer.Render(new(populated, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var sponsorOnly = renderer.Render(new(withoutRequesterEvidence, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+        var dateOnly = renderer.Render(new(withoutSpecimen, "A1B2C3D4E5F60718293A4B5C6D7E8F90", Watermark: false));
+
+        Assert.Equal(Canonicalise(signed.Content), Canonicalise(repeat.Content));
+        Assert.NotEqual(Canonicalise(signed.Content), Canonicalise(sponsorOnly.Content));
+        Assert.NotEqual(Canonicalise(signed.Content), Canonicalise(dateOnly.Content));
+        Assert.NotEqual(Canonicalise(dateOnly.Content), Canonicalise(sponsorOnly.Content));
+        DumpForVisualReview(signed.Content, $"REQUESTER-EVIDENCE-{permitClass}");
+    }
+
     [Fact]
     public void DraftPreviewIsWatermarkedAndDiffersFromTheOfficialDocument()
     {
@@ -356,7 +382,7 @@ public sealed class PtwFormRendererTests
         Assert.Equal("2. PASTIKAN Pelaksana Pekerjaan/Kontraktor Memahami Semua Risiko serta Melaksanakan Tindakan Pengendaliannya.", HsseReminder.Lines[1]);
         Assert.Equal("3. PASTIKAN Pelaksana Pekerjaan/Kontraktor Bekerja Aman dengan Perilaku/Tindakan Aman dan Kondisi Aman.", HsseReminder.Lines[2]);
         Assert.Equal("4. PASTIKAN semua Pelaksana Pekerjaan Fit To Work.", HsseReminder.Lines[3]);
-        Assert.Equal("ptw-form-renderer/4.1.0", PtwFormRenderer.RendererVersion);
+        Assert.Equal("ptw-form-renderer/4.2.0", PtwFormRenderer.RendererVersion);
     }
 
     [Fact]
@@ -449,6 +475,18 @@ public sealed class PtwFormRendererTests
             new VisualSignatureEvidence(
                 Guid.Parse("01994DCE-0000-7000-8000-000000000002"),
                 2,
+                "image/png",
+                SignaturePng,
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(SignaturePng)))),
+        Requester: new RequesterPrintEvidence(
+            "requester.demo",
+            "Budi Santoso",
+            "Supervisor Mekanikal",
+            "PT Mitra Kerja Sejahtera",
+            IssuedAt.AddHours(-5),
+            new VisualSignatureEvidence(
+                Guid.Parse("01994DCE-0000-7000-8000-000000000003"),
+                1,
                 "image/png",
                 SignaturePng,
                 Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(SignaturePng)))));

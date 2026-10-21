@@ -85,18 +85,24 @@ internal sealed partial class PtwFormRenderer
         OverlayFittedText(canvas, layout.SponsorRole, sponsorName, 3.8, 2.6);
         if (snapshot.Sponsor is not null)
         {
-            _ = TryOverlaySignature(canvas, layout.SponsorSignature, snapshot.Sponsor.Signature);
-            canvas.Fill(
-                Pt(layout.SponsorSignedAt.X - 1),
-                Pt(layout.SponsorSignedAt.Y - 1),
-                Pt(layout.SponsorSignedAt.Width + 2),
-                Pt(layout.SponsorSignedAt.Height + 2),
-                XColors.White);
-            OverlayText(
+            OverlaySignedSlot(
                 canvas,
+                layout.SponsorSignature,
                 layout.SponsorSignedAt,
-                $"Tanggal : {FormCanvas.Wib(snapshot.Sponsor.SubmittedAt, "dd/MM/yy HH:mm")}",
-                3.5);
+                snapshot.Sponsor.Signature,
+                snapshot.Sponsor.SubmittedAt);
+        }
+
+        // The Pelaksana Pekerjaan slot is signed by the Pemohon account that handed the PTW to the
+        // Sponsor (REQUESTER-PELAKSANA-SIGNATURE); the name line keeps the declared performing authority.
+        if (snapshot.Requester is not null)
+        {
+            OverlaySignedSlot(
+                canvas,
+                layout.RequesterSignature,
+                layout.RequesterSignedAt,
+                snapshot.Requester.Signature,
+                snapshot.Requester.SubmittedAt);
         }
 
         var selectedDocuments = BuildDocumentSelection(snapshot);
@@ -329,6 +335,27 @@ internal sealed partial class PtwFormRenderer
             align: TextAlign.Center);
     }
 
+    private static void OverlaySignedSlot(
+        FormCanvas canvas,
+        PdfRect signatureRect,
+        PdfRect signedAtRect,
+        VisualSignatureEvidence? signature,
+        DateTimeOffset signedAt)
+    {
+        _ = TryOverlaySignature(canvas, signatureRect, signature);
+        canvas.Fill(
+            Pt(signedAtRect.X - 1),
+            Pt(signedAtRect.Y - 1),
+            Pt(signedAtRect.Width + 2),
+            Pt(signedAtRect.Height + 2),
+            XColors.White);
+        OverlayText(
+            canvas,
+            signedAtRect,
+            $"Tanggal : {FormCanvas.Wib(signedAt, "dd/MM/yy HH:mm")}",
+            3.5);
+    }
+
     private static bool TryOverlaySignature(
         FormCanvas canvas,
         PdfRect target,
@@ -532,6 +559,8 @@ internal sealed record TemplateOverlayLayout(
     PdfRect SponsorRole,
     PdfRect SponsorSignature,
     PdfRect SponsorSignedAt,
+    PdfRect RequesterSignature,
+    PdfRect RequesterSignedAt,
     IReadOnlyList<double> WorkTypeCheckXs,
     IReadOnlyList<double> WorkTypeCheckYs,
     PdfRect OtherWorkTypeDescription,
@@ -587,6 +616,8 @@ internal static class TemplateOverlayCatalog
         new(119, 450, 174, 7),
         new(110, 421, 68, 27),
         new(187, 440, 106, 7),
+        new(110, 381, 68, 27),
+        new(187, 400, 106, 7),
         [87.3, 217.6, 309.6, 383.4, 462.9],
         [231.8, 244.2, 256.2, 267.5],
         new(505, 244, 263, 8),
@@ -635,6 +666,8 @@ internal static class TemplateOverlayCatalog
         new(103, 448, 192, 7),
         new(94, 419, 69, 27),
         new(171, 438, 124, 7),
+        new(94, 379, 69, 27),
+        new(171, 398, 124, 7),
         [71.4, 201.7, 300.6, 381.5, 475.9, 556.5],
         [229.4, 241.8, 253.8, 265.1],
         new(602, 253.5, 139, 8),
@@ -683,6 +716,8 @@ internal static class TemplateOverlayCatalog
         new(70, 436, 184, 7),
         new(66, 408, 63, 26),
         new(135, 427, 119, 7),
+        new(66, 370.6, 63, 26),
+        new(135, 389.6, 119, 7),
         [41.5, 163.8, 256.7, 340.6, 440.2, 526.3],
         [227.5, 239.2, 250.5, 263.2],
         new(564, 238.8, 190, 8),

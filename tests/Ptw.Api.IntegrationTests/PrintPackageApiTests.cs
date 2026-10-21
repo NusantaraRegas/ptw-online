@@ -14,9 +14,6 @@ namespace Ptw.Api.IntegrationTests;
 [Collection(PtwApiTestGroup.Name)]
 public sealed class PrintPackageApiTests(PtwApiFactory factory)
 {
-    private static readonly byte[] SignaturePng = Convert.FromBase64String(
-        "iVBORw0KGgoAAAANSUhEUgAAAKAAAAA8CAYAAADha7EVAAACxElEQVR4nO2cQY6DMAxFaTQXyL1m07P0HD1LN3OvHKGjLpAQgpIQ2z82/0mommmxifPjxIH29n6/J0JQJJhnQihAgoYCJFAoQAKFAiRQKEAChQIkUChAAoUCJFAoQAKFAiRQ3Aow35/vb38TH/xMjqHo/JMiCY+C9IdLAZI4uBMgs1wsUrTiIJJAc6C2mAhwDtjndT407C8pr8dtCkhexHL9v0iYTMFagYsuvpnlYI4mQjEBagemxX60ToqMuyJkK/tFyoS5YvBEGmDJQ9AiBfxMO0ugAWaSAT8B0wxajW0N0WoWBLlRfFEGZYqy9tPOEusKv+Xaam1fZZmhmgG/BU2iwxAd8e26kRV+DpAFU4Tsp3W+lI1W+2VHfBGzYLLeFO7p0CP70h1U28azbcoOBoibKVh61KID2zrAWq/3bMVbgmXB5EUcloE/El9vZdq73VIU1tauM2CrOI4CJhlQicy01b6zItTa68tORZgsGtob3Jbze3y1TrtSWbmcsDPSVNwj/u5H8i0W/hacLao+n9l6eKC2WCmC8dvzO3L/NGVAxNQoEVBE1rZ4LrIYiG19SPuoFmDv6LXcWO1dk7aef7QetLzHmzvvuWuKTXQKtliDWPiQFP2WLW3xlR2/yP1YcQFqjYblmsXijkPN9kVPcGvFYDF1loWPUcS2xa3mR8p7p6gaW5I+jnxtvSflc8+2tI81Xu+zH2ZAi7XACF9cGmlbw4oR2nyYAS0yEyITafg78o3cIikDiK25Cva6u966j6fpe/2qSVn4Wh/ToKQrVr5WvizFNzOy2JoEqJn9RgjSCNdAGqpg1LN2Gr4oPmdTcIQOQ0yHJPD3glug+MYFJkBElUicrgEJ0eISUzC50G9E5/vzT9omGZPyevz22mAGJFC4BiRQmAEJFAqQQKEACRQKkEChAAkUCpBAoQAJFAqQTEj+AcBfDu2Urk5nAAAAAElFTkSuQmCC");
-
     [Fact]
     public async Task IssuedPermitRendersAnOfficialPackageThatCanThenBeDownloaded()
     {
@@ -62,9 +59,18 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         Assert.Equal("Operasi", payload.Sponsor.Department);
         Assert.NotNull(payload.Sponsor.Signature);
         Assert.True(payload.Sponsor.SubmittedAt < payload.CreatedAt);
+        // The Pelaksana Pekerjaan slot is signed by the Pemohon account that handed the PTW over.
+        Assert.NotNull(payload.Requester);
+        Assert.Equal($"{sponsorId}.requester", payload.Requester.ActorId);
+        Assert.Equal("Pemohon Paket Cetak", payload.Requester.ActorName);
+        Assert.Equal("Supervisor Mekanikal", payload.Requester.ActorPosition);
+        Assert.Equal("PT Mitra Kerja", payload.Requester.Department);
+        Assert.NotNull(payload.Requester.Signature);
+        Assert.NotEqual(payload.Sponsor.Signature.SignatureVersionId, payload.Requester.Signature.SignatureVersionId);
+        Assert.True(payload.Requester.SubmittedAt < payload.Sponsor.SubmittedAt);
         var document = await db.GeneratedDocuments.AsNoTracking()
             .SingleAsync(x => x.PrintPackageSnapshotId == snapshot.Id);
-        Assert.Equal("ptw-form-renderer/4.1.0", document.RendererVersion);
+        Assert.Equal("ptw-form-renderer/4.2.0", document.RendererVersion);
         // Sensitive downloads are material audit events under BR-AUD-001.
         Assert.True(await db.AuditEvents.AsNoTracking().AnyAsync(
             x => x.PermitId == issued.Id && x.EventType == "print_package_downloaded"));
@@ -182,7 +188,8 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
 
     private async Task<PermitResponse> IssueAsync(string sponsorId, HttpClient sponsor)
     {
-        await CreateSponsorProfileAsync(sponsorId);
+        await CreateProfileAsync(sponsorId, "Sponsor Paket Cetak", "Officer Permit to Work", "Operasi");
+        await CreateProfileAsync($"{sponsorId}.requester", "Pemohon Paket Cetak", "Supervisor Mekanikal", "PT Mitra Kerja");
         using var validator = Client(Unique("hse"), "HSEValidator", "ORF");
         using var seniorOfficer = Client(Unique("senior-officer"), "AreaOwnerSeniorOfficer", "ORF");
         using var manager = Client(Unique("manager"), "AreaOwnerManager", "ORF");
@@ -239,28 +246,32 @@ public sealed class PrintPackageApiTests(PtwApiFactory factory)
         return Required(await issueResponse.Content.ReadFromJsonAsync<PermitResponse>());
     }
 
-    private async Task CreateSponsorProfileAsync(string sponsorId)
+    private async Task CreateProfileAsync(
+        string subjectId,
+        string displayName,
+        string position,
+        string department)
     {
         using var admin = Client(Unique("admin"), "Administrator", "*");
         using var createResponse = await admin.PostAsJsonAsync(
             "/api/v1/admin/users",
             new CreateUserRequest(
-                sponsorId,
+                subjectId,
                 $"user-{Guid.NewGuid():N}",
-                "Sponsor Paket Cetak",
-                "Officer Permit to Work",
-                "Operasi",
+                displayName,
+                position,
+                department,
                 "Development12345"));
         createResponse.EnsureSuccessStatusCode();
         var user = Required(await createResponse.Content.ReadFromJsonAsync<UserAccountResponse>());
 
         using var form = new MultipartFormDataContent();
-        using var image = new ByteArrayContent(SignaturePng);
+        using var image = new ByteArrayContent(TestAssets.SignaturePng);
         image.Headers.ContentType = new MediaTypeHeaderValue("image/png");
         form.Add(image, "file", "signature.png");
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
-            $"/api/v1/admin/users/{sponsorId}/signature")
+            $"/api/v1/admin/users/{subjectId}/signature")
         {
             Content = form
         };

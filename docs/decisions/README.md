@@ -21,6 +21,7 @@ untuk perluasan di masa depan, bukan prasyarat baseline.
 | [OPN-008](OPN-008.md) | Retensi, e-sign, klasifikasi, RPO/RTO | Legal/Records/TI | ACCEPTED sebagian (e-sign dan penanganan data, 25 Sep 2026) | tidak ada; periode retensi, klasifikasi, angka RPO/RTO backlog |
 | [OPN-009](OPN-009.md) | Topologi produksi dan HA | TI | ACCEPTED (24 Sep 2026) | observability/on-call belum diputuskan |
 | [HSE-SPONSOR-SELF-VALIDATION](HSE-SPONSOR-SELF-VALIDATION.md) | Sponsor yang memegang PIC HSE memvalidasi PTW-nya sendiri; SoD Bagian 7 dan penerbitan tetap | HSE/PO | ACCEPTED (20 Okt 2026) | tidak ada |
+| [REQUESTER-PELAKSANA-SIGNATURE](REQUESTER-PELAKSANA-SIGNATURE.md) | Slot tanda tangan Pelaksana Pekerjaan Bagian 3 diisi spesimen dan waktu pengajuan akun Pemohon | PO/HSE | ACCEPTED (21 Okt 2026) | tidak ada |
 | [PROD-UPLOAD-SCAN](PROD-UPLOAD-SCAN.md) | Unggahan tanpa malware scanner | TI/HSE | ACCEPTED risiko (24 Sep 2026) | scanner resmi (backlog) |
 | [PTW-RENEWAL](PTW-RENEWAL.md) | Renewal berbasis review pemilik wilayah | PO/Operasi | ACCEPTED melalui PTW-WORKFLOW-BASELINE (25 Sep 2026) | batas renewal berantai (OPN-010, backlog) |
 | [PTW-WORKFLOW-BASELINE](PTW-WORKFLOW-BASELINE.md) | Pengesahan alur sistem saat ini sebagai baseline operasional; Amendemen 1: scope baca lintas lokasi pemilik wilayah ORF; Amendemen 3: tindak lanjut UAT | PO | ACCEPTED (25 Sep 2026, termasuk Amendemen 1; Amendemen 3 20 Okt 2026) | tidak ada; OPN yang masih DRAFT adalah backlog |
