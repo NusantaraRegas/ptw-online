@@ -9,7 +9,7 @@ namespace Ptw.Infrastructure.Persistence;
 
 public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : IUserDirectoryStore
 {
-    private const int PasswordIterations = 210_000;
+    internal const int PasswordIterations = 210_000;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<IReadOnlyList<StoredUserAccount>> ListAsync(CancellationToken cancellationToken)
@@ -458,7 +458,7 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         }
     }
 
-    private static (byte[] Salt, byte[] Hash) HashPassword(string password)
+    internal static (byte[] Salt, byte[] Hash) HashPassword(string password)
     {
         var salt = RandomNumberGenerator.GetBytes(16);
         var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, PasswordIterations, HashAlgorithmName.SHA256, 32);
@@ -532,7 +532,7 @@ public sealed class UserDirectoryStore(PtwDbContext dbContext, IClock clock) : I
         signature.UploadedAt,
         signature.IsActive);
 
-    private static Guid DeterministicGuid(string value)
+    internal static Guid DeterministicGuid(string value)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value.ToUpperInvariant()));
         return new Guid(hash.AsSpan(0, 16));

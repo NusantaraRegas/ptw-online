@@ -235,6 +235,13 @@ if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))
     await using var migrationScope = app.Services.CreateAsyncScope();
     var migrationDb = migrationScope.ServiceProvider.GetRequiredService<PtwDbContext>();
     await migrationDb.Database.MigrateAsync();
+    if (app.Environment.IsDevelopment())
+    {
+        // Seeded accounts get the shared Development password here, not in a migration, so the
+        // credential never reaches a non-Development database.
+        var seeder = migrationScope.ServiceProvider.GetRequiredService<DevelopmentDirectorySeeder>();
+        StartupLog.DevelopmentCredentialsSeeded(app.Logger, await seeder.SeedLocalCredentialsAsync(CancellationToken.None));
+    }
     return;
 }
 

@@ -1,3 +1,4 @@
+using Ptw.Infrastructure.Persistence;
 using Ptw.Infrastructure.Security;
 
 namespace Ptw.Api;
@@ -14,6 +15,26 @@ internal static class StartupLog
             new EventId(1100, "InsecurePortalHttpAccepted"),
             "PortalAuth:AllowInsecureHttp=true: kredensial login diteruskan ke Portal API tanpa TLS ({Endpoint}). "
             + "Risiko diterima melalui amendemen OPN-007; hanya untuk portal di jaringan internal.");
+
+    private static readonly Action<ILogger, int, string, int, Exception?> DevelopmentCredentialsSeededMessage =
+        LoggerMessage.Define<int, string, int>(
+            LogLevel.Information,
+            new EventId(1101, "DevelopmentCredentialsSeeded"),
+            "Mode Development: password lokal bawaan ditetapkan untuk {Count} akun seed ({Subjects}); "
+            + "{Skipped} akun seed sudah memiliki credential dan dilewati.");
+
+    public static void DevelopmentCredentialsSeeded(ILogger logger, DevelopmentSeedResult result)
+    {
+        if (result.Enabled)
+        {
+            DevelopmentCredentialsSeededMessage(
+                logger,
+                result.SeededSubjectIds.Count,
+                string.Join(", ", result.SeededSubjectIds),
+                result.SkippedWithCredential,
+                null);
+        }
+    }
 
     public static void WarnOnAcceptedRisks(ILogger logger, PortalAuthenticationSettings portal)
     {

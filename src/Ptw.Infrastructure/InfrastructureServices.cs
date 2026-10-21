@@ -39,6 +39,9 @@ public static class InfrastructureServices
             && (!bool.TryParse(configuration["DemoMode:EnabledByDefault"], out var configuredDemoMode)
                 || configuredDemoMode);
         services.AddSingleton(new DemoModeDefaults(demoModeEnabledByDefault));
+        // Development bootstrap only: the seeder refuses to run when this flag is false.
+        services.AddSingleton(new DevelopmentSeedSettings(isDevelopment));
+        services.AddScoped<DevelopmentDirectorySeeder>();
         var portalAuthenticationSettings = PortalAuthenticationSettings.FromConfiguration(configuration, isDevelopment);
         services.AddSingleton(portalAuthenticationSettings);
         // Fail-safe: without a configured portal, login relies on local credentials only.

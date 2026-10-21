@@ -59,19 +59,21 @@ public sealed class ReferenceDataSeedMigrationTests(PtwApiFactory factory)
 
             var accounts = await db.UserAccounts.ToListAsync();
             Assert.Equal(10, accounts.Count);
-            var signatures = await db.UserSignatureVersions.ToListAsync();
+            // This migration seeds the placeholder as version 1; SeedDefaultSignatureSpecimen later
+            // supersedes it with the default specimen as version 2 (covered by its own tests).
+            var signatures = await db.UserSignatureVersions.Where(x => x.Version == 1).ToListAsync();
             Assert.Equal(10, signatures.Count);
             Assert.Equal(accounts.Select(x => x.SubjectId).Order(), signatures.Select(x => x.SubjectId).Order());
             Assert.All(signatures, signature =>
             {
-                Assert.Equal(1, signature.Version);
-                Assert.True(signature.IsActive);
-                Assert.Null(signature.SupersededAt);
+                Assert.False(signature.IsActive);
+                Assert.NotNull(signature.SupersededAt);
                 Assert.Equal("image/png", signature.MediaType);
                 Assert.Equal(PlaceholderLength, signature.Content.Length);
                 Assert.Equal(PlaceholderSha256, signature.Sha256);
                 Assert.Equal(PlaceholderSha256, Convert.ToHexString(SHA256.HashData(signature.Content)));
             });
+            Assert.Equal(10, await db.UserSignatureVersions.CountAsync(x => x.IsActive));
             Assert.Empty(await db.UserCredentials.ToListAsync());
 
             // 10 role assignments from the user seed plus 6 global Sponsor grants from
@@ -176,9 +178,10 @@ public sealed class ReferenceDataSeedMigrationTests(PtwApiFactory factory)
             });
 
             var signatures = await db.UserSignatureVersions.ToListAsync();
-            Assert.Equal(9, signatures.Count);
+            Assert.Equal(9, signatures.Count(x => x.Version == 1));
             Assert.DoesNotContain(signatures, x => x.SubjectId == operatorSubject);
-            Assert.Equal(9, await db.ConfigurationAuditEvents.CountAsync(x => x.EventType == "user_signature_seeded"));
+            Assert.Equal(9, await db.ConfigurationAuditEvents.CountAsync(
+                x => x.CorrelationId == SeedCorrelationId && x.EventType == "user_signature_seeded"));
             Assert.Equal(0, await db.ConfigurationAuditEvents.CountAsync(
                 x => x.CorrelationId == SeedCorrelationId && x.EventType == "authorization_seed_skipped"));
         }
