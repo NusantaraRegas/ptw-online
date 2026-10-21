@@ -56,6 +56,8 @@ services:
       GeneratedDocuments__StoragePath: /var/lib/ptw/generated-documents
       Authentication__DataProtectionPath: /var/lib/ptw/data-protection
       PortalAuth__BaseUrl: ${PTW_PORTAL_API_BASE_URL:-http://local.api.portal.com/}
+      PortalAuth__ServiceUserName: ${PTW_PORTAL_API_SERVICE_USERNAME:?set the Portal API service username in .env}
+      PortalAuth__ServicePassword: ${PTW_PORTAL_API_SERVICE_PASSWORD:?set the Portal API service password in .env}
     extra_hosts:
       - "${PTW_PORTAL_API_HOST:-local.api.portal.com}:host-gateway"
     volumes:

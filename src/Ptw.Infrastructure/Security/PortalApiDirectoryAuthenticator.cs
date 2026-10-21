@@ -1,4 +1,4 @@
-using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -8,10 +8,9 @@ using Ptw.Application;
 namespace Ptw.Infrastructure.Security;
 
 /// <summary>
-/// Verifies a username and password by calling the Portal API login endpoint
-/// (<c>POST /api/v1/User/SecureAuth</c>). The portal answers 200 with a JWT when the credential is
-/// valid and 401 when it is not; the JWT is discarded because the local <c>UserAccount</c> and its
-/// approved assignments remain the only source of identity, roles, and scope.
+/// Verifies a username and password through the Portal API's two-step contract. A service credential
+/// obtains a short-lived bearer token from <c>SecureAuth</c>; that token authorizes the employee
+/// credential check at <c>ADAuth</c>. The token is never used as PTW identity authority or persisted.
 /// </summary>
 public sealed partial class PortalApiDirectoryAuthenticator(
     HttpClient httpClient,
@@ -25,7 +24,9 @@ public sealed partial class PortalApiDirectoryAuthenticator(
         string password,
         CancellationToken cancellationToken)
     {
-        if (!settings.Enabled || settings.AuthenticateEndpoint is null)
+        if (!settings.Enabled
+            || settings.AuthenticateEndpoint is null
+            || settings.DirectoryAuthenticateEndpoint is null)
         {
             return DirectoryAuthenticationResult.Disabled;
         }
@@ -35,37 +36,35 @@ public sealed partial class PortalApiDirectoryAuthenticator(
             return DirectoryAuthenticationResult.InvalidCredentials;
         }
 
-        var endpoint = settings.AuthenticateEndpoint;
         try
         {
-            using var response = await httpClient.PostAsJsonAsync(
-                endpoint,
-                new SecureAuthRequest(userName.Trim(), password),
-                SerializerOptions,
-                cancellationToken);
-            // 401 is the only answer that proves the password is wrong; every other failure is treated
-            // as the portal being unavailable so the local password fallback still applies.
-            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            var token = await AcquireServiceTokenAsync(cancellationToken);
+            if (token is null)
             {
-                return DirectoryAuthenticationResult.InvalidCredentials;
+                return DirectoryAuthenticationResult.Unavailable;
             }
 
+            var endpoint = settings.DirectoryAuthenticateEndpoint;
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                DirectoryAuthenticationUri(endpoint, userName.Trim(), password));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            // The Portal endpoint requires POST with query parameters and an explicit empty body.
+            request.Content = new ByteArrayContent([]);
+
+            using var response = await httpClient.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                LogUnexpectedResponse(logger, endpoint.Host, (int)response.StatusCode);
+                LogUnexpectedResponse(logger, "directory-authentication", endpoint.Host, (int)response.StatusCode);
                 return DirectoryAuthenticationResult.Unavailable;
             }
 
-            var payload = await response.Content.ReadFromJsonAsync<SecureAuthResponse>(
+            var accepted = await response.Content.ReadFromJsonAsync<bool>(
                 SerializerOptions,
                 cancellationToken);
-            if (string.IsNullOrWhiteSpace(payload?.Token))
-            {
-                LogUnexpectedResponse(logger, endpoint.Host, (int)response.StatusCode);
-                return DirectoryAuthenticationResult.Unavailable;
-            }
-
-            return DirectoryAuthenticationResult.Succeeded;
+            return accepted
+                ? DirectoryAuthenticationResult.Succeeded
+                : DirectoryAuthenticationResult.InvalidCredentials;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -76,9 +75,51 @@ public sealed partial class PortalApiDirectoryAuthenticator(
             or JsonException
             or InvalidOperationException)
         {
-            LogPortalUnavailable(logger, endpoint.Host, exception.GetType().Name, exception);
+            LogPortalUnavailable(
+                logger,
+                settings.BaseUrl?.Host ?? "unconfigured",
+                exception.GetType().Name,
+                null);
             return DirectoryAuthenticationResult.Unavailable;
         }
+    }
+
+    private async Task<string?> AcquireServiceTokenAsync(CancellationToken cancellationToken)
+    {
+        var endpoint = settings.AuthenticateEndpoint!;
+        using var response = await httpClient.PostAsJsonAsync(
+            endpoint,
+            new SecureAuthRequest(settings.ServiceUserName, settings.ServicePassword),
+            SerializerOptions,
+            cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            LogUnexpectedResponse(logger, "service-authentication", endpoint.Host, (int)response.StatusCode);
+            return null;
+        }
+
+        var payload = await response.Content.ReadFromJsonAsync<SecureAuthResponse>(
+            SerializerOptions,
+            cancellationToken);
+        if (!string.IsNullOrWhiteSpace(payload?.Token))
+        {
+            return payload.Token;
+        }
+
+        LogUnexpectedResponse(logger, "service-authentication", endpoint.Host, (int)response.StatusCode);
+        return null;
+    }
+
+    private static Uri DirectoryAuthenticationUri(Uri endpoint, string userName, string password)
+    {
+        var separator = string.IsNullOrEmpty(endpoint.Query) ? "?" : "&";
+        return new Uri(
+            endpoint.AbsoluteUri
+            + separator
+            + "userName="
+            + Uri.EscapeDataString(userName)
+            + "&password="
+            + Uri.EscapeDataString(password));
     }
 
     // Property names follow the Portal API contract (`UserName`, `Password`) verbatim.
@@ -97,14 +138,14 @@ public sealed partial class PortalApiDirectoryAuthenticator(
         ILogger logger,
         string host,
         string errorType,
-        Exception exception);
+        Exception? exception);
 
     [LoggerMessage(
         EventId = 3101,
         EventName = "PortalAuthenticationUnexpectedResponse",
         Level = LogLevel.Warning,
-        Message = "Portal API login returned an unexpected response; falling back to local credentials. Host={Host} Status={StatusCode}")]
-    private static partial void LogUnexpectedResponse(ILogger logger, string host, int statusCode);
+        Message = "Portal API login returned an unexpected response; falling back to local credentials. Stage={Stage} Host={Host} Status={StatusCode}")]
+    private static partial void LogUnexpectedResponse(ILogger logger, string stage, string host, int statusCode);
 }
 
 /// <summary>Used when no portal is configured so login relies on local credentials only.</summary>
